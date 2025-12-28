@@ -1,100 +1,136 @@
-import { StyleSheet, Text, View, Image, TouchableOpacity } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  Image,
+  TouchableOpacity,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+} from 'react-native';
 import Eclipseshapetop from '../components/eclipseshapetop';
 import Eclipseshapebottom from '../components/eclipseshapebottom';
 import { getFontFamily } from '../assets/utils/fontfamily';
 import { TextInput } from 'react-native';
 import FontAwesome6 from '@react-native-vector-icons/fontawesome6';
 import { useState } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 
 export default function Loginscreen() {
   const [rememberMe, setRememberMe] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const navigation = useNavigation();
+  const handlelogin = () => {
+    let adminemail = 'pes@pes.com';
+    let adminpass = '123456';
+    if (adminemail === email && adminpass === password) {
+      const timer = setTimeout(() => {
+        navigation.replace('Dashboard');
+      }, 3000);
+      return () => clearTimeout(timer);
+    } else {
+      Alert.alert('Not authenticated', 'Email or password is incorrect or not filled');
+    }
+  };
   return (
-    <View style={styles.loginview}>
+    <SafeAreaView style={styles.loginview}>
       <Eclipseshapetop />
-      <View style={styles.logincontainer}>
-        <View style={styles.logintop}>
-          <Image
-            style={styles.logoimage}
-            source={require('../assets/splashlogo.png')}
-          />
-          <Text style={styles.welcometext}>Welcome</Text>
-          <Text style={styles.desctext}>
-            Please enter your email/phone or connect to your {`\n`}accounts to
-            continue.
-          </Text>
-        </View>
-        <View style={styles.loginfieldview}>
-          <Text style={styles.label}>Email/Phone</Text>
-          <View style={styles.inputWrapper}>
-            <FontAwesome6 name="envelope" style={styles.icon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Enter your Email or Phone"
-              placeholderTextColor="#6e6e6e"
-              value={email}
-              onChangeText={setEmail}
-            />
-          </View>
-          <Text style={styles.label}>Password</Text>
-          <View style={styles.inputWrapper}>
-            <FontAwesome6 name="envelope" style={styles.icon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Password"
-              placeholderTextColor="#6e6e6e"
-              secureTextEntry={true}
-              value={password}
-              onChangeText={setPassword}
-            />
-          </View>
-          <TouchableOpacity
-            style={styles.rememberMeContainer}
-            activeOpacity={0.8}
-            onPress={() => setRememberMe(prev => !prev)}
-          >
-            <View
-              style={[styles.checkbox, rememberMe && styles.checkboxActive]}
-            >
-              {rememberMe === true ? (
-                <FontAwesome6
-                  name="check"
-                  iconStyle="solid"
-                  size={12}
-                  color="#ffffff"
-                />
-              ) : null}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1, paddingTop: 100, paddingBottom: 50 }}
+      >
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          keyboardDismissMode="none"
+          scrollEventThrottle={16}
+        >
+          <View style={styles.logincontainer}>
+            <View style={styles.logintop}>
+              <Image
+                style={styles.logoimage}
+                source={require('../assets/splashlogo.png')}
+              />
+              <Text style={styles.welcometext}>Welcome</Text>
+              <Text style={styles.desctext}>
+                Please enter your email/phone or connect to your {`\n`}accounts
+                to continue.
+              </Text>
             </View>
-            <Text style={styles.rememberMeText}>Remember Me</Text>
-          </TouchableOpacity>
+            <View style={styles.loginfieldview}>
+              <Text style={styles.label}>Email/Phone</Text>
+              <View style={styles.inputWrapper}>
+                <FontAwesome6 name="envelope" style={styles.icon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter your Email or Phone"
+                  placeholderTextColor="#6e6e6e"
+                  value={email}
+                  onChangeText={setEmail}
+                />
+              </View>
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.inputWrapper}>
+                <FontAwesome6 name="envelope" style={styles.icon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Password"
+                  placeholderTextColor="#6e6e6e"
+                  secureTextEntry={true}
+                  value={password}
+                  onChangeText={setPassword}
+                />
+              </View>
+              <TouchableOpacity
+                style={styles.rememberMeContainer}
+                activeOpacity={0.8}
+                onPress={() => setRememberMe(prev => !prev)}
+              >
+                <View
+                  style={[styles.checkbox, rememberMe && styles.checkboxActive]}
+                >
+                  {rememberMe === true ? (
+                    <FontAwesome6
+                      name="check"
+                      iconStyle="solid"
+                      size={12}
+                      color="#ffffff"
+                    />
+                  ) : null}
+                </View>
+                <Text style={styles.rememberMeText}>Remember Me</Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => console.log('Button pressed')}
-            style={styles.loginButton}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.loginButtonText}>Login</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.loginbottom}>
-          <Text style={styles.bottomtext}>
-            By clicking Continue, you agree to Dart{'\n'}
-            <Text style={styles.linktext}>Terms of Use</Text> and{' '}
-            <Text style={styles.linktext}>Privacy Policy</Text>.
-          </Text>
-        </View>
-      </View>
+              <TouchableOpacity
+                onPress={handlelogin}
+                style={styles.loginButton}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.loginButtonText}>Login</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.loginbottom}>
+              <Text style={styles.bottomtext}>
+                By clicking Continue, you agree to Dart{'\n'}
+                <Text style={styles.linktext}>Terms of Use</Text> and{' '}
+                <Text style={styles.linktext}>Privacy Policy</Text>.
+              </Text>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
       <Eclipseshapebottom />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   loginview: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
     backgroundColor: '#151314',
     position: 'relative',
   },
@@ -123,7 +159,8 @@ const styles = StyleSheet.create({
   },
   logincontainer: {
     paddingHorizontal: 28,
-    flex: 1,
+    flexGrow: 1,
+    justifyContent: 'space-between',
   },
   loginfieldview: {
     paddingTop: 30,
@@ -219,6 +256,7 @@ const styles = StyleSheet.create({
     fontFamily: getFontFamily('true', 'regular'),
     color: '#ffffff',
     textAlign: 'center',
+    paddingTop: 30,
   },
   linktext: {
     fontFamily: getFontFamily('true', 'semibold'),

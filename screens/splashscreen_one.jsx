@@ -1,10 +1,19 @@
-import { StyleSheet, View, Image } from 'react-native';
-import React from 'react';
+import { StyleSheet, View } from 'react-native';
+import React, { useEffect } from 'react';
 import LottieView from 'lottie-react-native';
 import Eclipseshapetop from '../components/eclipseshapetop';
 import Eclipseshapebottom from '../components/eclipseshapebottom';
+import { useNavigation } from '@react-navigation/native';
 
 const SplashScreenone = () => {
+  const navigation = useNavigation();
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      navigation.replace('SplashTwo');
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, []);
   return (
     <View style={styles.splashview}>
       <Eclipseshapetop />

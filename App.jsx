@@ -1,22 +1,45 @@
-import { StyleSheet, View, Text } from 'react-native';
 import React from 'react';
-import SplashScreenone from './screens/splashscreen_one'
-import SplashScreentwo from './screens/splashscreen_two'
-import Loginscreen from './auth/loginscreen'
+import SplashScreenone from './screens/splashscreen_one';
+import SplashScreentwo from './screens/splashscreen_two';
+import Loginscreen from './auth/loginscreen';
+import Dashboardscreen from './screens/dashboardscreen';
+import { createStackNavigator } from '@react-navigation/stack';
+import { NavigationContainer } from '@react-navigation/native';
 
+const Stack = createStackNavigator();
 const App = () => {
-
   return (
-    <View style={styles.container}>
-      <Loginscreen/>
-    </View>
+    <NavigationContainer>
+      <Stack.Navigator
+        screenOptions={{
+          headerShown: false,
+          animationTypeForReplace: 'push',
+          animation: 'slide_from_right',
+        }}
+      >
+        <Stack.Screen
+          options={{ gestureEnabled: false }}
+          name="SplashOne"
+          component={SplashScreenone}
+        />
+        <Stack.Screen
+          options={{ gestureEnabled: false }}
+          name="SplashTwo"
+          component={SplashScreentwo}
+        />
+        <Stack.Screen
+          options={{ gestureEnabled: false }}
+          name="Loginscreen"
+          component={Loginscreen}
+        />
+        <Stack.Screen
+          options={{ headerShown: true }}
+          name="Dashboard"
+          component={Dashboardscreen}
+        />
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 };
-
-const styles = StyleSheet.create({
-  container:{
-    flex: 1,
-  }
-});
 
 export default App;

@@ -2,8 +2,18 @@ import { StyleSheet, Text, View, Image } from 'react-native';
 import Eclipseshapetop from '../components/eclipseshapetop';
 import Eclipseshapebottom from '../components/eclipseshapebottom';
 import { getFontFamily } from '../assets/utils/fontfamily';
+import { useEffect } from 'react';
+import { useNavigation } from '@react-navigation/native';
 
 export default function SplashScreentwo() {
+  const navigation = useNavigation()
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      navigation.replace('Loginscreen');
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, []);
   return (
     <View style={styles.splashview}>
       <Eclipseshapetop />
@@ -30,7 +40,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 81,
     resizeMode: 'cover',
-    alignSelf: 'center'
+    alignSelf: 'center',
   },
   logotext: {
     fontSize: 16,
