@@ -28,7 +28,7 @@ export default function Loginscreen() {
     let adminpass = '123456';
     if (adminemail === email && adminpass === password) {
       const timer = setTimeout(() => {
-        navigation.replace('Dashboard');
+        navigation.replace('Tabbar');
       }, 3000);
       return () => clearTimeout(timer);
     } else {
@@ -40,7 +40,7 @@ export default function Loginscreen() {
   };
   return (
     <SafeAreaView style={styles.loginview}>
-      <Eclipseshapetop pointerEvents="none"/>
+      <Eclipseshapetop pointerEvents="none" />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1, paddingTop: 100, paddingBottom: 50 }}
@@ -78,7 +78,7 @@ export default function Loginscreen() {
               </View>
               <Text style={styles.label}>Password</Text>
               <View style={styles.inputWrapper}>
-                <FontAwesome6 name="envelope" style={styles.icon} />
+                <FontAwesome6 name="lock" iconStyle='solid' style={styles.icon} />
                 <TextInput
                   style={styles.input}
                   placeholder="Password"
@@ -126,7 +126,7 @@ export default function Loginscreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-      <Eclipseshapebottom pointerEvents="none"/>
+      <Eclipseshapebottom pointerEvents="none" />
     </SafeAreaView>
   );
 }
