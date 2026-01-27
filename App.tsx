@@ -2,14 +2,25 @@ import React from 'react';
 import SplashScreenone from './screens/splashscreen_one';
 import SplashScreentwo from './screens/splashscreen_two';
 import Loginscreen from './auth/loginscreen';
-import Tabbar from './components/tabbar';
 import { createStackNavigator } from '@react-navigation/stack';
 import { NavigationContainer } from '@react-navigation/native';
+import { RootStackParamList } from './types/navigation';
+import Themestore from './store/themestore';
+import { StatusBar } from 'react-native';
+import { darkTheme } from './theme/color';
+import Tabbar from './components/tabbar';
 
-const Stack = createStackNavigator();
-const App = () => {
+const Stack = createStackNavigator<RootStackParamList>();
+const App: React.FC = () => {
+  const theme = Themestore(state => state.theme);
   return (
     <>
+      <StatusBar
+        barStyle={theme === darkTheme ? 'light-content' : 'dark-content'}
+        backgroundColor={theme.colors.background}
+        translucent={false}
+      />
+      
       <NavigationContainer>
         <Stack.Navigator
           screenOptions={{

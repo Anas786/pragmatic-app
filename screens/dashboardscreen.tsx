@@ -1,15 +1,18 @@
 import { Alert, StyleSheet, Text, View } from 'react-native';
-import React from 'react';
+import React, {useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScrollView } from 'react-native-gesture-handler';
 import { Button, IconButton, Searchbar } from 'react-native-paper';
 import FontAwesome6 from '@react-native-vector-icons/fontawesome6';
 import { getFontFamily } from '../assets/utils/fontfamily';
 import CompanyCard from '../components/CompanyCard';
+import Themestore from '../store/themestore';
 
 const Dashboardscreen = () => {
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const theme = Themestore(state => state.theme);
   return (
-    <SafeAreaView style={styles.dashboardview}>
+    <SafeAreaView style={[styles.dashboardview, {backgroundColor: theme.colors.background}]}>
       <ScrollView
         contentContainerStyle={{ flexGrow: 1 }}
         keyboardShouldPersistTaps="handled"
@@ -20,34 +23,36 @@ const Dashboardscreen = () => {
         <View style={styles.searchbarcontainer}>
           <Searchbar
             placeholder="Search"
-            placeholderTextColor={'#6e6e6e'}
+            placeholderTextColor={theme.colors.text}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
             icon={() => (
               <FontAwesome6
                 iconStyle="solid"
-                color={'#6f6f6f'}
+                color={theme.colors.text}
                 size={20}
                 style={{ width: 20, height: 20 }}
                 name="magnifying-glass"
               />
             )}
-            inputStyle={styles.searchtext}
-            style={styles.searchbar}
+            inputStyle={[styles.searchtext, {color: theme.colors.text}]}
+            style={[styles.searchbar, {backgroundColor: theme.colors.overlaybackground, borderColor: theme.colors.inputborder}]}
           />
           <IconButton
             icon={() => (
               <FontAwesome6
                 iconStyle="solid"
-                color={'#ffffff'}
+                color={theme.colors.inputicon}
                 size={20}
                 style={{ width: 20, height: 20, transform: [{ rotate: '90deg' }] }}
                 name="sliders"
               />
             )}
             onPress={() => Alert.alert('Filter')}
-            style={styles.searchfilterbutton}
+            style={[styles.searchfilterbutton, {backgroundColor: theme.colors.overlaybackground, borderColor: theme.colors.inputborder}]}
           />
         </View>
-        <View style={styles.summarytableview}>
+        <View style={[styles.summarytableview,{backgroundColor: theme.colors.overlaybackground, borderColor: theme.colors.bordercolor}]}>
           <View
             style={{
               flexDirection: 'row',
@@ -55,21 +60,21 @@ const Dashboardscreen = () => {
               alignItems: 'center',
             }}
           >
-            <Text style={styles.summarytitle}>Site Summary</Text>
+            <Text style={[styles.summarytitle, {color: theme.colors.title}]}>Site Summary</Text>
             <Button
-              style={styles.summarybutton}
+              style={[styles.summarybutton, {backgroundColor: theme.colors.iconbuttonbg}]}
               mode="contained"
               icon={() => (
                 <FontAwesome6
                   iconStyle="solid"
-                  color={'#ffffff'}
+                  color={theme.colors.iconbuttonicon}
                   size={12}
                   style={{ width: 12, height: 12 }}
                   name="upload"
                 />
               )}
               onPress={() => Alert.alert('Export Site Summary')}
-              labelStyle={styles.summarybuttontext}
+              labelStyle={[styles.summarybuttontext,{color: theme.colors.iconbuttontext}]}
             >
               Export
             </Button>
@@ -81,39 +86,54 @@ const Dashboardscreen = () => {
             date="17/12/2025"
             time="07:49 PM"
             logo={require("../assets/luckycementlogo.png")}
+            onverticalView={() => Alert.alert('Vertical Options')}
             powerReadings={[
-              { icon: "solar-panel", name: "Solar Panel", iconcolor: "#05c80e", value: "3.2345", label: "kWp" },
-              { icon: "fan", name: "Wind", iconcolor: "#f87a0c", value: "3.2345", label: "kWp" },
-              { icon: "volcano", name: "Grid", iconcolor: "#c805bb", value: "4,553.2", label: "kWp" },
+              { icon: "solar-panel", name: "Solar", iconcolor: "#05c80e", value: "3.2345", label: "kWp" },
+              { icon: "fan", name: "Wind", iconcolor: "#3a5fd0", value: "3.2345", label: "kWp" },
+              { icon: "volcano", name: "Grid", iconcolor: "#d03a3a", value: "4,553.2", label: "kWp" },
+              { icon: "solar-panel", name: "Solar", iconcolor: "#05c80e", value: "3.2345", label: "kWp" },
+              { icon: "solar-panel", name: "Solar", iconcolor: "#05c80e", value: "3.2345", label: "kWp" },
+              { icon: "chart-line", name: "PV Size", iconcolor: "#e8f80c", value: "18,235", label: "kW" },
+              { icon: "chart-line", name: "PV Size", iconcolor: "#e8f80c", value: "18,235", label: "kW" },
+              { icon: "fan", name: "Wind", iconcolor: "#3a5fd0", value: "3.2345", label: "kWp" },
+              { icon: "solar-panel", name: "Solar", iconcolor: "#05c80e", value: "3.2345", label: "kWp" },
             ]}
             efficiency={86.56}
             onExpandView={() => Alert.alert('Expand Lucky Cement Nooribad')}
+            isactive={true}
           />
           <CompanyCard
             companyName="Master Molty Foam"
             date="17/12/2025"
             time="07:49 PM"
             logo={require("../assets/mastermoltylogo.jpg")}
+            onverticalView={() => Alert.alert('Vertical Options')}
             powerReadings={[
-              { icon: "solar-panel", name: "Solar Panel", iconcolor: "#05c80e", value: "3.2345", label: "kWp" },
-              { icon: "fan", name: "Wind", iconcolor: "#f87a0c", value: "3.2345", label: "kWp" },
-              { icon: "volcano", name: "Grid", iconcolor: "#c805bb", value: "4,553.2", label: "kWp" },
+              { icon: "solar-panel", name: "Solar", iconcolor: "#05c80e", value: "3.2345", label: "kWp" },
+              { icon: "solar-panel", name: "Solar", iconcolor: "#05c80e", value: "3.2345", label: "kWp" },
+              { icon: "chart-line", name: "PV Size", iconcolor: "#e8f80c", value: "18,235", label: "kW" },
+              { icon: "chart-line", name: "PV Size", iconcolor: "#e8f80c", value: "18,235", label: "kW" },
+              { icon: "fan", name: "Wind", iconcolor: "#3a5fd0", value: "3.2345", label: "kWp" },
+              { icon: "solar-panel", name: "Solar", iconcolor: "#05c80e", value: "3.2345", label: "kWp" },
             ]}
             efficiency={86.56}
             onExpandView={() => Alert.alert('Expand Master Molty Foam')}
+            isactive={false}
           />
           <CompanyCard
             companyName="Young Food Pvt."
             date="17/12/2025"
             time="07:49 PM"
             logo={require("../assets/youngsfoodlogo.jpg")}
+            onverticalView={() => Alert.alert('Vertical Options')}
             powerReadings={[
-              { icon: "chart-line", name: "Solar Panel", iconcolor: "#05c80e", value: "18,235", label: "kW" },
-              { icon: "fan", name: "Wind", iconcolor: "#f87a0c", value: "3.2345", label: "kWp" },
-              { icon: "volcano", name: "Grid", iconcolor: "#c805bb", value: "3.2345", label: "kWp" },
+              { icon: "chart-line", name: "PV Size", iconcolor: "#e8f80c", value: "18,235", label: "kW" },
+              { icon: "solar-panel", name: "Solar", iconcolor: "#05c80e", value: "3.2345", label: "kWp" },
+              { icon: "solar-panel", name: "Solar", iconcolor: "#05c80e", value: "3.2345", label: "kWp" },
             ]}
             efficiency={86.56}
             onExpandView={() => Alert.alert('Expand Young Food Pvt.')}
+            isactive={false}
           />
         </View>
       </ScrollView>
@@ -124,8 +144,9 @@ const Dashboardscreen = () => {
 const styles = StyleSheet.create({
   dashboardview: {
     flex: 1,
-    backgroundColor: '#151314',
     position: 'relative',
+    borderWidth: 3,
+    borderColor: '#fff'
   },
   mainview: {
     gap: 20,
@@ -141,14 +162,11 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 100,
     borderWidth: 1,
-    borderColor: '#303030',
     paddingHorizontal: 12,
-    backgroundColor: '#1b1a1b',
     height: 44,
   },
   searchtext: {
     fontSize: 12,
-    color: '#6e6e6e',
     lineHeight: 12,
     fontFamily: getFontFamily('true', 'regular'),
     paddingBottom: 20,
@@ -156,8 +174,6 @@ const styles = StyleSheet.create({
   searchfilterbutton: {
     borderRadius: 100,
     borderWidth: 1,
-    borderColor: '#303030',
-    backgroundColor: '#1b1a1b',
     height: 44,
     width: 44,
     paddingVertical: 10,
@@ -166,24 +182,20 @@ const styles = StyleSheet.create({
   summarytableview: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#303030',
     marginTop: 20,
     padding: 12,
   },
   summarytitle: {
     fontSize: 12,
     fontFamily: getFontFamily('true', 'medium'),
-    color: '#ffffff',
     paddingLeft: 12,
   },
   summarybutton: {
     borderRadius: 65,
-    backgroundColor: '#08820E',
-    color: '#ffffff',
   },
   summarybuttontext: {
-    fontSize: 8,
-    fontFamily: getFontFamily('true', 'bold'),
+    fontSize: 12,
+    fontFamily: getFontFamily('true', 'medium'),
     lineHeight: 12,
   },
   companydatatable: {
