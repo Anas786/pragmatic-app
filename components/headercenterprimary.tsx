@@ -1,7 +1,7 @@
 import React from "react";
 import { Image } from "react-native";
 
-const Headerimage: React.FC = () => {
+const HeaderCenterPrimary: React.FC = () => {
     return (
         <Image
             style={{ width: 40, height: 27 }}
@@ -10,4 +10,4 @@ const Headerimage: React.FC = () => {
     );
 }
 
-export default Headerimage;
+export default HeaderCenterPrimary;

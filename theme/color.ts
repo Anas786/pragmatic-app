@@ -32,6 +32,10 @@ export interface ThemeColors {
   warningbtnicon: string;
   warningbtntext: string;
   headerbackbuttonbg: string;
+  headerstatus: string;
+  headerstatusiconbg: string;
+  headeractivestatusicon: string;
+  headerinactivestatusicon: string;
 }
 
 export interface Theme {
@@ -73,6 +77,10 @@ export const lightTheme: Theme = {
     warningbtnicon: '#ffffff',
     warningbtntext: '#ffffff',
     headerbackbuttonbg: '#e4e4e7',
+    headerstatus: '#e4e4e7',
+    headerstatusiconbg: '#05c80e',
+    headeractivestatusicon: '#3ad048',
+    headerinactivestatusicon: '#000000',
   },
 };
 
@@ -111,5 +119,9 @@ export const darkTheme: Theme = {
     warningbtnicon: '#ffffff',
     warningbtntext: '#ffffff',
     headerbackbuttonbg: '#0a0a0b',
+    headerstatus: '#1b1a1b',
+    headerstatusiconbg: '#05c80e',
+    headeractivestatusicon: '#3ad048',
+    headerinactivestatusicon: '#1b1a1b', 
   },
 };

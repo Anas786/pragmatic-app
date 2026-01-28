@@ -15,6 +15,9 @@ import Deactivateaccount from './screens/deactivateaccount';
 import Termsandcondition from './screens/termsandcondition';
 import Headerleft from './components/headerleftsecondary';
 import { getFontFamily } from './assets/utils/fontfamily';
+import Headerrightsecondary from './components/headerrightsecondary';
+import HeaderCenterSecondary from './components/headercentersecondary';
+import Companydetailscreen from './screens/companydetailscreen';
 
 const Stack = createStackNavigator<RootStackParamList>();
 const App: React.FC = () => {
@@ -147,6 +150,23 @@ const App: React.FC = () => {
             }}
             name="Termsandcondition"
             component={Termsandcondition}
+          />
+          <Stack.Screen
+            options={{
+              gestureEnabled: false,
+              headerShown: true,
+              headerStyle: {
+                backgroundColor: theme.colors.overlaybackground,
+                borderBottomWidth: 1,
+                borderBottomColor: theme.colors.bordercolor,
+              },
+              headerTitleAlign: 'center',
+              headerTitle: () => <HeaderCenterSecondary />,
+              headerLeft: () => <Headerleft />,
+              headerRight: () => <Headerrightsecondary />
+            }}
+            name="Companydetailscreen"
+            component={Companydetailscreen}
           />
 
         </Stack.Navigator>

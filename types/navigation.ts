@@ -6,5 +6,6 @@ export type RootStackParamList = {
     Editpersonalinfo: undefined;
     Editpassword: undefined;
     Deactivateaccount: undefined;
-    Termsandcondition: undefined
+    Termsandcondition: undefined;
+    Companydetailscreen: undefined;
   };

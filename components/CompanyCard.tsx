@@ -4,6 +4,9 @@ import FontAwesome6 from '@react-native-vector-icons/fontawesome6';
 import { getFontFamily } from '../assets/utils/fontfamily';
 import { Image } from 'react-native';
 import Themestore from '../store/themestore';
+import { RootStackParamList } from '../types/navigation';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { useNavigation } from '@react-navigation/native';
 
 interface CompanyCardProps {
   companyName: string;
@@ -19,8 +22,10 @@ interface CompanyCardProps {
 
 const CompanyCard: React.FC<CompanyCardProps> = ({ companyName, date, time, logo, powerReadings, efficiency, onExpandView, onverticalView, isactive }) => {
   const theme = Themestore(state => state.theme);
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
+
   return (
-    <View style={[styles.companycard, {backgroundColor: theme.colors.overlaybackground, borderColor: theme.colors.bordercolor}]}>
+    <TouchableOpacity onPress={() => navigation.push('Companydetailscreen')} style={[styles.companycard, {backgroundColor: theme.colors.overlaybackground, borderColor: theme.colors.bordercolor}]}>
       <View style={styles.companyheader}>
         <View style={styles.companylogoandtitle}>
           <View style={[styles.companylogo, {backgroundColor: theme.colors.background, borderColor: theme.colors.bordercolor}]}>
@@ -62,7 +67,7 @@ const CompanyCard: React.FC<CompanyCardProps> = ({ companyName, date, time, logo
         <Text style={[styles.expandviewbuttontext, {color: theme.colors.title}]}>Expand View</Text>
         <FontAwesome6 iconStyle="solid" color={theme.colors.iconsecondary} style={{ width: 8, height: 8, marginLeft: 8 }} size={8} name="chevron-down" />
       </TouchableOpacity>
-    </View>
+    </TouchableOpacity>
   );
 };
 

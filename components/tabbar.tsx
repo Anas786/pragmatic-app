@@ -8,9 +8,9 @@ import { Image } from 'react-native';
 import Themestore from '../store/themestore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Profilescreen from '../screens/profilescreen';
-import Headerimage from './headercenterprimary';
-import HeaderRight from './headerrightprimary';
-import Headerleft from './headerleftprimary';
+import HeaderCenterPrimary from './headercenterprimary';
+import HeaderRightPrimary from './headerrightprimary';
+import HeaderleftPrimary from './headerleftprimary';
 // import { UserprofileStore } from '../store/profilestore';
 
 const AnalyticsScreen: React.FC = () => {
@@ -59,7 +59,7 @@ const Tabbar: React.FC = () => {
         component={Dashboardscreen}
         options={{
           headerShown: true,
-          headerTitle: () => <Headerimage />,
+          headerTitle: () => <HeaderCenterPrimary />,
           headerTitleAlign: 'center',
           headerStyle: {
             backgroundColor: theme.colors.background,
@@ -68,8 +68,8 @@ const Tabbar: React.FC = () => {
             borderBottomWidth: 1,
             borderBottomColor: theme.colors.bordercolor,
           },
-          headerLeft: () => <Headerleft />,
-          headerRight: () => <HeaderRight />,
+          headerLeft: () => <HeaderleftPrimary />,
+          headerRight: () => <HeaderRightPrimary />,
           tabBarIcon: ({ focused }) => (
             <View
               style={[
@@ -92,7 +92,7 @@ const Tabbar: React.FC = () => {
         component={AnalyticsScreen}
         options={{
           headerShown: true,
-          headerTitle: () => <Headerimage />,
+          headerTitle: () => <HeaderCenterPrimary />,
           headerTitleAlign: 'center',
           headerStyle: {
             backgroundColor: theme.colors.background,
@@ -101,8 +101,8 @@ const Tabbar: React.FC = () => {
             borderBottomWidth: 1,
             borderBottomColor: theme.colors.bordercolor,
           },
-          headerLeft: () => <Headerleft />,
-          headerRight: () => <HeaderRight />,
+          headerLeft: () => <HeaderleftPrimary />,
+          headerRight: () => <HeaderRightPrimary />,
           tabBarIcon: ({ focused }) => (
             <View
               style={[
@@ -125,7 +125,7 @@ const Tabbar: React.FC = () => {
         component={AddScreen}
         options={{
           headerShown: true,
-          headerTitle: () => <Headerimage />,
+          headerTitle: () => <HeaderCenterPrimary />,
           headerTitleAlign: 'center',
           headerStyle: {
             backgroundColor: theme.colors.background,
@@ -134,8 +134,8 @@ const Tabbar: React.FC = () => {
             borderBottomWidth: 1,
             borderBottomColor: theme.colors.bordercolor,
           },
-          headerLeft: () => <Headerleft />,
-          headerRight: () => <HeaderRight />,
+          headerLeft: () => <HeaderleftPrimary />,
+          headerRight: () => <HeaderRightPrimary />,
           tabBarIcon: ({ focused }) => (
             <View
               style={[
@@ -158,7 +158,7 @@ const Tabbar: React.FC = () => {
         component={SettingScreen}
         options={{
           headerShown: true,
-          headerTitle: () => <Headerimage />,
+          headerTitle: () => <HeaderCenterPrimary />,
           headerTitleAlign: 'center',
           headerStyle: {
             backgroundColor: theme.colors.background,
@@ -167,8 +167,8 @@ const Tabbar: React.FC = () => {
             borderBottomWidth: 1,
             borderBottomColor: theme.colors.bordercolor,
           },
-          headerLeft: () => <Headerleft />,
-          headerRight: () => <HeaderRight />,
+          headerLeft: () => <HeaderleftPrimary />,
+          headerRight: () => <HeaderRightPrimary />,
           tabBarIcon: ({ focused }) => (
             <View
               style={[
@@ -191,7 +191,7 @@ const Tabbar: React.FC = () => {
         component={Profilescreen}
         options={{
           headerShown: true,
-          headerTitle: () => <Headerimage />,
+          headerTitle: () => <HeaderCenterPrimary />,
           headerTitleAlign: 'center',
           headerStyle: {
             backgroundColor: theme.colors.background,
@@ -200,8 +200,8 @@ const Tabbar: React.FC = () => {
             borderBottomWidth: 1,
             borderBottomColor: theme.colors.bordercolor,
           },
-          headerLeft: () => <Headerleft />,
-          headerRight: () => <HeaderRight />,
+          headerLeft: () => <HeaderleftPrimary />,
+          headerRight: () => <HeaderRightPrimary />,
           tabBarIcon: ({ focused }) => (
             <View
               style={[
