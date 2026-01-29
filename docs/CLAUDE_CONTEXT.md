@@ -6,7 +6,7 @@ Use this file to continue the conversation context on a different machine.
 
 ---
 
-## Current Status: Charts Complete, SLD Pending
+## Current Status: UI Complete, Backend Integration Pending
 
 ### What's Been Done:
 - ✅ React Native CLI 0.76.9 project initialized
@@ -35,11 +35,12 @@ Use this file to continue the conversation context on a different machine.
 - ✅ **AboutScreen** - Company info, features, contact
 - ✅ **Jest Testing** - 134 tests passing with coverage
 - ✅ **ECharts Integration** - Chart components (LineChart, BarChart, AreaChart, PieChart, GaugeChart, MixedChart)
+- ✅ **SLD (Single Line Diagram)** - Native SVG implementation with animated power flow
 
 ### What's Next:
 - Set up AWS Amplify with Cognito authentication
-- Implement SLD (Single Line Diagram) with React Flow
 - Connect to real API endpoints
+- Real-time PubSub (AWS IoT Core)
 - E2E tests (Detox/Maestro)
 
 ---
@@ -66,7 +67,7 @@ Building a **React Native CLI** mobile app for **Pragmatics Engineering Solution
 ### Key Design Decisions
 1. **No Bottom Tabs** - Using Drawer navigation instead
 2. **Dark Theme Only** - No light mode
-3. **SLD with React Flow** - Power flow diagram via WebView
+3. **SLD with Native SVG** - Power flow diagram using react-native-svg (not WebView)
 4. **Real-time with AWS IoT PubSub**
 
 ---
@@ -115,6 +116,16 @@ Building a **React Native CLI** mobile app for **Pragmatics Engineering Solution
 | `PieChart.tsx` | Power distribution donut chart |
 | `GaugeChart.tsx` | Single value metrics (efficiency %) |
 | `MixedChart.tsx` | Combined bar + line charts |
+| `index.ts` | Component exports |
+
+### SLD Components (`src/components/sld/`)
+| Component | Purpose |
+|-----------|---------|
+| `types.ts` | SLD types, colors, icons, and labels |
+| `SLDCanvas.tsx` | Main canvas with layout, background, legend |
+| `nodes/SiteNode.tsx` | Central factory/site node |
+| `nodes/SourceNode.tsx` | Power source nodes (Solar, Wind, Grid, PCS, Battery) |
+| `edges/PowerFlowEdge.tsx` | Animated bezier curve edges (SVG) |
 | `index.ts` | Component exports |
 
 ### Navigation (`src/navigation/`)
@@ -194,7 +205,7 @@ pragmatic-app/
 │   ├── components/
 │   │   ├── ui/              # Base components ✅
 │   │   ├── charts/          # ECharts ✅
-│   │   ├── sld/             # React Flow SLD (pending)
+│   │   ├── sld/             # Native SVG SLD ✅
 │   │   ├── site/            # Site components (pending)
 │   │   └── layout/          # Header, Drawer (pending)
 │   ├── hooks/               # Custom hooks (pending)
@@ -317,15 +328,16 @@ Please read these files for context:
 - docs/CLAUDE_CONTEXT.md
 - docs/figma/FIGMA_CONTEXT.md
 
-Current status: Phase 5 (Charts) is complete. All UI screens are built with mock data. 134 unit tests passing.
+Current status: All UI phases complete (Charts + SLD). All screens built with mock data. 134 unit tests passing.
 
 Next task: [WHAT YOU WANT TO DO NEXT]
 
 Options:
-- Implement SLD (Single Line Diagram) with React Flow
 - Set up AWS Amplify with Cognito authentication
 - Connect to real API endpoints
+- Add real-time PubSub (AWS IoT Core)
 - Add E2E tests (Detox/Maestro)
+- Add animations and polish
 ```
 
 ---
@@ -339,7 +351,7 @@ Options:
 | 3 | Dashboard & Drawer | ✅ Complete |
 | 4 | Site Detail - Main View (4 tabs) | ✅ Complete |
 | 5 | Charts (ECharts) | ✅ Complete |
-| 5.1 | Single Line Diagram (React Flow) | Pending |
+| 5.1 | Single Line Diagram (Native SVG) | ✅ Complete |
 | 6 | Site Detail - Other Views | ✅ Complete |
 | 7 | Real-time (PubSub) | Pending |
 | 8 | Profile & Drawer Screens | ✅ UI Complete |

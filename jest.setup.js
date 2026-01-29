@@ -191,6 +191,25 @@ jest.mock('react-native-echarts-pro', () => {
   };
 });
 
+// Mock react-native-svg
+jest.mock('react-native-svg', () => {
+  const mockReact = require('react');
+  const View = require('react-native').View;
+  return {
+    default: View,
+    Svg: View,
+    Path: View,
+    Defs: View,
+    LinearGradient: View,
+    Stop: View,
+    Circle: View,
+    Rect: View,
+    G: View,
+    Text: View,
+    Line: View,
+  };
+});
+
 // Mock Linking
 jest.mock('react-native/Libraries/Linking/Linking', () => ({
   openURL: jest.fn(() => Promise.resolve()),

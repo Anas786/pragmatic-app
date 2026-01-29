@@ -206,17 +206,18 @@ pragmatic-app/
 │   │   │   ├── GaugeChart.tsx        # Efficiency percentage
 │   │   │   ├── MixedChart.tsx        # Combined bar + line
 │   │   │   └── index.ts              # Exports
-│   │   ├── sld/                  # Single Line Diagram (React Flow)
-│   │   │   ├── SLDCanvas.tsx         # Main React Flow canvas
+│   │   ├── sld/                  # Single Line Diagram (Native SVG) ✅
+│   │   │   ├── types.ts              # SLD type definitions & colors
+│   │   │   ├── SLDCanvas.tsx         # Main SLD canvas with layout
 │   │   │   ├── nodes/
-│   │   │   │   ├── SiteNode.tsx      # Central site node (Lucky Cement)
-│   │   │   │   ├── SourceNode.tsx    # Power source nodes (Solar, Wind, Grid, PCS)
-│   │   │   │   └── MetricNode.tsx    # Metric display nodes (Q, PF values)
+│   │   │   │   ├── index.ts          # Node exports
+│   │   │   │   ├── SiteNode.tsx      # Central site node (factory icon, load)
+│   │   │   │   └── SourceNode.tsx    # Power source nodes (Solar, Wind, Grid, PCS, Battery)
 │   │   │   ├── edges/
-│   │   │   │   ├── PowerFlowEdge.tsx # Animated dashed edge (green/blue)
-│   │   │   │   └── ConnectionEdge.tsx
-│   │   │   └── controls/
-│   │   │       └── SLDControls.tsx   # Zoom, pan, lock controls
+│   │   │   │   ├── index.ts          # Edge exports
+│   │   │   │   └── PowerFlowEdge.tsx # Animated bezier edge (SVG)
+│   │   │   ├── controls/             # Future: zoom, fullscreen controls
+│   │   │   └── index.ts              # All SLD exports
 │   │   ├── site/                 # Site-specific components
 │   │   │   ├── SiteCard.tsx          # Dashboard site card (expandable)
 │   │   │   ├── MetricCard.tsx        # Power metric display card
@@ -372,22 +373,28 @@ pragmatic-app/
 - [x] Create chart legend components
 - [x] Implement time axis formatting
 
-### Phase 5.1: Single Line Diagram (React Flow)
-- [ ] Configure React Flow for React Native (WebView wrapper)
-- [ ] **Custom Nodes:**
-  - [ ] SiteNode - Central node showing site name + load (e.g., Lucky Cement, Load: 315.44)
-  - [ ] SourceNode - Power source nodes (Solar panel icon, Wind turbine icon, Grid icon, PCS)
-  - [ ] MetricNode - Display nodes showing Q and PF values
-- [ ] **Custom Edges:**
-  - [ ] PowerFlowEdge - Animated dashed lines (green for renewable, blue for grid)
-  - [ ] Curved bezier connections
-- [ ] **Controls:**
-  - [ ] Zoom in/out (+/-)
-  - [ ] Lock/unlock pan
-  - [ ] Fullscreen toggle
-- [ ] **Features:**
-  - [ ] Dot grid background
+### Phase 5.1: Single Line Diagram (Native SVG) ✅ COMPLETE
+- [x] Native React Native SLD implementation (react-native-svg)
+- [x] **Custom Nodes:**
+  - [x] SiteNode - Central node showing site name + load (e.g., Lucky Cement, Load: 315.44)
+  - [x] SourceNode - Power source nodes (Solar, Wind, Grid, PCS, Battery) with metrics (Q, PF)
+  - [x] Status indicators (active/inactive/warning/error)
+- [x] **Custom Edges:**
+  - [x] PowerFlowEdge - Animated dashed lines (green for renewable, blue for grid, purple for storage)
+  - [x] Curved bezier connections with SVG Path
+  - [x] Animated flow indicators
+- [x] **Layout:**
+  - [x] Semi-circle layout for source nodes
+  - [x] Dot grid background
+  - [x] Color-coded edge legend
+- [x] **Integration:**
+  - [x] Integrated into SiteDetailScreen Summary tab
+  - [x] Mock data generation from site metrics
+  - [x] Touch interactions (onNodePress callbacks)
+- [ ] **Future Enhancements (Phase 9+):**
   - [ ] Real-time data updates via PubSub
+  - [ ] Zoom controls (+/-)
+  - [ ] Fullscreen toggle
   - [ ] Touch gestures (pinch zoom, pan)
 
 ### Phase 6: Site Detail - Other Views (Live Parameters, Devices, Alarm Management) ✅ UI COMPLETE
@@ -696,6 +703,7 @@ devices/{deviceId}/health        - Device health updates
 | M3 | Dashboard with mock data | ✅ Complete |
 | M4 | Site detail screens | ✅ Complete (with Charts) |
 | M5 | Charts integration | ✅ Complete |
+| M5.1 | Single Line Diagram (SLD) | ✅ Complete |
 | M6 | Real-time PubSub integration | Pending |
 | M7 | Device management | ✅ UI Complete |
 | M8 | Profile & settings | ✅ UI Complete |
@@ -734,7 +742,7 @@ devices/{deviceId}/health        - Device health updates
 
 ## Next Steps
 
-**Phase 5 (Charts) is COMPLETE.** Next up: Phase 5.1 (SLD with React Flow) or AWS Amplify integration.
+**Phase 5.1 (SLD) is COMPLETE.** All UI screens and visualizations are done with mock data.
 
 ```bash
 # Navigate to project
@@ -754,11 +762,11 @@ npm run ios
 npm test
 ```
 
-### Immediate Next Tasks:
-1. **Phase 5.1: Single Line Diagram (React Flow)** - Implement SLD visualization in Summary tab
-2. **Set up AWS Amplify** with Cognito authentication
-3. **API Integration** - Connect to real backend endpoints
-4. **Real-time PubSub** - AWS IoT Core integration
+### Immediate Next Tasks (Backend Integration):
+1. **Set up AWS Amplify** with Cognito authentication
+2. **API Integration** - Connect to real backend endpoints
+3. **Real-time PubSub** - AWS IoT Core integration for live metrics
+4. **Polish** - Animations, loading states, error handling
 
 ---
 

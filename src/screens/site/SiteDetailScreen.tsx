@@ -15,6 +15,7 @@ import {
   generateTimeLabels,
   chartColors,
 } from '../../components/charts';
+import { SLDCanvas, SLDData } from '../../components/sld';
 
 type RouteProps = RouteProp<SiteStackParamList, 'SiteDetail'>;
 type NavigationProps = NativeStackNavigationProp<SiteStackParamList, 'SiteDetail'>;
@@ -51,6 +52,47 @@ const MOCK_ALARM_DATA = {
   warning: [5, 4, 6, 3, 4, 5, 3],
   info: [8, 10, 7, 9, 11, 8, 6],
 };
+
+// Mock SLD data
+const createSLDData = (siteName: string, siteId: string): SLDData => ({
+  site: {
+    id: siteId,
+    name: siteName,
+    load: MOCK_SITE_DATA.load,
+    icon: 'factory',
+  },
+  sources: [
+    {
+      id: 'solar-1',
+      type: 'solar',
+      power: MOCK_SITE_DATA.metrics.solar.power,
+      q: MOCK_SITE_DATA.metrics.solar.q,
+      pf: MOCK_SITE_DATA.metrics.solar.pf,
+      status: 'active',
+    },
+    {
+      id: 'wind-1',
+      type: 'wind',
+      power: MOCK_SITE_DATA.metrics.wind.power,
+      q: MOCK_SITE_DATA.metrics.wind.q,
+      pf: MOCK_SITE_DATA.metrics.wind.pf,
+      status: 'active',
+    },
+    {
+      id: 'grid-1',
+      type: 'grid',
+      power: MOCK_SITE_DATA.metrics.grid.power,
+      q: MOCK_SITE_DATA.metrics.grid.q,
+      pf: MOCK_SITE_DATA.metrics.grid.pf,
+      status: 'active',
+    },
+  ],
+  connections: [
+    { id: 'conn-1', source: 'solar-1', target: siteId, type: 'renewable' },
+    { id: 'conn-2', source: 'wind-1', target: siteId, type: 'renewable' },
+    { id: 'conn-3', source: 'grid-1', target: siteId, type: 'grid' },
+  ],
+});
 
 export const SiteDetailScreen: React.FC = () => {
   const route = useRoute<RouteProps>();
@@ -158,16 +200,18 @@ export const SiteDetailScreen: React.FC = () => {
         </Card>
       </View>
 
-      {/* SLD Placeholder */}
+      {/* Single Line Diagram */}
       <Card className="mb-4">
         <Text className="text-text-primary text-base font-semibold mb-3">
           Single Line Diagram
         </Text>
-        <View className="h-48 bg-background-tertiary rounded-lg items-center justify-center">
-          <Text className="text-4xl mb-2">📊</Text>
-          <Text className="text-text-secondary">SLD Visualization</Text>
-          <Text className="text-text-muted text-sm">React Flow integration coming soon</Text>
-        </View>
+        <SLDCanvas
+          data={createSLDData(siteName, siteId)}
+          height={280}
+          onNodePress={(nodeId, nodeType) => {
+            console.log(`Pressed ${nodeType}: ${nodeId}`);
+          }}
+        />
       </Card>
     </View>
   );
