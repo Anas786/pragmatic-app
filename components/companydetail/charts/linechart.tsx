@@ -6,6 +6,20 @@ import Themestore from '../../../store/themestore';
 
 const Linechart: React.FC = () => {
   const theme = Themestore(state => state.theme);
+  const customdatapoint = (color: string) => {
+    return (
+      <View
+        style={{
+          width: 10,
+          height: 10,
+          backgroundColor: '#ffffff',
+          borderWidth: 1,
+          borderRadius: 5,
+          borderColor: color,
+        }}
+      />
+    );
+  };
   const lineData1 = [
     { value: 65 },
     { value: 55 },
@@ -51,21 +65,27 @@ const Linechart: React.FC = () => {
   ];
   const dataSet = [
     {
-      data: lineData1,
+      data: lineData1.map(item => ({
+        ...item,
+        customDataPoint: () => customdatapoint(theme.colors.linechartdatapointbordergreen), 
+      })),
       color: '#3AD04B',
-      dataPointsColor: 'white',
       areaChart: false,
     },
     {
-      data: lineData2,
+      data: lineData2.map(item => ({
+        ...item,
+        customDataPoint: () => customdatapoint(theme.colors.linechartdatapointborderblue), 
+      })),
       color: '#3A5FD0',
-      dataPointsColor: 'white',
       areaChart: false,
     },
     {
-      data: lineData3,
+      data: lineData3.map(item => ({
+        ...item,
+        customDataPoint: () => customdatapoint(theme.colors.linechartdatapointborderred), 
+      })),
       color: '#D03A3A',
-      dataPointsColor: 'white',
       areaChart: false,
     },
   ];
@@ -91,9 +111,6 @@ const Linechart: React.FC = () => {
         curved={false}
         thickness={1}
         hideDataPoints={false}
-        dataPointsHeight={6}
-        dataPointsWidth={6}
-        dataPointsColor="white"
         xAxisLabelTexts={[
           '19 Dec',
           '20 Dec',

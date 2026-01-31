@@ -3,16 +3,12 @@ import React, { useState } from 'react'
 import Themestore from '../../store/themestore';
 import FontAwesome6 from '@react-native-vector-icons/fontawesome6';
 import { getFontFamily } from '../../assets/utils/fontfamily';
+import { Dropdownprops } from '../../types/dropdown';
 
-const Dropdown: React.FC = () => {
+const Dropdown: React.FC<Dropdownprops> = ({selectdropdown, handledropdown}) => {
     const theme = Themestore(state => state.theme);
     const [showDropdown, setShowDropdown] = useState<boolean>(false);
-    const [selectedView, setSelectedView] = useState<string>('Views');
 
-  const selectOption = (value: string) => {
-    setSelectedView(value);
-    setShowDropdown(false);
-  };
 return (
     <View style={{ marginBottom: 20 }}>
     <TouchableOpacity
@@ -27,7 +23,7 @@ return (
       ]}
     >
       <Text style={[styles.dropdownText, { color: theme.colors.text }]}>
-        {selectedView}
+        {selectdropdown}
       </Text>
       <FontAwesome6
         name={showDropdown ? 'chevron-up' : 'chevron-down'}
@@ -55,14 +51,14 @@ return (
               borderBottomColor: theme.colors.bordercolor,
             },
           ]}
-          onPress={() => selectOption('Views')}
+          onPress={() => handledropdown('Views')}
         >
           <Text
             style={[
               styles.dropdownItemText,
               {
                 color:
-                  selectedView === 'Views'
+                  selectdropdown === 'Views'
                     ? theme.colors.iconcolor
                     : theme.colors.text,
               },
@@ -80,14 +76,14 @@ return (
               borderBottomColor: theme.colors.bordercolor,
             },
           ]}
-          onPress={() => selectOption('Live parameters')}
+          onPress={() => handledropdown('Live parameters')}
         >
           <Text
             style={[
               styles.dropdownItemText,
               {
                 color:
-                  selectedView === 'Live parameters'
+                  selectdropdown === 'Live parameters'
                     ? theme.colors.iconcolor
                     : theme.colors.text,
               },
@@ -105,14 +101,14 @@ return (
               borderBottomColor: theme.colors.bordercolor,
             },
           ]}
-          onPress={() => selectOption('Devices')}
+          onPress={() => handledropdown('Devices')}
         >
           <Text
             style={[
               styles.dropdownItemText,
               {
                 color:
-                  selectedView === 'Devices'
+                  selectdropdown === 'Devices'
                     ? theme.colors.iconcolor
                     : theme.colors.text,
               },
@@ -124,14 +120,14 @@ return (
 
         <TouchableOpacity
           style={styles.dropdownItem}
-          onPress={() => selectOption('Alarms')}
+          onPress={() => handledropdown('Alarms')}
         >
           <Text
             style={[
               styles.dropdownItemText,
               {
                 color:
-                  selectedView === 'Alarms'
+                  selectdropdown === 'Alarms'
                     ? theme.colors.iconcolor
                     : theme.colors.text,
               },

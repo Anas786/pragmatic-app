@@ -1,27 +1,26 @@
 import React, { useState } from 'react';
 import { StyleSheet, View, ScrollView } from 'react-native';
 import Themestore from '../../../store/themestore';
-import Summaryblock from '../../../components/companydetail/blocks/summaryblock';
-import Cardblock from '../../../components/companydetail/blocks/cardblock';
-import Filters from '../../../components/companydetail/filters';
 import { Searchbar } from 'react-native-paper';
 import { getFontFamily } from '../../../assets/utils/fontfamily';
 import FontAwesome6 from '@react-native-vector-icons/fontawesome6';
 import Dropdown from '../../../components/companydetail/dropdown';
-import Alarmblock from '../../../components/companydetail/blocks/alarmblock';
-import Trendblock from '../../../components/companydetail/blocks/trendblock';
+import Viewsscreen from './dropdownscreens/viewsscreen';
+import Alarmsscreen from './dropdownscreens/alarmsscreen';
+import DevicesScreen from './dropdownscreens/devicesscreen';
+import LiveparametersScreen from './dropdownscreens/liveparameters';
+import { RootStackParamList } from '../../../types/navigation';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { useNavigation } from '@react-navigation/native';
 
 const Companydetailscreen: React.FC = () => {
   const theme = Themestore(state => state.theme);
-  const [selectedfilter, setselectedfilter] = useState<string>('Summary');
-  const selectFilter = (value: string) => {
-    setselectedfilter(value);
-  };
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [inverterfilter, setinverterfilter] = useState<string>('customfilter');
-  const selectinverterfilter = (value: string) => {
-    setinverterfilter(value);
-  }
+  const [selectdropdown, setselecteddropdown] = useState<string>('Views');
+  const handledropdown = (value: string) => {
+    setselecteddropdown(value);
+  };
 
   return (
     <View
@@ -41,6 +40,7 @@ const Companydetailscreen: React.FC = () => {
             placeholderTextColor={theme.colors.text}
             value={searchQuery}
             onChangeText={setSearchQuery}
+            onPress={() => navigation.push('SearchScreen')}
             icon={() => (
               <FontAwesome6
                 iconStyle="solid"
@@ -60,12 +60,12 @@ const Companydetailscreen: React.FC = () => {
             ]}
           />
         </View>
-        <Dropdown />
-        <Filters selectedfilter={selectedfilter} selectFilter={selectFilter} />
-        {(selectedfilter === 'Summary' && <Summaryblock />) ||
-          (selectedfilter === 'Cards' && <Cardblock />) ||
-          (selectedfilter === 'Alarms' && <Alarmblock />) ||
-          (selectedfilter === 'Trend' && (<Trendblock inverterfilter={inverterfilter} selectinverterfilter={selectinverterfilter}/>))}
+        <Dropdown selectdropdown={selectdropdown} handledropdown={handledropdown}/>
+        {selectdropdown === 'Views' && <Viewsscreen/> 
+        || selectdropdown === 'Live parameters' && <LiveparametersScreen/> 
+        || selectdropdown === 'Devices' && <DevicesScreen/> 
+        || selectdropdown === 'Alarms' && <Alarmsscreen/> 
+        }
       </ScrollView>
     </View>
   );

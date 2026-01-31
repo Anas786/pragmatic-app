@@ -541,7 +541,7 @@ const Summaryblock: React.FC = () => {
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                backgroundColor: theme.colors.overlaybackground,
+                backgroundColor: theme.colors.datepickerbackground,
                 paddingVertical: 6,
                 paddingHorizontal: 12,
                 height: 24,
@@ -553,13 +553,13 @@ const Summaryblock: React.FC = () => {
               <FontAwesome6
                 name="calendar"
                 size={12}
-                color={theme.colors.title}
+                color={theme.colors.iconbuttontext}
                 style={{ marginRight: 6 }}
               />
               <Text
                 style={{
                   fontSize: 10,
-                  color: theme.colors.title,
+                  color: theme.colors.iconbuttontext,
                   fontFamily: getFontFamily('true', 'medium'),
                 }}
               >

@@ -65,7 +65,7 @@ const Trendblock: React.FC<Inverterfilter> = ({
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                backgroundColor: theme.colors.overlaybackground,
+                backgroundColor: theme.colors.datepickerbackground,
                 paddingVertical: 6,
                 paddingHorizontal: 12,
                 height: 24,
@@ -77,13 +77,13 @@ const Trendblock: React.FC<Inverterfilter> = ({
               <FontAwesome6
                 name="calendar"
                 iconStyle="solid"
-                color={theme.colors.iconsecondary}
+                color={theme.colors.iconbuttontext}
                 size={16}
               />
               <Text
                 style={{
                   fontSize: 10,
-                  color: theme.colors.title,
+                  color: theme.colors.iconbuttontext,
                   fontFamily: getFontFamily('true', 'medium'),
                   marginLeft: 8,
                 }}
@@ -191,7 +191,7 @@ const Trendblock: React.FC<Inverterfilter> = ({
                 <View style={{ alignItems: 'flex-start' }}>
                   <View
                     style={{
-                      backgroundColor: theme.colors.iconbuttonicon,
+                      backgroundColor: theme.colors.chartanalysisvaluebg,
                       paddingHorizontal: 4,
                       paddingVertical: 4,
                       borderRadius: 100,
@@ -217,7 +217,7 @@ const Trendblock: React.FC<Inverterfilter> = ({
                       borderTopWidth: 6,
                       borderLeftColor: 'transparent',
                       borderRightColor: 'transparent',
-                      borderTopColor: '#FFF',
+                      borderTopColor: theme.colors.chartanalysisvaluebg,
                       marginLeft: 8,
                     }}
                   />
@@ -225,7 +225,7 @@ const Trendblock: React.FC<Inverterfilter> = ({
                 <View style={{ alignItems: 'center' }}>
                   <View
                     style={{
-                      backgroundColor: '#FFF',
+                      backgroundColor: theme.colors.chartanalysisvaluebg,
                       paddingHorizontal: 8,
                       paddingVertical: 2,
                       borderRadius: 10,
@@ -251,14 +251,14 @@ const Trendblock: React.FC<Inverterfilter> = ({
                       borderTopWidth: 6,
                       borderLeftColor: 'transparent',
                       borderRightColor: 'transparent',
-                      borderTopColor: '#FFF',
+                      borderTopColor: theme.colors.chartanalysisvaluebg,
                     }}
                   />
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
                   <View
                     style={{
-                      backgroundColor: '#FFF',
+                      backgroundColor: theme.colors.chartanalysisvaluebg,
                       paddingHorizontal: 8,
                       paddingVertical: 2,
                       borderRadius: 10,
@@ -284,7 +284,7 @@ const Trendblock: React.FC<Inverterfilter> = ({
                       borderTopWidth: 6,
                       borderLeftColor: 'transparent',
                       borderRightColor: 'transparent',
-                      borderTopColor: '#FFF',
+                      borderTopColor: theme.colors.chartanalysisvaluebg,
                       marginRight: 22,
                     }}
                   />
@@ -308,6 +308,7 @@ const Trendblock: React.FC<Inverterfilter> = ({
           </View>
         ))}
       </View>
+
       <View
         style={[
           styles.trendanalysisbox,
@@ -342,7 +343,7 @@ const Trendblock: React.FC<Inverterfilter> = ({
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                backgroundColor: theme.colors.overlaybackground,
+                backgroundColor: theme.colors.datepickerbackground,
                 paddingVertical: 6,
                 paddingHorizontal: 12,
                 height: 24,
@@ -354,13 +355,13 @@ const Trendblock: React.FC<Inverterfilter> = ({
               <FontAwesome6
                 name="calendar"
                 iconStyle="solid"
-                color={theme.colors.iconsecondary}
+                color={theme.colors.iconbuttontext}
                 size={16}
               />
               <Text
                 style={{
                   fontSize: 10,
-                  color: theme.colors.title,
+                  color: theme.colors.iconbuttontext,
                   fontFamily: getFontFamily('true', 'medium'),
                   marginLeft: 8,
                 }}
@@ -431,6 +432,7 @@ const Trendblock: React.FC<Inverterfilter> = ({
         <Linechart />
         <Barchart />
       </View>
+
       <View
         style={[styles.inverterbox, { borderColor: theme.colors.bordercolor }]}
       >
@@ -462,7 +464,7 @@ const Trendblock: React.FC<Inverterfilter> = ({
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                backgroundColor: theme.colors.overlaybackground,
+                backgroundColor: theme.colors.datepickerbackground,
                 paddingVertical: 6,
                 paddingHorizontal: 12,
                 height: 24,
@@ -474,13 +476,13 @@ const Trendblock: React.FC<Inverterfilter> = ({
               <FontAwesome6
                 name="calendar"
                 iconStyle="solid"
-                color={theme.colors.iconsecondary}
+                color={theme.colors.iconbuttontext}
                 size={16}
               />
               <Text
                 style={{
                   fontSize: 10,
-                  color: theme.colors.title,
+                  color: theme.colors.iconbuttontext,
                   fontFamily: getFontFamily('true', 'medium'),
                   marginLeft: 8,
                 }}
@@ -688,12 +690,12 @@ const Trendblock: React.FC<Inverterfilter> = ({
           </Text>
 
           <View style={styles.metricsRow}>
-            <View style={[styles.metricBox, { borderColor: theme.colors.bordercolor }]}>
+            <View style={[styles.metricBox, { borderColor: theme.colors.inputborder }]}>
               <Text style={[styles.metricLabel, { color: theme.colors.text }]}>Production</Text>
               <Text style={[styles.metricValue, { color: theme.colors.title }]}>241.56</Text>
             </View>
 
-            <View style={[styles.metricBox, { borderColor: theme.colors.bordercolor }]}>
+            <View style={[styles.metricBox, { borderColor: theme.colors.inputborder }]}>
               <Text style={[styles.metricLabel, { color: theme.colors.text }]}>Yield</Text>
               <Text style={[styles.metricValue, { color: theme.colors.title }]}>2.20</Text>
             </View>
@@ -734,11 +736,11 @@ const Trendblock: React.FC<Inverterfilter> = ({
           </Text>
 
           <View style={styles.metricsRow}>
-            <View style={[styles.metricBox, { borderColor: theme.colors.bordercolor }]}>
+            <View style={[styles.metricBox, { borderColor: theme.colors.inputborder }]}>
               <Text style={[styles.metricLabel, { color: theme.colors.text }]}>Production</Text>
               <Text style={[styles.metricValue, { color: theme.colors.title }]}>241.56</Text>
             </View>
-            <View style={[styles.metricBox, { borderColor: theme.colors.bordercolor }]}>
+            <View style={[styles.metricBox, { borderColor: theme.colors.inputborder }]}>
               <Text style={[styles.metricLabel, { color: theme.colors.text }]}>Yield</Text>
               <Text style={[styles.metricValue, { color: theme.colors.title }]}>2.20</Text>
             </View>

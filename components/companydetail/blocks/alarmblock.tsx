@@ -26,6 +26,7 @@ const Alarmblock: React.FC = () => {
           Alarms
         </Text>
       </View>
+
       <View
         style={[
           styles.alarmCardContainer,
@@ -40,7 +41,7 @@ const Alarmblock: React.FC = () => {
             styles.indicatorBar,
             { backgroundColor: !priorityalarm
                 ? theme.colors.cardscolorred
-                : theme.colors.cardscolorblue },
+                : theme.colors.cardscolorlightblue },
           ]}
         />
         <FontAwesome6
@@ -72,7 +73,9 @@ const Alarmblock: React.FC = () => {
                 {
                   backgroundColor: !priorityalarm
                     ? theme.colors.cardscolorred
-                    : theme.colors.cardscolorblue,
+                    : theme.colors.cardscolorlightblue,
+                    borderWidth: 1, 
+                    borderColor: !priorityalarm ? theme.colors.cardscolorred : theme.colors.cardscolorlightblue,
                 },
               ]}
             >
@@ -98,12 +101,12 @@ const Alarmblock: React.FC = () => {
                   : 'transparent',
                 borderColor: toggleactive
                   ? theme.colors.buttonbg
-                  : theme.colors.bordercolor,
+                  : theme.colors.alarmtoggleborder,
               },
             ]}
           >
             <View
-              style={[styles.togglecircle, { left: !toggleactive ? 5 : 25 }]}
+              style={[styles.togglecircle, {backgroundColor: !toggleactive ? theme.colors.alarmtoggle : theme.colors.alarmtoggledcolor, left: !toggleactive ? 5 : 25 }]}
             />
           </TouchableOpacity>
         </View>
@@ -123,7 +126,7 @@ const Alarmblock: React.FC = () => {
             styles.indicatorBar,
             { backgroundColor: priorityalarm
                 ? theme.colors.cardscolorred
-                : theme.colors.cardscolorblue },
+                : theme.colors.cardscolorlightblue },
           ]}
         />
         <FontAwesome6
@@ -155,14 +158,17 @@ const Alarmblock: React.FC = () => {
                 {
                   backgroundColor: priorityalarm
                     ? theme.colors.cardscolorred
-                    : theme.colors.cardscolorblue,
+                    : theme.colors.cardscolorlightblue,
+                    borderWidth: 1, 
+                    borderColor: priorityalarm ? theme.colors.cardscolorred : theme.colors.cardscolorlightblue,
                 },
               ]}
             >
               <Text
                 style={[
                   styles.priorityindicatortext,
-                  { color: theme.colors.iconbuttontext },
+                  { color: theme.colors.iconbuttontext 
+                  },
                 ]}
               >
                 {priorityalarm ? 'Priority' : 'Normal'}
@@ -181,16 +187,17 @@ const Alarmblock: React.FC = () => {
                   : 'transparent',
                 borderColor: !toggleactive
                   ? theme.colors.buttonbg
-                  : theme.colors.bordercolor,
+                  : theme.colors.alarmtoggleborder,
               },
             ]}
           >
             <View
-              style={[styles.togglecircle, { left: toggleactive ? 5 : 25 }]}
+              style={[styles.togglecircle, { backgroundColor: toggleactive ? theme.colors.alarmtoggle : theme.colors.alarmtoggledcolor, left: toggleactive ? 5 : 25 }]}
             />
           </TouchableOpacity>
         </View>
       </View>
+      
       <View
         style={[
           styles.alarmCardContainer,
@@ -205,7 +212,7 @@ const Alarmblock: React.FC = () => {
             styles.indicatorBar,
             { backgroundColor: priorityalarm
                 ? theme.colors.cardscolorred
-                : theme.colors.cardscolorblue },
+                : theme.colors.cardscolorlightblue },
           ]}
         />
         <FontAwesome6
@@ -237,7 +244,9 @@ const Alarmblock: React.FC = () => {
                 {
                   backgroundColor: priorityalarm
                     ? theme.colors.cardscolorred
-                    : theme.colors.cardscolorblue,
+                    : theme.colors.cardscolorlightblue,
+                    borderWidth: 1, 
+                    borderColor: priorityalarm ? theme.colors.cardscolorred : theme.colors.cardscolorlightblue,
                 },
               ]}
             >
@@ -263,12 +272,12 @@ const Alarmblock: React.FC = () => {
                   : 'transparent',
                 borderColor: !toggleactive
                   ? theme.colors.buttonbg
-                  : theme.colors.bordercolor,
+                  : theme.colors.alarmtoggleborder,
               },
             ]}
           >
             <View
-              style={[styles.togglecircle, { left: toggleactive ? 5 : 25 }]}
+              style={[styles.togglecircle, {backgroundColor: toggleactive ? theme.colors.alarmtoggle : theme.colors.alarmtoggledcolor, left: toggleactive ? 5 : 25 }]}
             />
           </TouchableOpacity>
         </View>
@@ -346,7 +355,6 @@ const styles = StyleSheet.create({
     borderRadius: 100,
     width: 10,
     height: 10,
-    backgroundColor: '#ffffff',
   },
   priorityindicator: {
     height: 28,

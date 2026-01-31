@@ -4,28 +4,13 @@ import FontAwesome6 from '@react-native-vector-icons/fontawesome6';
 import { getFontFamily } from '../../assets/utils/fontfamily';
 import { Image } from 'react-native';
 import Themestore from '../../store/themestore';
-import { RootStackParamList } from '../../types/navigation';
-import { StackNavigationProp } from '@react-navigation/stack';
-import { useNavigation } from '@react-navigation/native';
+import { CompanyCardProps } from '../../types/companycard';
 
-interface CompanyCardProps {
-  companyName: string;
-  date: string;
-  time: string;
-  logo: string;
-  powerReadings: any[];
-  efficiency: number;
-  onExpandView: () => void;
-  onverticalView: () => void;
-  isactive: boolean;
-}
 
-const CompanyCard: React.FC<CompanyCardProps> = ({ companyName, date, time, logo, powerReadings, efficiency, onExpandView, onverticalView, isactive }) => {
+const CompanyCard: React.FC<CompanyCardProps> = ({ companyName, date, time, logo, powerReadings, efficiency, onExpandView, onverticalView, isactive, isopen }) => {
   const theme = Themestore(state => state.theme);
-  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
-
   return (
-    <TouchableOpacity onPress={() => navigation.push('Companydetailscreen')} style={[styles.companycard, {backgroundColor: theme.colors.overlaybackground, borderColor: theme.colors.bordercolor}]}>
+    <TouchableOpacity onPress={isopen} style={[styles.companycard, {backgroundColor: theme.colors.overlaybackground, borderColor: theme.colors.bordercolor}]}>
       <View style={styles.companyheader}>
         <View style={styles.companylogoandtitle}>
           <View style={[styles.companylogo, {backgroundColor: theme.colors.background, borderColor: theme.colors.bordercolor}]}>

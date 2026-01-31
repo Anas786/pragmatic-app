@@ -7,11 +7,16 @@ import FontAwesome6 from '@react-native-vector-icons/fontawesome6';
 import { getFontFamily } from '../../../assets/utils/fontfamily';
 import CompanyCard from '../../../components/companydetail/CompanyCard';
 import Themestore from '../../../store/themestore';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '../../../types/navigation';
 
 const Dashboardscreen = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const theme = Themestore(state => state.theme);
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
+
 
   return (
     <SafeAreaView edges={['top']} style={[styles.dashboardview, {backgroundColor: theme.colors.background}]}>
@@ -29,6 +34,7 @@ const Dashboardscreen = () => {
             placeholderTextColor={theme.colors.text}
             value={searchQuery}
             onChangeText={setSearchQuery}
+            onPress={() => navigation.push('SearchScreen')}
             icon={() => (
               <FontAwesome6
                 iconStyle="solid"
@@ -104,6 +110,7 @@ const Dashboardscreen = () => {
             efficiency={86.56}
             onExpandView={() => Alert.alert('Expand Lucky Cement Nooribad')}
             isactive={true}
+            isopen={() => navigation.push('Companydetailscreen')}
           />
           <CompanyCard
             companyName="Master Molty Foam"
@@ -122,6 +129,7 @@ const Dashboardscreen = () => {
             efficiency={86.56}
             onExpandView={() => Alert.alert('Expand Master Molty Foam')}
             isactive={false}
+            isopen={() => Alert.alert('Expand Master Molty Foam')}
           />
           <CompanyCard
             companyName="Young Food Pvt."
@@ -137,6 +145,7 @@ const Dashboardscreen = () => {
             efficiency={86.56}
             onExpandView={() => Alert.alert('Expand Young Food Pvt.')}
             isactive={false}
+            isopen={() => Alert.alert('Expand Young Food Pvt.')}
           />
         </View>
       </ScrollView>

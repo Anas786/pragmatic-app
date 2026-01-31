@@ -18,6 +18,7 @@ import { getFontFamily } from './assets/utils/fontfamily';
 import Headerrightsecondary from './components/secondaryheader/headerrightsecondary';
 import HeaderCenterSecondary from './components/secondaryheader/headercentersecondary';
 import Companydetailscreen from './screens/main/companydetail/companydetailscreen';
+import SearchScreen from './screens/search/searchscreen';
 
 const Stack = createStackNavigator<RootStackParamList>();
 const App: React.FC = () => {
@@ -167,6 +168,16 @@ const App: React.FC = () => {
             }}
             name="Companydetailscreen"
             component={Companydetailscreen}
+          />
+          <Stack.Screen
+            options={{
+              gestureEnabled: false,
+              headerShown: false,
+              animationTypeForReplace: 'push',
+              animation: 'slide_from_bottom',
+            }}
+            name="SearchScreen"
+            component={SearchScreen}
           />
 
         </Stack.Navigator>

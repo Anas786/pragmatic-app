@@ -141,23 +141,23 @@ const Filters: React.FC<Filterprops> = ({selectFilter, selectedfilter}) => {
           styles.filterButton,
           {
             backgroundColor:
-              selectedfilter === 'Trend'
+              selectedfilter === 'Trends'
                 ? theme.colors.buttonbg
                 : 'transparent',
             borderColor:
-              selectedfilter === 'Trend'
+              selectedfilter === 'Trends'
                 ? theme.colors.buttonbg
                 : theme.colors.bordercolor,
           },
         ]}
-        onPress={() => selectFilter('Trend')}
+        onPress={() => selectFilter('Trends')}
       >
         <FontAwesome6
           name="file-lines"
           iconStyle="solid"
           size={12}
           color={
-            selectedfilter === 'Trend'
+            selectedfilter === 'Trends'
               ? theme.colors.iconbuttonicon
               : theme.colors.iconsecondary
           }
@@ -168,13 +168,13 @@ const Filters: React.FC<Filterprops> = ({selectFilter, selectedfilter}) => {
             styles.filterText,
             {
               color:
-                selectedfilter === 'Trend'
+                selectedfilter === 'Trends'
                   ? theme.colors.iconbuttontext
                   : theme.colors.text,
             },
           ]}
         >
-          Trend
+          Trends
         </Text>
       </TouchableOpacity>
     </ScrollView>

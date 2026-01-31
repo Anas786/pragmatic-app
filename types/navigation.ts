@@ -8,4 +8,5 @@ export type RootStackParamList = {
     Deactivateaccount: undefined;
     Termsandcondition: undefined;
     Companydetailscreen: undefined;
+    SearchScreen: undefined;
   };

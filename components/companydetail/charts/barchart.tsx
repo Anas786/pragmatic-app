@@ -49,9 +49,9 @@ const Barchart: React.FC = () => {
     <View style={{ marginVertical: 8 }}>
       <BarChart
         data={dataSet}
-        height={220}
+        height={200}
         width={285}
-        barWidth={8}
+        barWidth={10}
         maxValue={100}
         noOfSections={5}
         yAxisTextStyle={{ color: theme.colors.text, fontSize: 10 }}
@@ -66,8 +66,8 @@ const Barchart: React.FC = () => {
         rulesType="solid"
         hideRules={true}
         showVerticalLines={true}
-        verticalLinesThickness={8}
-        verticalLinesColor={theme.colors.text}
+        verticalLinesThickness={10}
+        verticalLinesColor={theme.colors.overlaybackground}
         yAxisColor="transparent"
         xAxisColor="transparent"
       />

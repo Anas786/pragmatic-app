@@ -443,7 +443,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginTop: 8,
   },
   statitem: {
     flex: 1,
@@ -454,7 +454,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
     marginHorizontal: 8,
-    marginTop: 8,
   },
   indicatorBar: {
     width: 2,

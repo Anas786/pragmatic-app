@@ -41,10 +41,19 @@ export interface ThemeColors {
   piechartcolor3: string;
   piechartcolor4: string;
   cardscolorblue: string,
+  cardscolorlightblue: string,
   cardscolorgreen: string,
   cardscolorred: string,
   chartyeartextactive: string,
-  chartyeartextinactive: string,  
+  chartyeartextinactive: string, 
+  alarmtoggle: string; 
+  alarmtoggleborder: string;
+  alarmtoggledcolor: string;
+  datepickerbackground: string;
+  chartanalysisvaluebg: string;
+  linechartdatapointbordergreen: string;
+  linechartdatapointborderblue: string;
+  linechartdatapointborderred: string;
 }
 
 
@@ -96,10 +105,19 @@ export const lightTheme: Theme = {
     piechartcolor3: '#d03a3a',
     piechartcolor4: '#3ad04b',
     cardscolorblue: '#3a5fd0',
+    cardscolorlightblue: '#0077ff',
     cardscolorgreen: '#3ad04b',
     cardscolorred: '#d03a3a',
     chartyeartextactive: '#000000',
     chartyeartextinactive: '#ffffff',
+    alarmtoggle: '#000000',
+    alarmtoggleborder: '#000000',
+    alarmtoggledcolor: '#ffffff',
+    datepickerbackground: '#1b1a1b',
+    chartanalysisvaluebg: '#ebebeb',
+    linechartdatapointbordergreen: '#3ad04b',
+    linechartdatapointborderblue: '#3a5fd0',
+    linechartdatapointborderred: '#d03a3a',
   },
 };
 
@@ -147,9 +165,18 @@ export const darkTheme: Theme = {
     piechartcolor3: '#d03a3a',
     piechartcolor4: '#3ad04b',
     cardscolorblue: '#3a5fd0',
+    cardscolorlightblue: '#0077ff',
     cardscolorgreen: '#3ad04b',
     cardscolorred: '#d03a3a',
     chartyeartextactive: '#000000',
     chartyeartextinactive: '#ffffff',  
+    alarmtoggle: '#ffffff',
+    alarmtoggleborder: '#ffffff',
+    alarmtoggledcolor: '#ffffff',
+    datepickerbackground: '#1b1a1b',
+    chartanalysisvaluebg: '#ffffff',
+    linechartdatapointbordergreen: '#3ad04b',
+    linechartdatapointborderblue: '#3a5fd0',
+    linechartdatapointborderred: '#d03a3a',
   },
 };
