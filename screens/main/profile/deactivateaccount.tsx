@@ -1,8 +1,8 @@
 import { StyleSheet, ScrollView, View, Text, Alert, TouchableOpacity } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useState } from 'react'
-import Themestore from '../store/themestore';
-import { getFontFamily } from '../assets/utils/fontfamily';
+import Themestore from '../../../store/themestore';
+import { getFontFamily } from '../../../assets/utils/fontfamily';
 import FontAwesome6 from '@react-native-vector-icons/fontawesome6';
 import { TextInput } from 'react-native-gesture-handler';
 import { Button } from 'react-native-paper';

@@ -1,7 +1,7 @@
 import { useNavigation } from "@react-navigation/native";
-import Themestore from "../store/themestore";
+import Themestore from "../../store/themestore";
 import { StackNavigationProp } from "@react-navigation/stack";
-import { RootStackParamList } from "../types/navigation";
+import { RootStackParamList } from "../../types/navigation";
 import { StyleSheet, TouchableOpacity } from "react-native";
 import FontAwesome6 from "@react-native-vector-icons/fontawesome6";
 

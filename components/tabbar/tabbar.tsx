@@ -1,16 +1,16 @@
 import { StyleSheet, View, Text } from 'react-native';
 import React from 'react';
 import FontAwesome6 from '@react-native-vector-icons/fontawesome6';
-import { getFontFamily } from '../assets/utils/fontfamily';
+import { getFontFamily } from '../../assets/utils/fontfamily';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import Dashboardscreen from '../screens/dashboardscreen';
+import Dashboardscreen from '../../screens/main/dashboard/dashboardscreen';
 import { Image } from 'react-native';
-import Themestore from '../store/themestore';
+import Themestore from '../../store/themestore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Profilescreen from '../screens/profilescreen';
-import HeaderCenterPrimary from './headercenterprimary';
-import HeaderRightPrimary from './headerrightprimary';
-import HeaderleftPrimary from './headerleftprimary';
+import Profilescreen from '../../screens/main/profile/profilescreen';
+import HeaderCenterPrimary from '../primaryheader/headercenterprimary';
+import HeaderRightPrimary from '../primaryheader/headerrightprimary';
+import HeaderleftPrimary from '../primaryheader/headerleftprimary';
 // import { UserprofileStore } from '../store/profilestore';
 
 const AnalyticsScreen: React.FC = () => {
@@ -210,7 +210,7 @@ const Tabbar: React.FC = () => {
               ]}
             >
               {/* {profileimageicon ? */}
-                <Image style={{ width: 24, height: 24, borderRadius: 100, borderWidth: 1, borderColor: theme.colors.tabbarprofileiconborder }} source={require('../assets/profiledummy1.jpg')} />
+                <Image style={{ width: 24, height: 24, borderRadius: 100, borderWidth: 1, borderColor: theme.colors.tabbarprofileiconborder }} source={require('../../assets/profiledummy1.jpg')} />
                  {/* : */}
                 {/* // <FontAwesome6
                 //   name="user"

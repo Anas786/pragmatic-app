@@ -1,10 +1,10 @@
 import { StyleSheet, Text, View, Image } from 'react-native';
-import { getFontFamily } from '../assets/utils/fontfamily';
+import { getFontFamily } from '../../assets/utils/fontfamily';
 import { useEffect } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList } from '../types/navigation';
-import Themestore from '../store/themestore';
+import { RootStackParamList } from '../../types/navigation';
+import Themestore from '../../store/themestore';
 
 const SplashScreentwo: React.FC = () => {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
@@ -21,7 +21,7 @@ const SplashScreentwo: React.FC = () => {
       <View>
         <Image
           style={styles.logo}
-          source={require('../assets/splashlogo.png')}
+          source={require('../../assets/splashlogo.png')}
         />
         <Text style={[styles.logotext, {color: theme.colors.title}]}>Pragmatics Engineering Solution</Text>
       </View>

@@ -40,7 +40,13 @@ export interface ThemeColors {
   piechartcolor2: string;
   piechartcolor3: string;
   piechartcolor4: string;
+  cardscolorblue: string,
+  cardscolorgreen: string,
+  cardscolorred: string,
+  chartyeartextactive: string,
+  chartyeartextinactive: string,  
 }
+
 
 export interface Theme {
   colors: ThemeColors;
@@ -89,6 +95,11 @@ export const lightTheme: Theme = {
     piechartcolor2: '#118ad6',
     piechartcolor3: '#d03a3a',
     piechartcolor4: '#3ad04b',
+    cardscolorblue: '#3a5fd0',
+    cardscolorgreen: '#3ad04b',
+    cardscolorred: '#d03a3a',
+    chartyeartextactive: '#000000',
+    chartyeartextinactive: '#ffffff',
   },
 };
 
@@ -135,5 +146,10 @@ export const darkTheme: Theme = {
     piechartcolor2: '#118ad6',
     piechartcolor3: '#d03a3a',
     piechartcolor4: '#3ad04b',
+    cardscolorblue: '#3a5fd0',
+    cardscolorgreen: '#3ad04b',
+    cardscolorred: '#d03a3a',
+    chartyeartextactive: '#000000',
+    chartyeartextinactive: '#ffffff',  
   },
 };

@@ -5,7 +5,7 @@ const HeaderCenterPrimary: React.FC = () => {
     return (
         <Image
             style={{ width: 40, height: 27 }}
-            source={require('../assets/headerlogo.png')}
+            source={require('../../assets/headerlogo.png')}
         />
     );
 }

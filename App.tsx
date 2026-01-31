@@ -1,23 +1,23 @@
 import React from 'react';
-import SplashScreenone from './screens/splashscreen_one';
-import SplashScreentwo from './screens/splashscreen_two';
-import Loginscreen from './auth/loginscreen';
+import SplashScreenone from './screens/splash/splashscreen_one';
+import SplashScreentwo from './screens/splash/splashscreen_two';
+import Loginscreen from './screens/auth/loginscreen';
 import { createStackNavigator } from '@react-navigation/stack';
 import { NavigationContainer } from '@react-navigation/native';
 import { RootStackParamList } from './types/navigation';
 import Themestore from './store/themestore';
 import { StatusBar } from 'react-native';
 import { darkTheme } from './theme/color';
-import Tabbar from './components/tabbar';
-import Editpersonalinfo from './screens/editpersonalinfo';
-import Editpassword from './screens/editpassword';
-import Deactivateaccount from './screens/deactivateaccount';
-import Termsandcondition from './screens/termsandcondition';
-import Headerleft from './components/headerleftsecondary';
+import Tabbar from './components/tabbar/tabbar';
+import Editpersonalinfo from './screens/main/profile/editpersonalinfo';
+import Editpassword from './screens/main/profile/editpassword';
+import Deactivateaccount from './screens/main/profile/deactivateaccount';
+import Termsandcondition from './screens/main/profile/termsandcondition';
+import Headerleft from './components/secondaryheader/headerleftsecondary';
 import { getFontFamily } from './assets/utils/fontfamily';
-import Headerrightsecondary from './components/headerrightsecondary';
-import HeaderCenterSecondary from './components/headercentersecondary';
-import Companydetailscreen from './screens/companydetailscreen';
+import Headerrightsecondary from './components/secondaryheader/headerrightsecondary';
+import HeaderCenterSecondary from './components/secondaryheader/headercentersecondary';
+import Companydetailscreen from './screens/main/companydetail/companydetailscreen';
 
 const Stack = createStackNavigator<RootStackParamList>();
 const App: React.FC = () => {

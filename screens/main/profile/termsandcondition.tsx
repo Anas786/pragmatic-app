@@ -1,8 +1,8 @@
 import { StyleSheet, Text, ScrollView } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import React from 'react'
-import Themestore from '../store/themestore';
-import { getFontFamily } from '../assets/utils/fontfamily';
+import Themestore from '../../../store/themestore';
+import { getFontFamily } from '../../../assets/utils/fontfamily';
 
 const Termsandcondition: React.FC = () => {
     const theme = Themestore(state => state.theme);

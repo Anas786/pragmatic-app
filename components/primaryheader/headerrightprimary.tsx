@@ -1,5 +1,5 @@
 import { Alert, TouchableOpacity } from "react-native";
-import Themestore from "../store/themestore";
+import Themestore from "../../store/themestore";
 import FontAwesome6 from "@react-native-vector-icons/fontawesome6";
 
 const HeaderRight: React.FC = () => {

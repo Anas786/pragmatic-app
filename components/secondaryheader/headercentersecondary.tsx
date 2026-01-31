@@ -1,7 +1,7 @@
 import React from "react";
 import { Image, Text, View } from "react-native";
-import { getFontFamily } from "../assets/utils/fontfamily";
-import Themestore from "../store/themestore";
+import { getFontFamily } from "../../assets/utils/fontfamily";
+import Themestore from "../../store/themestore";
 
 const HeaderCenterSecondary: React.FC = () => {
     const theme = Themestore((state) => state.theme);
@@ -10,7 +10,7 @@ const HeaderCenterSecondary: React.FC = () => {
             <View style={{backgroundColor: theme.colors.background, borderRadius: 100, borderColor: theme.colors.bordercolor}}>
                 <Image
                     style={{ width: 36, height: 36, borderRadius: 100 }}
-                    source={require('../assets/luckycementlogo.png')}
+                    source={require('../../assets/luckycementlogo.png')}
                 />
             </View>
             <View style={{ marginLeft: 10 }}>

@@ -10,15 +10,15 @@ import {
   // Alert,
   ImageStyle,
 } from 'react-native';
-import { getFontFamily } from '../assets/utils/fontfamily';
+import { getFontFamily } from '../../assets/utils/fontfamily';
 import { TextInput } from 'react-native';
 import FontAwesome6 from '@react-native-vector-icons/fontawesome6';
 import { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList } from '../types/navigation';
-import Themestore from '../store/themestore';
+import { RootStackParamList } from '../../types/navigation';
+import Themestore from '../../store/themestore';
 
 export default function Loginscreen() {
   const [rememberMe, setRememberMe] = useState<boolean>(false);
@@ -58,7 +58,7 @@ export default function Loginscreen() {
             <View style={styles.logintop}>
               <Image
                 style={styles.logoimage as ImageStyle}
-                source={require('../assets/splashlogo.png')}
+                source={require('../../assets/splashlogo.png')}
               />
               <Text style={[styles.welcometext, {color: theme.colors.title}]}>Welcome</Text>
               <Text style={[styles.desctext, {color: theme.colors.text}]}>

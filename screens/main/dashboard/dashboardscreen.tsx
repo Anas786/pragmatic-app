@@ -4,9 +4,9 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ScrollView } from 'react-native-gesture-handler';
 import { Button, IconButton, Searchbar } from 'react-native-paper';
 import FontAwesome6 from '@react-native-vector-icons/fontawesome6';
-import { getFontFamily } from '../assets/utils/fontfamily';
-import CompanyCard from '../components/CompanyCard';
-import Themestore from '../store/themestore';
+import { getFontFamily } from '../../../assets/utils/fontfamily';
+import CompanyCard from '../../../components/companydetail/CompanyCard';
+import Themestore from '../../../store/themestore';
 
 const Dashboardscreen = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -88,7 +88,7 @@ const Dashboardscreen = () => {
             companyName="Lucky Cement Nooribad"
             date="17/12/2025"
             time="07:49 PM"
-            logo={require("../assets/luckycementlogo.png")}
+            logo={require("../../../assets/luckycementlogo.png")}
             onverticalView={() => Alert.alert('Vertical Options')}
             powerReadings={[
               { icon: "solar-panel", name: "Solar", iconcolor: "#05c80e", value: "3.2345", label: "kWp" },
@@ -109,7 +109,7 @@ const Dashboardscreen = () => {
             companyName="Master Molty Foam"
             date="17/12/2025"
             time="07:49 PM"
-            logo={require("../assets/mastermoltylogo.jpg")}
+            logo={require("../../../assets/mastermoltylogo.jpg")}
             onverticalView={() => Alert.alert('Vertical Options')}
             powerReadings={[
               { icon: "solar-panel", name: "Solar", iconcolor: "#05c80e", value: "3.2345", label: "kWp" },
@@ -127,7 +127,7 @@ const Dashboardscreen = () => {
             companyName="Young Food Pvt."
             date="17/12/2025"
             time="07:49 PM"
-            logo={require("../assets/youngsfoodlogo.jpg")}
+            logo={require("../../../assets/youngsfoodlogo.jpg")}
             onverticalView={() => Alert.alert('Vertical Options')}
             powerReadings={[
               { icon: "chart-line", name: "PV Size", iconcolor: "#e8f80c", value: "18,235", label: "kW" },

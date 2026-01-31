@@ -1,10 +1,10 @@
 import { ImageSourcePropType, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import React from 'react';
 import FontAwesome6 from '@react-native-vector-icons/fontawesome6';
-import { getFontFamily } from '../assets/utils/fontfamily';
+import { getFontFamily } from '../../assets/utils/fontfamily';
 import { Image } from 'react-native';
-import Themestore from '../store/themestore';
-import { RootStackParamList } from '../types/navigation';
+import Themestore from '../../store/themestore';
+import { RootStackParamList } from '../../types/navigation';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useNavigation } from '@react-navigation/native';
 

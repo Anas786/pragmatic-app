@@ -1,13 +1,13 @@
 import { Text, StyleSheet, View, Alert, ScrollView, Image, TouchableOpacity } from 'react-native'
 import { Button } from 'react-native-paper';
 import React from 'react'
-import Themestore from '../store/themestore'
-import { getFontFamily } from '../assets/utils/fontfamily';
+import Themestore from '../../../store/themestore'
+import { getFontFamily } from '../../../assets/utils/fontfamily';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome6 from '@react-native-vector-icons/fontawesome6';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
-import { imagePickerOptions, UserprofileStore } from '../store/profilestore';
-import { RootStackParamList } from '../types/navigation';
+import { imagePickerOptions, UserprofileStore } from '../../../store/profilestore';
+import { RootStackParamList } from '../../../types/navigation';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useNavigation } from '@react-navigation/native';
 
@@ -62,7 +62,7 @@ const Profilescreen: React.FC = () => {
                 <View style={styles.userinfocontainer}>
                     <View style={styles.userinfobox}>
                         <View style={styles.userimage}>
-                            <Image source={require('../assets/profiledummy1.jpg')}
+                            <Image source={require('../../../assets/profiledummy1.jpg')}
                                 style={{
                                     width: 80, height: 80, borderRadius: 100,
                                     borderWidth: 2,

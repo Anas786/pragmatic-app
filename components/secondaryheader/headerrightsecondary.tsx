@@ -1,7 +1,7 @@
 import FontAwesome6 from "@react-native-vector-icons/fontawesome6";
-import Themestore from "../store/themestore";
+import Themestore from "../../store/themestore";
 import { StyleSheet, Text, View } from "react-native";
-import { getFontFamily } from "../assets/utils/fontfamily";
+import { getFontFamily } from "../../assets/utils/fontfamily";
 
 const Headerrightsecondary: React.FC = () => {
     const theme = Themestore(state => state.theme);

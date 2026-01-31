@@ -3,8 +3,8 @@ import React, { useEffect } from 'react';
 import LottieView from 'lottie-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList } from '../types/navigation';
-import Themestore from '../store/themestore';
+import { RootStackParamList } from '../../types/navigation';
+import Themestore from '../../store/themestore';
 
 const SplashScreenone: React.FC = () => {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
@@ -23,7 +23,7 @@ const SplashScreenone: React.FC = () => {
       <View style={styles.gifloader}>
         <LottieView
           style={styles.gif}
-          source={require('../assets/LOADINGLINH.json')}
+          source={require('../../assets/LOADINGLINH.json')}
           autoPlay
           loop
           speed={0.9}
