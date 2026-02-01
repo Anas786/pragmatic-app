@@ -4,11 +4,13 @@ import Themestore from '../../../../store/themestore';
 import FontAwesome6 from '@react-native-vector-icons/fontawesome6';
 import { getFontFamily } from '../../../../assets/utils/fontfamily';
 import { Searchbar } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const LiveparametersScreen: React.FC = () => {
   const theme = Themestore(state => state.theme);
   const [isExpanded, setIsExpanded] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const inset = useSafeAreaInsets();
   return (
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
@@ -28,7 +30,7 @@ const LiveparametersScreen: React.FC = () => {
             styles.cardHeader,
             {
               backgroundColor: theme.colors.cardheader,
-              borderRadius: !isExpanded ? 20 : 0,
+              borderRadius: !isExpanded ? 16 : 0,
             },
           ]}
         >
@@ -50,7 +52,7 @@ const LiveparametersScreen: React.FC = () => {
               style={[
                 styles.searchContainer,
                 {
-                  backgroundColor: theme.colors.overlaybackground,
+                  backgroundColor: theme.colors.liveparametersearchbg,
                   borderColor: theme.colors.bordercolor,
                 },
               ]}
@@ -110,8 +112,8 @@ const LiveparametersScreen: React.FC = () => {
                     style={[
                       styles.tabPill,
                       {
-                        borderColor: theme.colors.bordercolor,
-                        backgroundColor: theme.colors.background,
+                        borderColor: theme.colors.inputborder,
+                        backgroundColor: theme.colors.liveparameterpillsbg,
                       },
                     ]}
                   >
@@ -138,7 +140,7 @@ const LiveparametersScreen: React.FC = () => {
                       styles.tabPill,
                       {
                         borderColor: theme.colors.buttonbg,
-                        backgroundColor: theme.colors.background,
+                        backgroundColor: theme.colors.liveparameterpillsbg,
                       },
                     ]}
                   >
@@ -228,7 +230,7 @@ const LiveparametersScreen: React.FC = () => {
                 style={[
                   styles.categoryPillActive,
                   {
-                    backgroundColor: theme.colors.background,
+                    backgroundColor: theme.colors.liveparameterpillsbg,
                     borderColor: theme.colors.highlightedsecondary,
                   },
                 ]}
@@ -261,8 +263,8 @@ const LiveparametersScreen: React.FC = () => {
                     style={[
                       styles.chip,
                       {
-                        backgroundColor: theme.colors.background,
-                        borderColor: theme.colors.bordercolor,
+                        backgroundColor: theme.colors.liveparameterpillsbg,
+                        borderColor: theme.colors.inputborder,
                       },
                     ]}
                   >
@@ -286,8 +288,8 @@ const LiveparametersScreen: React.FC = () => {
                 style={[
                   styles.collapsedCategory,
                   {
-                    borderColor: theme.colors.bordercolor,
-                    backgroundColor: theme.colors.background,
+                    borderColor: theme.colors.inputborder,
+                    backgroundColor: theme.colors.liveparameterpillsbg,
                   },
                 ]}
               >
@@ -312,8 +314,8 @@ const LiveparametersScreen: React.FC = () => {
                 style={[
                   styles.collapsedCategory,
                   {
-                    borderColor: theme.colors.bordercolor,
-                    backgroundColor: theme.colors.background,
+                    borderColor: theme.colors.inputborder,
+                    backgroundColor: theme.colors.liveparameterpillsbg,
                   },
                 ]}
               >
@@ -341,8 +343,8 @@ const LiveparametersScreen: React.FC = () => {
                 style={[
                   styles.collapsedCategory,
                   {
-                    borderColor: theme.colors.bordercolor,
-                    backgroundColor: theme.colors.background,
+                    borderColor: theme.colors.inputborder,
+                    backgroundColor: theme.colors.liveparameterpillsbg,
                   },
                 ]}
               >
@@ -375,7 +377,7 @@ const LiveparametersScreen: React.FC = () => {
             styles.cardHeader,
             {
               backgroundColor: theme.colors.cardheader,
-              borderRadius: !isExpanded ? 20 : 0,
+              borderRadius: !isExpanded ? 16 : 16,
             },
           ]}
         >
@@ -397,7 +399,7 @@ const LiveparametersScreen: React.FC = () => {
               style={[
                 styles.searchContainer,
                 {
-                  backgroundColor: theme.colors.overlaybackground,
+                  backgroundColor: theme.colors.liveparametersearchbg,
                   borderColor: theme.colors.bordercolor,
                 },
               ]}
@@ -454,7 +456,7 @@ const LiveparametersScreen: React.FC = () => {
             styles.cardHeader,
             {
               backgroundColor: theme.colors.cardheader,
-              borderRadius: !isExpanded ? 20 : 0,
+              borderRadius: !isExpanded ? 16 : 16,
             },
           ]}
         >
@@ -476,7 +478,7 @@ const LiveparametersScreen: React.FC = () => {
               style={[
                 styles.searchContainer,
                 {
-                  backgroundColor: theme.colors.overlaybackground,
+                  backgroundColor: theme.colors.liveparametersearchbg,
                   borderColor: theme.colors.bordercolor,
                 },
               ]}
@@ -533,7 +535,7 @@ const LiveparametersScreen: React.FC = () => {
             styles.cardHeader,
             {
               backgroundColor: theme.colors.cardheader,
-              borderRadius: !isExpanded ? 20 : 0,
+              borderRadius: !isExpanded ? 16 : 16,
             },
           ]}
         >
@@ -555,7 +557,7 @@ const LiveparametersScreen: React.FC = () => {
               style={[
                 styles.searchContainer,
                 {
-                  backgroundColor: theme.colors.overlaybackground,
+                  backgroundColor: theme.colors.liveparametersearchbg,
                   borderColor: theme.colors.bordercolor,
                 },
               ]}
@@ -602,6 +604,7 @@ const LiveparametersScreen: React.FC = () => {
           styles.card,
           {
             borderColor: theme.colors.bordercolor,
+            marginBottom: isExpanded ? inset.bottom + 12 : 0,
           },
         ]}
       >
@@ -612,7 +615,7 @@ const LiveparametersScreen: React.FC = () => {
             styles.cardHeader,
             {
               backgroundColor: theme.colors.cardheader,
-              borderRadius: !isExpanded ? 20 : 0,
+              borderRadius: !isExpanded ? 16 : 16,
             },
           ]}
         >
@@ -634,7 +637,7 @@ const LiveparametersScreen: React.FC = () => {
               style={[
                 styles.searchContainer,
                 {
-                  backgroundColor: theme.colors.overlaybackground,
+                  backgroundColor: theme.colors.liveparametersearchbg,
                   borderColor: theme.colors.bordercolor,
                 },
               ]}
@@ -687,7 +690,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   card: {
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 1,
     marginBottom: 20,
   },
@@ -696,8 +699,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 12,
-    borderTopRightRadius: 20,
-    borderTopLeftRadius: 20,
+    borderTopRightRadius: 16,
+    borderTopLeftRadius: 16,
   },
   headerLeft: {
     flexDirection: 'row',

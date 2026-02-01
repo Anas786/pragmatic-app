@@ -54,6 +54,8 @@ export interface ThemeColors {
   linechartdatapointbordergreen: string;
   linechartdatapointborderblue: string;
   linechartdatapointborderred: string;
+  liveparametersearchbg: string;
+  liveparameterpillsbg: string;
 }
 
 
@@ -118,6 +120,8 @@ export const lightTheme: Theme = {
     linechartdatapointbordergreen: '#3ad04b',
     linechartdatapointborderblue: '#3a5fd0',
     linechartdatapointborderred: '#d03a3a',
+    liveparametersearchbg: '#f0f0f0',
+    liveparameterpillsbg: '#ebebeb',
   },
 };
 
@@ -178,5 +182,7 @@ export const darkTheme: Theme = {
     linechartdatapointbordergreen: '#3ad04b',
     linechartdatapointborderblue: '#3a5fd0',
     linechartdatapointborderred: '#d03a3a',
+    liveparametersearchbg: '#1b1a1b',
+    liveparameterpillsbg: '#171717',
   },
 };

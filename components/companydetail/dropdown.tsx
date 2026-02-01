@@ -184,7 +184,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
       },
       dropdownItemText: {
-        fontSize: 14,
+        fontSize: 12,
         fontFamily: getFontFamily('true', 'medium'),
       },
 })
