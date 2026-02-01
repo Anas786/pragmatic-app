@@ -85,7 +85,7 @@ export default function Loginscreen() {
                   style={[styles.input, {color: theme.colors.text}]}
                   placeholder="Password"
                   placeholderTextColor={theme.colors.text}
-                  secureTextEntry={true}
+                  secureTextEntry={false}
                   value={password}
                   onChangeText={setPassword}
                 />
