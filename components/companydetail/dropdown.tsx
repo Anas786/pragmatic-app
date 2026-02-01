@@ -119,6 +119,31 @@ return (
         </TouchableOpacity>
 
         <TouchableOpacity
+          style={[
+            styles.dropdownItem,
+            {
+              borderBottomWidth: 1,
+              borderBottomColor: theme.colors.bordercolor,
+            },
+          ]}
+          onPress={() => handledropdown('Devices Health')}
+        >
+          <Text
+            style={[
+              styles.dropdownItemText,
+              {
+                color:
+                  selectdropdown === 'Devices Health'
+                    ? theme.colors.iconcolor
+                    : theme.colors.text,
+              },
+            ]}
+          >
+            Devices Health
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={styles.dropdownItem}
           onPress={() => handledropdown('Alarms')}
         >

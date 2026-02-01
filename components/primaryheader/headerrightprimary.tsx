@@ -1,15 +1,19 @@
-import { Alert, TouchableOpacity } from "react-native";
+import { TouchableOpacity } from "react-native";
 import Themestore from "../../store/themestore";
 import FontAwesome6 from "@react-native-vector-icons/fontawesome6";
 
-const HeaderRight: React.FC = () => {
+
+interface HeaderRightProps {
+    setvisible: (value: boolean) => void;
+}
+const HeaderRight: React.FC<HeaderRightProps> = ({setvisible}) => {
     const theme = Themestore(state => state.theme);
     const toggleTheme = Themestore((state) => state.toggleTheme);
     const mode = Themestore((state) => state.mode);
     return (
         <>
             <TouchableOpacity
-                onPress={() => Alert.alert('Notification screen will be open')}
+                onPress={() => setvisible(true)}
             >
                 <FontAwesome6
                     name="bell"

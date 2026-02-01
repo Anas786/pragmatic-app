@@ -1,14 +1,17 @@
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import React from 'react';
+import React, { useState } from 'react';
 import Themestore from '../../../store/themestore';
 import FontAwesome6 from '@react-native-vector-icons/fontawesome6';
 import { getFontFamily } from '../../../assets/utils/fontfamily';
 import { PieChart } from 'react-native-gifted-charts';
 import Svg, { Path } from 'react-native-svg';
+import DatePicker from 'react-native-date-picker';
 
 const Summaryblock: React.FC = () => {
   const theme = Themestore(state => state.theme);
   const mode = Themestore(state => state.mode);
+  const [date, setDate] = useState(new Date());
+  const [open, setOpen] = useState<boolean>(false);
 
   const pieData = [
     { value: 45, color: theme.colors.piechartcolor1, text: '' },
@@ -18,9 +21,6 @@ const Summaryblock: React.FC = () => {
   ];
   return (
     <>
-    
-     
-
       <View
         style={[styles.yieldbox, { borderColor: theme.colors.bordercolor }]}
       >
@@ -548,7 +548,7 @@ const Summaryblock: React.FC = () => {
                 borderRadius: 65,
                 marginHorizontal: 8,
               }}
-              onPress={() => Alert.alert('Date Picker Opening...')}
+              onPress={() => setOpen(true)}
             >
               <FontAwesome6
                 name="calendar"
@@ -565,6 +565,18 @@ const Summaryblock: React.FC = () => {
               >
                 15/12/25 - 17/12/25
               </Text>
+              <DatePicker
+                modal
+                open={open}
+                date={date}
+                onConfirm={date => {
+                  setOpen(false);
+                  setDate(date);
+                }}
+                onCancel={() => {
+                  setOpen(false);
+                }}
+              />
             </TouchableOpacity>
             <TouchableOpacity
               style={{

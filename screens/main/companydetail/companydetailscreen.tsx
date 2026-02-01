@@ -12,6 +12,7 @@ import LiveparametersScreen from './dropdownscreens/liveparameters';
 import { RootStackParamList } from '../../../types/navigation';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useNavigation } from '@react-navigation/native';
+import DevicesHealthScreen from './dropdownscreens/devicehealth';
 
 const Companydetailscreen: React.FC = () => {
   const theme = Themestore(state => state.theme);
@@ -64,6 +65,7 @@ const Companydetailscreen: React.FC = () => {
         {selectdropdown === 'Views' && <Viewsscreen/> 
         || selectdropdown === 'Live parameters' && <LiveparametersScreen/> 
         || selectdropdown === 'Devices' && <DevicesScreen/> 
+        || selectdropdown === 'Devices Health' && <DevicesHealthScreen/> 
         || selectdropdown === 'Alarms' && <Alarmsscreen/> 
         }
       </ScrollView>

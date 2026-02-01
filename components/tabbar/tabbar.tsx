@@ -1,5 +1,5 @@
 import { StyleSheet, View, Text } from 'react-native';
-import React from 'react';
+import React, { useState } from 'react';
 import FontAwesome6 from '@react-native-vector-icons/fontawesome6';
 import { getFontFamily } from '../../assets/utils/fontfamily';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -11,219 +11,274 @@ import Profilescreen from '../../screens/main/profile/profilescreen';
 import HeaderCenterPrimary from '../primaryheader/headercenterprimary';
 import HeaderRightPrimary from '../primaryheader/headerrightprimary';
 import HeaderleftPrimary from '../primaryheader/headerleftprimary';
+import Alertbox from '../utils/alertbox';
 // import { UserprofileStore } from '../store/profilestore';
 
 const AnalyticsScreen: React.FC = () => {
   const theme = Themestore(state => state.theme);
   return (
-    <View style={[styles.placeholder, { backgroundColor: theme.colors.background }]}>
-      <Text style={[styles.text, { color: theme.colors.title }]}>Analytics</Text>
+    <View
+      style={[styles.placeholder, { backgroundColor: theme.colors.background }]}
+    >
+      <Text style={[styles.text, { color: theme.colors.title }]}>
+        Analytics
+      </Text>
     </View>
-  )
+  );
 };
 const AddScreen: React.FC = () => {
   const theme = Themestore(state => state.theme);
   return (
-    <View style={[styles.placeholder, { backgroundColor: theme.colors.background }]}>
+    <View
+      style={[styles.placeholder, { backgroundColor: theme.colors.background }]}
+    >
       <Text style={[styles.text, { color: theme.colors.title }]}>Add</Text>
     </View>
-  )
+  );
 };
 const SettingScreen: React.FC = () => {
   const theme = Themestore(state => state.theme);
   return (
-    <View style={[styles.placeholder, { backgroundColor: theme.colors.background }]}>
+    <View
+      style={[styles.placeholder, { backgroundColor: theme.colors.background }]}
+    >
       <Text style={[styles.text, { color: theme.colors.title }]}>Setting</Text>
     </View>
-  )
+  );
 };
-
 
 const Tabbar: React.FC = () => {
   const Tab = createBottomTabNavigator();
   const theme = Themestore(state => state.theme);
   const insets = useSafeAreaInsets();
+  const [visible, setvisible] = useState({
+    visible: false,
+    message: '',
+    title: 'Alert',
+  });
+  const showAlert = (msg: string) => setvisible({ visible: true, message: msg, title: 'Alert' });
   // const profileimageicon = UserprofileStore((state) => state.profileImageUri);
 
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: [styles.tabBar, { backgroundColor: theme.colors.background, height: 80 + insets.bottom, paddingBottom: insets.bottom, paddingTop: 10 }],
-        tabBarShowLabel: true,
-        tabBarLabelStyle: [styles.labelStyle, { color: theme.colors.title }],
-      }}
-    >
-      <Tab.Screen
-        name="Dashboard"
-        component={Dashboardscreen}
-        options={{
-          headerShown: true,
-          headerTitle: () => <HeaderCenterPrimary />,
-          headerTitleAlign: 'center',
-          headerStyle: {
-            backgroundColor: theme.colors.background,
-            borderWidth: 1,
-            borderColor: theme.colors.bordercolor,
-            borderBottomWidth: 1,
-            borderBottomColor: theme.colors.bordercolor,
-          },
-          headerLeft: () => <HeaderleftPrimary />,
-          headerRight: () => <HeaderRightPrimary />,
-          tabBarIcon: ({ focused }) => (
-            <View
-              style={[
-                styles.iconContainer,
-                focused && { backgroundColor: theme.colors.activetintcolor },
-              ]}
-            >
-              <FontAwesome6
-                name="house"
-                size={20}
-                color={focused ? theme.colors.tabbariconactive : theme.colors.tabbariconinactive}
-                iconStyle='solid'
-              />
-            </View>
-          ),
-        }}
+    <>
+      <Alertbox
+        title="Alert"
+        message={visible.message}
+        visible={visible.visible}
+        setvisible={(val) => setvisible((prev) => ({ ...prev, visible: val }))}
       />
-      <Tab.Screen
-        name="Analytics"
-        component={AnalyticsScreen}
-        options={{
-          headerShown: true,
-          headerTitle: () => <HeaderCenterPrimary />,
-          headerTitleAlign: 'center',
-          headerStyle: {
-            backgroundColor: theme.colors.background,
-            borderWidth: 1,
-            borderColor: theme.colors.bordercolor,
-            borderBottomWidth: 1,
-            borderBottomColor: theme.colors.bordercolor,
-          },
-          headerLeft: () => <HeaderleftPrimary />,
-          headerRight: () => <HeaderRightPrimary />,
-          tabBarIcon: ({ focused }) => (
-            <View
-              style={[
-                styles.iconContainer,
-                focused && { backgroundColor: theme.colors.activetintcolor },
-              ]}
-            >
-              <FontAwesome6
-                name="chart-line"
-                iconStyle="solid"
-                size={20}
-                color={focused ? theme.colors.tabbariconactive : theme.colors.tabbariconinactive}
-              />
-            </View>
-          ),
+      <Tab.Navigator
+        screenOptions={{
+          headerShown: false,
+          tabBarStyle: [
+            styles.tabBar,
+            {
+              backgroundColor: theme.colors.background,
+              height: 80 + insets.bottom,
+              paddingBottom: insets.bottom,
+              paddingTop: 10,
+            },
+          ],
+          tabBarShowLabel: true,
+          tabBarLabelStyle: [styles.labelStyle, { color: theme.colors.title }],
         }}
-      />
-      <Tab.Screen
-        name="Add"
-        component={AddScreen}
-        options={{
-          headerShown: true,
-          headerTitle: () => <HeaderCenterPrimary />,
-          headerTitleAlign: 'center',
-          headerStyle: {
-            backgroundColor: theme.colors.background,
-            borderWidth: 1,
-            borderColor: theme.colors.bordercolor,
-            borderBottomWidth: 1,
-            borderBottomColor: theme.colors.bordercolor,
-          },
-          headerLeft: () => <HeaderleftPrimary />,
-          headerRight: () => <HeaderRightPrimary />,
-          tabBarIcon: ({ focused }) => (
-            <View
-              style={[
-                styles.iconContainer,
-                focused && { backgroundColor: theme.colors.activetintcolor },
-              ]}
-            >
-              <FontAwesome6
-                name="square-plus"
-                iconStyle="regular"
-                size={24}
-                color={focused ? theme.colors.tabbariconactive : theme.colors.tabbariconinactive}
-              />
-            </View>
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Setting"
-        component={SettingScreen}
-        options={{
-          headerShown: true,
-          headerTitle: () => <HeaderCenterPrimary />,
-          headerTitleAlign: 'center',
-          headerStyle: {
-            backgroundColor: theme.colors.background,
-            borderWidth: 1,
-            borderColor: theme.colors.bordercolor,
-            borderBottomWidth: 1,
-            borderBottomColor: theme.colors.bordercolor,
-          },
-          headerLeft: () => <HeaderleftPrimary />,
-          headerRight: () => <HeaderRightPrimary />,
-          tabBarIcon: ({ focused }) => (
-            <View
-              style={[
-                styles.iconContainer,
-                focused && { backgroundColor: theme.colors.activetintcolor },
-              ]}
-            >
-              <FontAwesome6
-                name="gear"
-                iconStyle="solid"
-                size={20}
-                color={focused ? theme.colors.tabbariconactive : theme.colors.tabbariconinactive}
-              />
-            </View>
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={Profilescreen}
-        options={{
-          headerShown: true,
-          headerTitle: () => <HeaderCenterPrimary />,
-          headerTitleAlign: 'center',
-          headerStyle: {
-            backgroundColor: theme.colors.background,
-            borderWidth: 1,
-            borderColor: theme.colors.bordercolor,
-            borderBottomWidth: 1,
-            borderBottomColor: theme.colors.bordercolor,
-          },
-          headerLeft: () => <HeaderleftPrimary />,
-          headerRight: () => <HeaderRightPrimary />,
-          tabBarIcon: ({ focused }) => (
-            <View
-              style={[
-                styles.iconContainer,
-                focused && { backgroundColor: theme.colors.activetintcolor },
-              ]}
-            >
-              {/* {profileimageicon ? */}
-                <Image style={{ width: 24, height: 24, borderRadius: 100, borderWidth: 1, borderColor: theme.colors.tabbarprofileiconborder }} source={require('../../assets/profiledummy1.jpg')} />
-                 {/* : */}
+      >
+        <Tab.Screen
+          name="Dashboard"
+          component={Dashboardscreen}
+          options={{
+            headerShown: true,
+            headerTitle: () => <HeaderCenterPrimary />,
+            headerTitleAlign: 'center',
+            headerStyle: {
+              backgroundColor: theme.colors.background,
+              borderWidth: 1,
+              borderColor: theme.colors.bordercolor,
+              borderBottomWidth: 1,
+              borderBottomColor: theme.colors.bordercolor,
+            },
+            headerLeft: () => <HeaderleftPrimary setvisible={() => showAlert('Drawer will be here')} />,
+            headerRight: () => <HeaderRightPrimary setvisible={() => showAlert('Notification Screen Will Be Here')} />,
+            tabBarIcon: ({ focused }) => (
+              <View
+                style={[
+                  styles.iconContainer,
+                  focused && { backgroundColor: theme.colors.activetintcolor },
+                ]}
+              >
+                <FontAwesome6
+                  name="house"
+                  size={20}
+                  color={
+                    focused
+                      ? theme.colors.tabbariconactive
+                      : theme.colors.tabbariconinactive
+                  }
+                  iconStyle="solid"
+                />
+              </View>
+            ),
+          }}
+        />
+        <Tab.Screen
+          name="Analytics"
+          component={AnalyticsScreen}
+          options={{
+            headerShown: true,
+            headerTitle: () => <HeaderCenterPrimary />,
+            headerTitleAlign: 'center',
+            headerStyle: {
+              backgroundColor: theme.colors.background,
+              borderWidth: 1,
+              borderColor: theme.colors.bordercolor,
+              borderBottomWidth: 1,
+              borderBottomColor: theme.colors.bordercolor,
+            },
+            headerLeft: () => <HeaderleftPrimary setvisible={() => showAlert('Drawer will be here')}/>,
+            headerRight: () => <HeaderRightPrimary setvisible={() => showAlert('Notification Screen Will Be Here')} />,
+            tabBarIcon: ({ focused }) => (
+              <View
+                style={[
+                  styles.iconContainer,
+                  focused && { backgroundColor: theme.colors.activetintcolor },
+                ]}
+              >
+                <FontAwesome6
+                  name="chart-line"
+                  iconStyle="solid"
+                  size={20}
+                  color={
+                    focused
+                      ? theme.colors.tabbariconactive
+                      : theme.colors.tabbariconinactive
+                  }
+                />
+              </View>
+            ),
+          }}
+        />
+        <Tab.Screen
+          name="Add"
+          component={AddScreen}
+          options={{
+            headerShown: true,
+            headerTitle: () => <HeaderCenterPrimary />,
+            headerTitleAlign: 'center',
+            headerStyle: {
+              backgroundColor: theme.colors.background,
+              borderWidth: 1,
+              borderColor: theme.colors.bordercolor,
+              borderBottomWidth: 1,
+              borderBottomColor: theme.colors.bordercolor,
+            },
+            headerLeft: () => <HeaderleftPrimary setvisible={() => showAlert('Drawer will be here')}/>,
+            headerRight: () => <HeaderRightPrimary setvisible={() => showAlert('Notification Screen Will Be Here')} />,
+            tabBarIcon: ({ focused }) => (
+              <View
+                style={[
+                  styles.iconContainer,
+                  focused && { backgroundColor: theme.colors.activetintcolor },
+                ]}
+              >
+                <FontAwesome6
+                  name="square-plus"
+                  iconStyle="regular"
+                  size={24}
+                  color={
+                    focused
+                      ? theme.colors.tabbariconactive
+                      : theme.colors.tabbariconinactive
+                  }
+                />
+              </View>
+            ),
+          }}
+        />
+        <Tab.Screen
+          name="Setting"
+          component={SettingScreen}
+          options={{
+            headerShown: true,
+            headerTitle: () => <HeaderCenterPrimary />,
+            headerTitleAlign: 'center',
+            headerStyle: {
+              backgroundColor: theme.colors.background,
+              borderWidth: 1,
+              borderColor: theme.colors.bordercolor,
+              borderBottomWidth: 1,
+              borderBottomColor: theme.colors.bordercolor,
+            },
+            headerLeft: () => <HeaderleftPrimary setvisible={() => showAlert('Drawer will be here')}/>,
+            headerRight: () => <HeaderRightPrimary setvisible={() => showAlert('Notification Screen Will Be Here')} />,
+            tabBarIcon: ({ focused }) => (
+              <View
+                style={[
+                  styles.iconContainer,
+                  focused && { backgroundColor: theme.colors.activetintcolor },
+                ]}
+              >
+                <FontAwesome6
+                  name="gear"
+                  iconStyle="solid"
+                  size={20}
+                  color={
+                    focused
+                      ? theme.colors.tabbariconactive
+                      : theme.colors.tabbariconinactive
+                  }
+                />
+              </View>
+            ),
+          }}
+        />
+        <Tab.Screen
+          name="Profile"
+          component={Profilescreen}
+          options={{
+            headerShown: true,
+            headerTitle: () => <HeaderCenterPrimary />,
+            headerTitleAlign: 'center',
+            headerStyle: {
+              backgroundColor: theme.colors.background,
+              borderWidth: 1,
+              borderColor: theme.colors.bordercolor,
+              borderBottomWidth: 1,
+              borderBottomColor: theme.colors.bordercolor,
+            },
+            headerLeft: () => <HeaderleftPrimary setvisible={() => showAlert('Drawer will be here')}/>,
+            headerRight: () => <HeaderRightPrimary setvisible={() => showAlert('Notification Screen Will Be Here')} />,
+            tabBarIcon: ({ focused }) => (
+              <View
+                style={[
+                  styles.iconContainer,
+                  focused && { backgroundColor: theme.colors.activetintcolor },
+                ]}
+              >
+                {/* {profileimageicon ? */}
+                <Image
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: 100,
+                    borderWidth: 1,
+                    borderColor: theme.colors.tabbarprofileiconborder,
+                  }}
+                  source={require('../../assets/profiledummy1.jpg')}
+                />
+                {/* : */}
                 {/* // <FontAwesome6
                 //   name="user"
                 //   iconStyle="regular"
                 //   size={20}
                 //   color={focused ? theme.colors.tabbariconactive : theme.colors.tabbariconinactive}
                 // /> */}
-               {/* } */}
-            </View>
-          ),
-        }}
-      />
-    </Tab.Navigator>
+                {/* } */}
+              </View>
+            ),
+          }}
+        />
+      </Tab.Navigator>
+    </>
   );
 };
 
@@ -258,6 +313,6 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: 20,
-    color: '#000'
+    color: '#000',
   },
 });

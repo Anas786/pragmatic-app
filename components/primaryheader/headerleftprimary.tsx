@@ -1,11 +1,15 @@
-import { Alert, TouchableOpacity } from "react-native";
+import { TouchableOpacity } from "react-native";
 import Themestore from "../../store/themestore";
 import FontAwesome6 from "@react-native-vector-icons/fontawesome6";
 
-const Headerleft: React.FC = () => {
+interface HeaderLeftProps {
+    setvisible: (value: boolean) => void;
+}
+
+const Headerleft: React.FC<HeaderLeftProps>= ({setvisible}) => {
     const theme = Themestore(state => state.theme);
     return (
-        <TouchableOpacity onPress={() => Alert.alert('Drawer will be here')}>
+        <TouchableOpacity onPress={() => setvisible(true)}>
             <FontAwesome6
                 name="align-left"
                 style={{

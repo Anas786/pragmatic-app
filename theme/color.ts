@@ -56,6 +56,14 @@ export interface ThemeColors {
   linechartdatapointborderred: string;
   liveparametersearchbg: string;
   liveparameterpillsbg: string;
+  alarmstatusiconred: string;
+  alarmstatusiconorange: string;
+  alarmstatusiconblue: string;
+  alarmstatusicongreen: string;
+  alarmstatusiconpurple: string;
+  searchbarscreenbg: string;
+  searchsitesimgborder: string;
+  searchsitesimgbg: string;
 }
 
 
@@ -122,6 +130,14 @@ export const lightTheme: Theme = {
     linechartdatapointborderred: '#d03a3a',
     liveparametersearchbg: '#f0f0f0',
     liveparameterpillsbg: '#ebebeb',
+    alarmstatusiconred: '#ff0000',
+    alarmstatusiconorange: '#f87a0c',
+    alarmstatusicongreen: '#00a908',
+    alarmstatusiconblue: '#0077ff',
+    alarmstatusiconpurple: '#a100ff',
+    searchbarscreenbg: '#f0f0f0',
+    searchsitesimgborder: '#303030',
+    searchsitesimgbg: '#ffffff',
   },
 };
 
@@ -184,5 +200,13 @@ export const darkTheme: Theme = {
     linechartdatapointborderred: '#d03a3a',
     liveparametersearchbg: '#1b1a1b',
     liveparameterpillsbg: '#171717',
+    alarmstatusiconred: '#ff0000',
+    alarmstatusiconorange: '#f87a0c',
+    alarmstatusicongreen: '#00a908',
+    alarmstatusiconblue: '#0077ff',
+    alarmstatusiconpurple: '#a100ff',
+    searchbarscreenbg: '#1b1a1b',
+    searchsitesimgborder: '#303030',
+    searchsitesimgbg: '#ffffff',
   },
 };
