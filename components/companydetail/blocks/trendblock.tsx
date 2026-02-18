@@ -11,11 +11,11 @@ import FontAwesome6 from '@react-native-vector-icons/fontawesome6';
 import Themestore from '../../../store/themestore';
 import { getFontFamily } from '../../../assets/utils/fontfamily';
 import DatePicker from 'react-native-date-picker';
-import LinearGradient from 'react-native-linear-gradient';
 import Areachart from '../charts/areachart';
 import Linechart from '../charts/linechart';
 import Barchart from '../charts/barchart';
 import { Inverterfilter } from '../../../types/invertertablefilter';
+import Rangeslider from '../charts/rangeslider';
 
 const Trendblock: React.FC<Inverterfilter> = ({
   inverterfilter,
@@ -24,10 +24,6 @@ const Trendblock: React.FC<Inverterfilter> = ({
   const theme = Themestore(state => state.theme);
   const [date, setDate] = useState(new Date());
   const [open, setOpen] = useState<boolean>(false);
-  const analysisData = [
-    { title: 'Captive Plant kW', min: '0.00', avg: '579.74', max: '14784.25' },
-    { title: 'Grid Active Power', min: '0.00', avg: '579.74', max: '14784.25' },
-  ];
 
   return (
     <>
@@ -149,164 +145,7 @@ const Trendblock: React.FC<Inverterfilter> = ({
             </TouchableOpacity>
           </View>
         </View>
-        {analysisData.map((item, index) => (
-          <View
-            key={index}
-            style={[
-              styles.gradientchart,
-              {
-                backgroundColor: theme.colors.overlaybackground,
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.gradientcharttitle,
-                {
-                  color: theme.colors.title,
-                },
-              ]}
-            >
-              {item.title}
-            </Text>
-
-            <View
-              style={{
-                position: 'relative',
-                height: 40,
-                justifyContent: 'flex-end',
-                marginBottom: 15,
-              }}
-            >
-              <View
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <View style={{ alignItems: 'flex-start' }}>
-                  <View
-                    style={{
-                      backgroundColor: theme.colors.chartanalysisvaluebg,
-                      paddingHorizontal: 4,
-                      paddingVertical: 4,
-                      borderRadius: 100,
-                      marginBottom: 2,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: '#000',
-                        fontSize: 10,
-                        fontWeight: 'medium',
-                      }}
-                    >
-                      {item.min}
-                    </Text>
-                  </View>
-                  <View
-                    style={{
-                      width: 0,
-                      height: 0,
-                      borderLeftWidth: 4,
-                      borderRightWidth: 4,
-                      borderTopWidth: 6,
-                      borderLeftColor: 'transparent',
-                      borderRightColor: 'transparent',
-                      borderTopColor: theme.colors.chartanalysisvaluebg,
-                      marginLeft: 8,
-                    }}
-                  />
-                </View>
-                <View style={{ alignItems: 'center' }}>
-                  <View
-                    style={{
-                      backgroundColor: theme.colors.chartanalysisvaluebg,
-                      paddingHorizontal: 8,
-                      paddingVertical: 2,
-                      borderRadius: 10,
-                      marginBottom: 2,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: '#000',
-                        fontSize: 10,
-                        fontWeight: 'bold',
-                      }}
-                    >
-                      {item.avg}
-                    </Text>
-                  </View>
-                  <View
-                    style={{
-                      width: 0,
-                      height: 0,
-                      borderLeftWidth: 4,
-                      borderRightWidth: 4,
-                      borderTopWidth: 6,
-                      borderLeftColor: 'transparent',
-                      borderRightColor: 'transparent',
-                      borderTopColor: theme.colors.chartanalysisvaluebg,
-                    }}
-                  />
-                </View>
-                <View style={{ alignItems: 'flex-end' }}>
-                  <View
-                    style={{
-                      backgroundColor: theme.colors.chartanalysisvaluebg,
-                      paddingHorizontal: 8,
-                      paddingVertical: 2,
-                      borderRadius: 10,
-                      marginBottom: 2,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: '#000',
-                        fontSize: 10,
-                        fontWeight: 'bold',
-                      }}
-                    >
-                      {item.max}
-                    </Text>
-                  </View>
-                  <View
-                    style={{
-                      width: 0,
-                      height: 0,
-                      borderLeftWidth: 4,
-                      borderRightWidth: 4,
-                      borderTopWidth: 6,
-                      borderLeftColor: 'transparent',
-                      borderRightColor: 'transparent',
-                      borderTopColor: theme.colors.chartanalysisvaluebg,
-                      marginRight: 22,
-                    }}
-                  />
-                </View>
-              </View>
-              <LinearGradient
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                colors={['#FF3B30', '#FFCC00', '#34C759']}
-                style={{ height: 4, borderRadius: 1000, width: '100%' }}
-              />
-            </View>
-
-            <View
-              style={{ flexDirection: 'row', justifyContent: 'space-between' }}
-            >
-              <Text style={{ color: theme.colors.text, fontSize: 6 }}>Min</Text>
-              <Text style={{ color: theme.colors.text, fontSize: 6 }}>Avg</Text>
-              <Text style={{ color: theme.colors.text, fontSize: 6 }}>Max</Text>
-            </View>
-          </View>
-        ))}
+        <Rangeslider/>
       </View>
 
       <View
@@ -843,16 +682,6 @@ const styles = StyleSheet.create({
     borderRadius: 65,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  gradientchart: {
-    margin: 8,
-    borderRadius: 16,
-    padding: 12,
-  },
-  gradientcharttitle: {
-    fontSize: 10,
-    fontFamily: getFontFamily('true', 'medium'),
-    marginBottom: 16,
   },
   filterRow: {
     flexDirection: 'row',

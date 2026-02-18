@@ -1,10 +1,9 @@
-import { StyleSheet, View, Text } from 'react-native';
+import { StyleSheet, View, Text,Image } from 'react-native';
 import React, { useState } from 'react';
 import FontAwesome6 from '@react-native-vector-icons/fontawesome6';
 import { getFontFamily } from '../../assets/utils/fontfamily';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createDrawerNavigator } from '@react-navigation/drawer';
 import Dashboardscreen from '../../screens/main/dashboard/dashboardscreen';
-import { Image } from 'react-native';
 import Themestore from '../../store/themestore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Profilescreen from '../../screens/main/profile/profilescreen';
@@ -12,8 +11,11 @@ import HeaderCenterPrimary from '../primaryheader/headercenterprimary';
 import HeaderRightPrimary from '../primaryheader/headerrightprimary';
 import HeaderleftPrimary from '../primaryheader/headerleftprimary';
 import Alertbox from '../utils/alertbox';
+import { DrawerActions, useNavigation } from '@react-navigation/native';
+
 // import { UserprofileStore } from '../store/profilestore';
 
+const Drawer = createDrawerNavigator();
 const AnalyticsScreen: React.FC = () => {
   const theme = Themestore(state => state.theme);
   return (
@@ -48,9 +50,9 @@ const SettingScreen: React.FC = () => {
 };
 
 const Tabbar: React.FC = () => {
-  const Tab = createBottomTabNavigator();
   const theme = Themestore(state => state.theme);
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
   const [visible, setvisible] = useState({
     visible: false,
     message: '',
@@ -67,23 +69,21 @@ const Tabbar: React.FC = () => {
         visible={visible.visible}
         setvisible={(val) => setvisible((prev) => ({ ...prev, visible: val }))}
       />
-      <Tab.Navigator
+      <Drawer.Navigator
         screenOptions={{
           headerShown: false,
-          tabBarStyle: [
+          drawerStyle: [
             styles.tabBar,
             {
               backgroundColor: theme.colors.background,
-              height: 80 + insets.bottom,
               paddingBottom: insets.bottom,
               paddingTop: 10,
             },
           ],
-          tabBarShowLabel: true,
-          tabBarLabelStyle: [styles.labelStyle, { color: theme.colors.title }],
+          drawerLabelStyle: [styles.labelStyle, { color: theme.colors.title }],
         }}
       >
-        <Tab.Screen
+        <Drawer.Screen
           name="Dashboard"
           component={Dashboardscreen}
           options={{
@@ -97,9 +97,9 @@ const Tabbar: React.FC = () => {
               borderBottomWidth: 1,
               borderBottomColor: theme.colors.bordercolor,
             },
-            headerLeft: () => <HeaderleftPrimary setvisible={() => showAlert('Drawer will be here')} />,
+            headerLeft: () => <HeaderleftPrimary setvisible={() => {navigation.dispatch(DrawerActions.openDrawer())}}/>,
             headerRight: () => <HeaderRightPrimary setvisible={() => showAlert('Notification Screen Will Be Here')} />,
-            tabBarIcon: ({ focused }) => (
+            drawerIcon: ({ focused }) => (
               <View
                 style={[
                   styles.iconContainer,
@@ -120,7 +120,7 @@ const Tabbar: React.FC = () => {
             ),
           }}
         />
-        <Tab.Screen
+        <Drawer.Screen
           name="Analytics"
           component={AnalyticsScreen}
           options={{
@@ -136,7 +136,7 @@ const Tabbar: React.FC = () => {
             },
             headerLeft: () => <HeaderleftPrimary setvisible={() => showAlert('Drawer will be here')}/>,
             headerRight: () => <HeaderRightPrimary setvisible={() => showAlert('Notification Screen Will Be Here')} />,
-            tabBarIcon: ({ focused }) => (
+            drawerIcon: ({ focused }) => (
               <View
                 style={[
                   styles.iconContainer,
@@ -157,7 +157,7 @@ const Tabbar: React.FC = () => {
             ),
           }}
         />
-        <Tab.Screen
+        <Drawer.Screen
           name="Add"
           component={AddScreen}
           options={{
@@ -173,7 +173,7 @@ const Tabbar: React.FC = () => {
             },
             headerLeft: () => <HeaderleftPrimary setvisible={() => showAlert('Drawer will be here')}/>,
             headerRight: () => <HeaderRightPrimary setvisible={() => showAlert('Notification Screen Will Be Here')} />,
-            tabBarIcon: ({ focused }) => (
+            drawerIcon: ({ focused }) => (
               <View
                 style={[
                   styles.iconContainer,
@@ -194,7 +194,7 @@ const Tabbar: React.FC = () => {
             ),
           }}
         />
-        <Tab.Screen
+        <Drawer.Screen
           name="Setting"
           component={SettingScreen}
           options={{
@@ -210,7 +210,7 @@ const Tabbar: React.FC = () => {
             },
             headerLeft: () => <HeaderleftPrimary setvisible={() => showAlert('Drawer will be here')}/>,
             headerRight: () => <HeaderRightPrimary setvisible={() => showAlert('Notification Screen Will Be Here')} />,
-            tabBarIcon: ({ focused }) => (
+            drawerIcon: ({ focused }) => (
               <View
                 style={[
                   styles.iconContainer,
@@ -231,7 +231,7 @@ const Tabbar: React.FC = () => {
             ),
           }}
         />
-        <Tab.Screen
+        <Drawer.Screen
           name="Profile"
           component={Profilescreen}
           options={{
@@ -247,7 +247,7 @@ const Tabbar: React.FC = () => {
             },
             headerLeft: () => <HeaderleftPrimary setvisible={() => showAlert('Drawer will be here')}/>,
             headerRight: () => <HeaderRightPrimary setvisible={() => showAlert('Notification Screen Will Be Here')} />,
-            tabBarIcon: ({ focused }) => (
+            drawerIcon: ({ focused }) => (
               <View
                 style={[
                   styles.iconContainer,
@@ -277,7 +277,7 @@ const Tabbar: React.FC = () => {
             ),
           }}
         />
-      </Tab.Navigator>
+      </Drawer.Navigator>
     </>
   );
 };
@@ -292,6 +292,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -3 },
     shadowOpacity: 0.15,
     shadowRadius: 6,
+    flex: 1,
   },
   labelStyle: {
     fontSize: 10,

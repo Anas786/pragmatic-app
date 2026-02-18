@@ -64,6 +64,7 @@ export interface ThemeColors {
   searchbarscreenbg: string;
   searchsitesimgborder: string;
   searchsitesimgbg: string;
+  rangeslidertext: string;
 }
 
 
@@ -138,6 +139,7 @@ export const lightTheme: Theme = {
     searchbarscreenbg: '#f0f0f0',
     searchsitesimgborder: '#303030',
     searchsitesimgbg: '#ffffff',
+    rangeslidertext: '#000000',
   },
 };
 
@@ -208,5 +210,6 @@ export const darkTheme: Theme = {
     searchbarscreenbg: '#1b1a1b',
     searchsitesimgborder: '#303030',
     searchsitesimgbg: '#ffffff',
+    rangeslidertext: '#000000',
   },
 };

@@ -6,7 +6,6 @@ export interface CompanyCardProps {
     powerReadings: any[];
     efficiency: number;
     onExpandView: () => void;
-    onverticalView: () => void;
     isactive: boolean;
     isopen: () => void;
   }

@@ -6,7 +6,10 @@ import { getFontFamily } from '../../../../assets/utils/fontfamily';
 
 const DevicesScreen: React.FC = () => {
   const theme = Themestore(state => state.theme);
-  const [isExpanded, setIsExpanded] = useState<boolean>(true);
+  const [isExpanded, setIsExpanded] = useState<string | null>(null);
+  const handleexpand = (id: string) => {
+    setIsExpanded(prev => (prev === id ? null : id));
+  };
   return (
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
@@ -20,7 +23,7 @@ const DevicesScreen: React.FC = () => {
       >
         <TouchableOpacity
           activeOpacity={0.8}
-          onPress={() => setIsExpanded(!isExpanded)}
+          onPress={() => handleexpand('device1')}
           style={[
             styles.cardHeader,
             {
@@ -44,7 +47,7 @@ const DevicesScreen: React.FC = () => {
 
           <View style={styles.headerRight}>
             <FontAwesome6
-              name={isExpanded ? 'chevron-up' : 'chevron-down'}
+              name={isExpanded === 'device1' ? 'chevron-up' : 'chevron-down'}
               iconStyle="solid"
               size={15}
               color={theme.colors.title}
@@ -62,7 +65,7 @@ const DevicesScreen: React.FC = () => {
       >
         <TouchableOpacity
           activeOpacity={0.8}
-          onPress={() => setIsExpanded(!isExpanded)}
+          onPress={() => handleexpand('device2')}
           style={[
             styles.cardHeader,
             {
@@ -86,7 +89,7 @@ const DevicesScreen: React.FC = () => {
 
           <View style={styles.headerRight}>
             <FontAwesome6
-              name={isExpanded ? 'chevron-up' : 'chevron-down'}
+              name={isExpanded === 'device2' ? 'chevron-up' : 'chevron-down'}
               iconStyle="solid"
               size={15}
               color={theme.colors.title}

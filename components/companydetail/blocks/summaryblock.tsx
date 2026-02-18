@@ -1,24 +1,82 @@
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import React, { useState } from 'react';
+import {
+  Alert,
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import React, { useRef, useState } from 'react';
 import Themestore from '../../../store/themestore';
 import FontAwesome6 from '@react-native-vector-icons/fontawesome6';
 import { getFontFamily } from '../../../assets/utils/fontfamily';
-import { PieChart } from 'react-native-gifted-charts';
-import Svg, { Path } from 'react-native-svg';
 import DatePicker from 'react-native-date-picker';
+import Piechart from '../charts/piechart';
+import Nodechart from '../charts/nodechart';
+import { scheduleOnRN } from 'react-native-worklets';
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+} from 'react-native-gesture-handler';
 
 const Summaryblock: React.FC = () => {
-  const theme = Themestore(state => state.theme);
-  const mode = Themestore(state => state.mode);
   const [date, setDate] = useState(new Date());
   const [open, setOpen] = useState<boolean>(false);
+  const theme = Themestore(state => state.theme);
+  const mode = Themestore(state => state.mode);
 
-  const pieData = [
-    { value: 45, color: theme.colors.piechartcolor1, text: '' },
-    { value: 30, color: theme.colors.piechartcolor2, text: '' },
-    { value: 5, color: theme.colors.piechartcolor4, text: '' },
-    { value: 20, color: theme.colors.piechartcolor3, text: '' },
-  ];
+  const [zoomLevel, setZoomLevel] = useState(0.8);
+  const [isLocked, setIsLocked] = useState(false);
+  const [fullScreen, setFullScreen] = useState(false);
+  const startZoom = useRef(0.8);
+  const MIN_ZOOM = 0.8;
+  const MAX_ZOOM = 2.0;
+
+  const pinchGesture = Gesture.Pinch()
+    .onStart(() => {
+      startZoom.current = zoomLevel;
+    })
+    .onUpdate(event => {
+      const nextScale = startZoom.current * event.scale;
+      const clamped = Math.min(Math.max(nextScale, MIN_ZOOM), MAX_ZOOM);
+      scheduleOnRN(setZoomLevel, clamped);
+    })
+    .runOnJS(true);
+  const handlePinchSync = (newZoom: number) => {
+    if (newZoom >= 0.8 && newZoom <= 2.0) {
+      setZoomLevel(newZoom);
+    }
+  };
+
+  const handleZoomIn = () => {
+    setZoomLevel(prev => {
+      const next = prev + 0.2;
+      return next <= 2.0 ? next : 2.0;
+    });
+  };
+
+  const handleZoomOut = () => {
+    setZoomLevel(prev => {
+      const next = prev - 0.2;
+      return next >= 0.8 ? next : 0.8;
+    });
+  };
+  const toggleLock = () => setIsLocked(!isLocked);
+
+  const renderChart = (isFull: boolean) => {
+    return (
+      <View style={{ flex: 1 }}>
+        <Nodechart
+          zoom={zoomLevel}
+          roamType={isLocked ? true : 'move'}
+          isFullScreen={isFull}
+          onZoomChange={handlePinchSync}
+        />
+      </View>
+    );
+  };
+
   return (
     <>
       <View
@@ -249,148 +307,15 @@ const Summaryblock: React.FC = () => {
             alignItems: 'center',
             borderColor: theme.colors.bordercolor,
             backgroundColor: theme.colors.background,
+            overflow: 'hidden',
           },
         ]}
       >
-        <View style={StyleSheet.absoluteFill}>
-          <Svg height="100%" width="100%">
-            <Path
-              d="M 70 80 Q 70 150 160 150"
-              fill="none"
-              stroke="#3AD04B"
-              strokeWidth="1.5"
-              strokeDasharray="5, 5"
-            />
-            <Path
-              d="M 270 80 Q 270 150 180 150"
-              fill="none"
-              stroke="#3AD04B"
-              strokeWidth="1.5"
-              strokeDasharray="5, 5"
-            />
-            <Path
-              d="M 70 230 Q 70 180 160 180"
-              fill="none"
-              stroke="#3A5FD0"
-              strokeWidth="1.5"
-              strokeDasharray="5, 5"
-            />
-            <Path
-              d="M 270 230 Q 270 180 180 180"
-              fill="none"
-              stroke="#3A5FD0"
-              strokeWidth="1.5"
-              strokeDasharray="5, 5"
-            />
-          </Svg>
-        </View>
-        <View
-          style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: [{ translateX: -40 }, { translateY: 0 }],
-            alignItems: 'center',
-          }}
-        >
-          <View
-            style={{
-              width: 96,
-              height: 69,
-              borderRadius: 20,
-              backgroundColor: theme.colors.background,
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderWidth: 0.1,
-              borderColor: '#ff0000',
-              padding: 9.6,
-            }}
-          >
-            <FontAwesome6
-              name="volcano"
-              iconStyle="solid"
-              size={24}
-              color="#ef476f"
-            />
-            <Text
-              style={{
-                marginTop: 6,
-                color: theme.colors.title,
-                fontSize: 10,
-                fontFamily: getFontFamily('true', 'bold'),
-              }}
-            >
-              Lucky Cement
-            </Text>
-            <Text style={{ color: theme.colors.text, fontSize: 7 }}>
-              Load: 315.44
-            </Text>
-          </View>
-        </View>
-
-        <View style={{ position: 'absolute', top: 30, left: 0 }}>
-          <View
-            style={{
-              backgroundColor: theme.colors.overlaybackground,
-              borderWidth: 1,
-              borderColor: theme.colors.bordercolor,
-              borderRadius: 10,
-              padding: 6,
-              marginBottom: 6,
-            }}
-          >
-            <Text style={{ color: '#888', fontSize: 8 }}>Q: 58.95</Text>
-            <Text style={{ color: '#888', fontSize: 8 }}>PF: 58.95</Text>
-          </View>
-        </View>
-
-        <View style={{ position: 'absolute', top: 30, left: 100 }}>
-          <View
-            style={{
-              backgroundColor: theme.colors.overlaybackground,
-              borderWidth: 1,
-              borderColor: theme.colors.bordercolor,
-              borderRadius: 10,
-              padding: 6,
-              marginBottom: 6,
-            }}
-          >
-            <Text style={{ color: '#888', fontSize: 8 }}>Q: 58.95</Text>
-            <Text style={{ color: '#888', fontSize: 8 }}>PF: 58.95</Text>
-          </View>
-        </View>
-
-        <View style={{ position: 'absolute', top: 30, right: 0 }}>
-          <View
-            style={{
-              backgroundColor: theme.colors.overlaybackground,
-              borderWidth: 1,
-              borderColor: theme.colors.bordercolor,
-              borderRadius: 10,
-              padding: 6,
-              marginBottom: 6,
-            }}
-          >
-            <Text style={{ color: '#888', fontSize: 8 }}>Q: 58.95</Text>
-            <Text style={{ color: '#888', fontSize: 8 }}>PF: 58.95</Text>
-          </View>
-        </View>
-
-        <View style={{ position: 'absolute', top: 30, right: 100 }}>
-          <View
-            style={{
-              backgroundColor: theme.colors.overlaybackground,
-              borderWidth: 1,
-              borderColor: theme.colors.bordercolor,
-              borderRadius: 10,
-              padding: 6,
-              marginBottom: 6,
-            }}
-          >
-            <Text style={{ color: '#888', fontSize: 8 }}>Q: 58.95</Text>
-            <Text style={{ color: '#888', fontSize: 8 }}>PF: 58.95</Text>
-          </View>
-        </View>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <GestureDetector gesture={pinchGesture}>
+            {renderChart(false)}
+          </GestureDetector>
+        </GestureHandlerRootView>
 
         <View
           style={{
@@ -399,84 +324,19 @@ const Summaryblock: React.FC = () => {
             left: 15,
             right: 15,
             flexDirection: 'row',
-            justifyContent: 'space-between',
+            justifyContent: 'flex-end',
             alignItems: 'center',
+            pointerEvents: 'box-none',
           }}
         >
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <View style={{ position: 'absolute', bottom: -40, left: -15 }}>
-              <View
-                style={{
-                  backgroundColor: theme.colors.overlaybackground,
-                  borderWidth: 1,
-                  borderColor: theme.colors.bordercolor,
-                  borderRadius: 10,
-                  padding: 6,
-                  marginBottom: 6,
-                }}
-              >
-                <Text style={{ color: '#888', fontSize: 8 }}>Q: 58.95</Text>
-                <Text style={{ color: '#888', fontSize: 8 }}>PF: 58.95</Text>
-              </View>
-            </View>
-
-            <View style={{ position: 'absolute', bottom: -40, left: 100 }}>
-              <View
-                style={{
-                  backgroundColor: theme.colors.overlaybackground,
-                  borderWidth: 1,
-                  borderColor: theme.colors.bordercolor,
-                  borderRadius: 10,
-                  padding: 6,
-                  marginBottom: 6,
-                }}
-              >
-                <Text style={{ color: '#888', fontSize: 8 }}>Q: 58.95</Text>
-                <Text style={{ color: '#888', fontSize: 8 }}>PF: 58.95</Text>
-              </View>
-            </View>
-
-            <View style={{ position: 'absolute', bottom: -40, left: 200 }}>
-              <View
-                style={{
-                  backgroundColor: theme.colors.overlaybackground,
-                  borderWidth: 1,
-                  borderColor: theme.colors.bordercolor,
-                  borderRadius: 10,
-                  padding: 6,
-                  marginBottom: 6,
-                }}
-              >
-                <Text style={{ color: '#888', fontSize: 8 }}>Q: 58.95</Text>
-                <Text style={{ color: '#888', fontSize: 8 }}>PF: 58.95</Text>
-              </View>
-            </View>
-
-            <View style={{ position: 'absolute', bottom: -40, left: 295 }}>
-              <View
-                style={{
-                  backgroundColor: theme.colors.overlaybackground,
-                  borderWidth: 1,
-                  borderColor: theme.colors.bordercolor,
-                  borderRadius: 10,
-                  padding: 6,
-                  marginBottom: 6,
-                }}
-              >
-                <Text style={{ color: '#888', fontSize: 8 }}>Q: 58.95</Text>
-                <Text style={{ color: '#888', fontSize: 8 }}>PF: 58.95</Text>
-              </View>
-            </View>
-          </View>
-
           <View
             style={{
               flexDirection: 'row',
               alignItems: 'center',
               backgroundColor:
                 mode === 'dark'
-                  ? 'rgba(26, 26, 26, 0.6)'
-                  : 'rgba(235, 235, 235, 0.6)',
+                  ? 'rgba(26,26,26,0.8)'
+                  : 'rgba(235,235,235,0.8)',
               borderRadius: 100,
               borderWidth: 1,
               borderColor: theme.colors.bordercolor,
@@ -484,32 +344,64 @@ const Summaryblock: React.FC = () => {
               paddingHorizontal: 10,
             }}
           >
-            <TouchableOpacity style={{ padding: 8 }}>
+            <TouchableOpacity
+              disabled={zoomLevel === MAX_ZOOM || isLocked === true}
+              style={{ padding: 8 }}
+              onPress={handleZoomIn}
+            >
               <FontAwesome6
                 iconStyle="solid"
                 name="plus"
                 size={12}
-                color={theme.colors.iconsecondary}
+                disabled={zoomLevel === MAX_ZOOM || isLocked === true}
+                color={
+                  zoomLevel !== MIN_ZOOM || isLocked !== true
+                    ? theme.colors.iconsecondary
+                    : theme.colors.inputborder
+                }
               />
             </TouchableOpacity>
-            <TouchableOpacity style={{ padding: 8 }}>
+
+            <TouchableOpacity
+              disabled={zoomLevel === MIN_ZOOM || isLocked === true}
+              style={{ padding: 8 }}
+              onPress={handleZoomOut}
+            >
               <FontAwesome6
                 iconStyle="solid"
                 name="minus"
                 size={12}
-                color={theme.colors.iconsecondary}
+                disabled={zoomLevel === MIN_ZOOM || isLocked === true}
+                color={
+                  zoomLevel !== MIN_ZOOM || isLocked !== true
+                    ? theme.colors.iconsecondary
+                    : theme.colors.inputborder
+                }
               />
             </TouchableOpacity>
-            <View style={{ width: 1, height: 16, backgroundColor: '#333' }} />
-            <TouchableOpacity style={{ padding: 8 }}>
+
+            <View
+              style={{
+                width: 1,
+                height: 16,
+                backgroundColor: '#333',
+                marginHorizontal: 4,
+              }}
+            />
+
+            <TouchableOpacity style={{ padding: 8 }} onPress={toggleLock}>
               <FontAwesome6
                 iconStyle="solid"
-                name="lock"
+                name={isLocked ? 'lock' : 'lock-open'}
                 size={12}
-                color={theme.colors.iconsecondary}
+                color={isLocked ? theme.colors.title : theme.colors.title}
               />
             </TouchableOpacity>
-            <TouchableOpacity style={{ padding: 8 }}>
+
+            <TouchableOpacity
+              style={{ padding: 8 }}
+              onPress={() => setFullScreen(true)}
+            >
               <FontAwesome6
                 iconStyle="solid"
                 name="expand"
@@ -608,290 +500,9 @@ const Summaryblock: React.FC = () => {
             </TouchableOpacity>
           </View>
         </View>
-        <View style={{ padding: 15, alignItems: 'center' }}>
-          <PieChart
-            data={pieData}
-            donut
-            radius={80}
-            innerRadius={0}
-            showText
-            textColor="white"
-            textSize={10}
-            textBackgroundRadius={26}
-            font={getFontFamily('true', 'bold')}
-          />
 
-          <View
-            style={[
-              StyleSheet.absoluteFill,
-              { justifyContent: 'center', alignItems: 'center' },
-            ]}
-          >
-            <View style={{ position: 'absolute', top: 20, left: 0 }}>
-              <View
-                style={{
-                  backgroundColor: theme.colors.overlaybackground,
-                  padding: 8,
-                  borderRadius: 8,
-                  borderWidth: 1,
-                  borderColor: theme.colors.bordercolor,
-                }}
-              >
-                <Text style={{ fontSize: 8, color: theme.colors.text }}>
-                  Genset{'\n'}Production{'\n'}(kWh)
-                </Text>
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    marginTop: 4,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 8,
-                      color: theme.colors.title,
-                      fontFamily: getFontFamily('true', 'semi-bold'),
-                    }}
-                  >
-                    23,424
-                  </Text>
-                  <View
-                    style={{
-                      backgroundColor: theme.colors.buttonbg,
-                      borderRadius: 100,
-                      padding: 4,
-                      marginLeft: 5,
-                    }}
-                  >
-                    <Text style={{ fontSize: 6, color: theme.colors.title }}>
-                      67%
-                    </Text>
-                  </View>
-                </View>
-              </View>
-              <View
-                style={{
-                  height: 1,
-                  width: 20,
-                  backgroundColor: '#ef476f',
-                  position: 'absolute',
-                  right: -20,
-                  top: 25,
-                }}
-              />
-              <View
-                style={{
-                  height: 20,
-                  width: 1,
-                  backgroundColor: '#ef476f',
-                  position: 'absolute',
-                  right: -20,
-                  top: 25,
-                }}
-              />
-            </View>
+        <Piechart />
 
-            <View style={{ position: 'absolute', top: 100, left: 0 }}>
-              <View
-                style={{
-                  backgroundColor: theme.colors.overlaybackground,
-                  padding: 8,
-                  borderRadius: 8,
-                  borderWidth: 1,
-                  borderColor: theme.colors.bordercolor,
-                }}
-              >
-                <Text style={{ fontSize: 8, color: theme.colors.text }}>
-                  Wind Turbine{'\n'}Output (kWh)
-                </Text>
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    marginTop: 4,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 8,
-                      color: theme.colors.title,
-                      fontFamily: getFontFamily('true', 'semi-bold'),
-                    }}
-                  >
-                    12,560
-                  </Text>
-                  <View
-                    style={{
-                      backgroundColor: theme.colors.buttonbg,
-                      borderRadius: 100,
-                      padding: 4,
-                      marginLeft: 5,
-                    }}
-                  >
-                    <Text style={{ fontSize: 6, color: theme.colors.title }}>
-                      38%
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </View>
-
-            <View style={{ position: 'absolute', bottom: 10, left: 0 }}>
-              <View
-                style={{
-                  backgroundColor: theme.colors.overlaybackground,
-                  padding: 8,
-                  borderRadius: 8,
-                  borderWidth: 1,
-                  borderColor: theme.colors.bordercolor,
-                }}
-              >
-                <Text style={{ fontSize: 8, color: theme.colors.text }}>
-                  Solar Power{'\n'}Generation{'\n'}(kWh)
-                </Text>
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    marginTop: 4,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 8,
-                      color: theme.colors.title,
-                      fontFamily: getFontFamily('true', 'semi-bold'),
-                    }}
-                  >
-                    15,300
-                  </Text>
-                  <View
-                    style={{
-                      backgroundColor: theme.colors.buttonbg,
-                      borderRadius: 100,
-                      padding: 4,
-                      marginLeft: 5,
-                    }}
-                  >
-                    <Text style={{ fontSize: 6, color: theme.colors.title }}>
-                      45%
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </View>
-
-            <View style={{ position: 'absolute', top: 50, right: 0 }}>
-              <View
-                style={{
-                  backgroundColor: theme.colors.overlaybackground,
-                  padding: 8,
-                  borderRadius: 8,
-                  borderWidth: 1,
-                  borderColor: theme.colors.bordercolor,
-                }}
-              >
-                <Text style={{ fontSize: 8, color: theme.colors.text }}>
-                  Wind Turbine{'\n'}Output (kWh)
-                </Text>
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    marginTop: 4,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 8,
-                      color: theme.colors.title,
-                      fontFamily: getFontFamily('true', 'semi-bold'),
-                    }}
-                  >
-                    12,560
-                  </Text>
-                  <View
-                    style={{
-                      backgroundColor: theme.colors.buttonbg,
-                      borderRadius: 100,
-                      padding: 4,
-                      marginLeft: 5,
-                    }}
-                  >
-                    <Text style={{ fontSize: 6, color: theme.colors.title }}>
-                      38%
-                    </Text>
-                  </View>
-                </View>
-              </View>
-              <View
-                style={{
-                  height: 1,
-                  width: 20,
-                  backgroundColor: '#3A5FD0',
-                  position: 'absolute',
-                  left: -20,
-                  top: 25,
-                }}
-              />
-            </View>
-
-            <View style={{ position: 'absolute', bottom: 30, right: 0 }}>
-              <View
-                style={{
-                  backgroundColor: theme.colors.overlaybackground,
-                  padding: 8,
-                  borderRadius: 8,
-                  borderWidth: 1,
-                  borderColor: theme.colors.bordercolor,
-                }}
-              >
-                <Text style={{ fontSize: 8, color: theme.colors.text }}>
-                  Wind Turbine{'\n'}Output (kWh)
-                </Text>
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    marginTop: 4,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 8,
-                      color: theme.colors.title,
-                      fontFamily: getFontFamily('true', 'semi-bold'),
-                    }}
-                  >
-                    12,560
-                  </Text>
-                  <View
-                    style={{
-                      backgroundColor: theme.colors.buttonbg,
-                      borderRadius: 100,
-                      padding: 4,
-                      marginLeft: 5,
-                    }}
-                  >
-                    <Text style={{ fontSize: 6, color: theme.colors.title }}>
-                      38%
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </View>
-          </View>
-          <View
-            style={{
-              flexDirection: 'row',
-              flexWrap: 'wrap',
-              justifyContent: 'center',
-              marginTop: 55,
-              gap: 8,
-            }}
-          />
-        </View>
         <View
           style={{
             flexDirection: 'row',
@@ -993,6 +604,142 @@ const Summaryblock: React.FC = () => {
           </View>
         </View>
       </View>
+
+      <Modal
+        visible={fullScreen}
+        animationType="slide"
+        transparent={true}
+        statusBarTranslucent={true}
+        onRequestClose={() => setFullScreen(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: theme.colors.overlaybackground,
+          }}
+        >
+          <GestureHandlerRootView style={{ flex: 1 }}>
+            <GestureDetector gesture={pinchGesture}>
+              <View style={{ flex: 1 }}>{renderChart(true)}</View>
+            </GestureDetector>
+          </GestureHandlerRootView>
+          <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+            <TouchableOpacity
+              onPress={() => setFullScreen(false)}
+              style={{
+                position: 'absolute',
+                top: 50,
+                right: 20,
+                backgroundColor: theme.colors.overlaybackground,
+                padding: 6,
+                borderRadius: 100,
+              }}
+            >
+              <FontAwesome6
+                iconStyle="solid"
+                name="xmark"
+                size={12}
+                color={theme.colors.title}
+              />
+            </TouchableOpacity>
+
+            <View
+              style={{
+                position: 'absolute',
+                bottom: 15,
+                left: 15,
+                right: 15,
+                flexDirection: 'row',
+                justifyContent: 'flex-end',
+                alignItems: 'center',
+                pointerEvents: 'box-none',
+              }}
+            >
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor:
+                    mode === 'dark'
+                      ? 'rgba(26,26,26,0.8)'
+                      : 'rgba(245,245,245,0.5)',
+                  borderRadius: 100,
+                  borderWidth: 1,
+                  borderColor: theme.colors.bordercolor,
+                  height: 36,
+                  paddingHorizontal: 10,
+                }}
+              >
+                <TouchableOpacity
+                  disabled={zoomLevel === MAX_ZOOM || isLocked === true}
+                  style={{ padding: 8 }}
+                  onPress={handleZoomIn}
+                >
+                  <FontAwesome6
+                    iconStyle="solid"
+                    name="plus"
+                    size={12}
+                    disabled={zoomLevel === MAX_ZOOM || isLocked === true}
+                    color={
+                      zoomLevel !== MIN_ZOOM || isLocked !== true
+                        ? theme.colors.iconsecondary
+                        : theme.colors.inputborder
+                    }
+                  />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{ padding: 8 }}
+                  onPress={handleZoomOut}
+                  disabled={zoomLevel === MIN_ZOOM || isLocked === true}
+                >
+                  <FontAwesome6
+                    iconStyle="solid"
+                    name="minus"
+                    size={12}
+                    disabled={zoomLevel === MIN_ZOOM || isLocked === true}
+                    color={
+                      zoomLevel !== MIN_ZOOM || isLocked !== true
+                        ? theme.colors.iconsecondary
+                        : theme.colors.inputborder
+                    }
+                  />
+                </TouchableOpacity>
+
+                <View
+                  style={{
+                    width: 1,
+                    height: 16,
+                    backgroundColor: '#333',
+                    marginHorizontal: 4,
+                  }}
+                />
+
+                <TouchableOpacity style={{ padding: 8 }} onPress={toggleLock}>
+                  <FontAwesome6
+                    iconStyle="solid"
+                    name={isLocked ? 'lock' : 'lock-open'}
+                    size={12}
+                    color={isLocked ? theme.colors.title : theme.colors.title}
+                  />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{ padding: 8 }}
+                  onPress={() => setFullScreen(false)}
+                >
+                  <FontAwesome6
+                    iconStyle="solid"
+                    name="compress"
+                    size={12}
+                    color={theme.colors.iconsecondary}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 };

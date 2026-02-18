@@ -13,6 +13,7 @@ import { RootStackParamList } from '../../../types/navigation';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useNavigation } from '@react-navigation/native';
 import DevicesHealthScreen from './dropdownscreens/devicehealth';
+import { useUIStore } from '../../../store/utilstore';
 
 const Companydetailscreen: React.FC = () => {
   const theme = Themestore(state => state.theme);
@@ -22,6 +23,7 @@ const Companydetailscreen: React.FC = () => {
   const handledropdown = (value: string) => {
     setselecteddropdown(value);
   };
+  const isScrollEnabled = useUIStore((state) => state.isScrollEnabled);
 
   return (
     <View
@@ -33,6 +35,7 @@ const Companydetailscreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
         keyboardDismissMode="none"
         scrollEventThrottle={16}
+        scrollEnabled={isScrollEnabled}
       >
         <View style={styles.searchbarcontainer}>
           <Searchbar
@@ -61,13 +64,15 @@ const Companydetailscreen: React.FC = () => {
             ]}
           />
         </View>
-        <Dropdown selectdropdown={selectdropdown} handledropdown={handledropdown}/>
-        {selectdropdown === 'Views' && <Viewsscreen/> 
-        || selectdropdown === 'Live parameters' && <LiveparametersScreen/> 
-        || selectdropdown === 'Devices' && <DevicesScreen/> 
-        || selectdropdown === 'Devices Health' && <DevicesHealthScreen/> 
-        || selectdropdown === 'Alarms' && <Alarmsscreen/> 
-        }
+        <Dropdown
+          selectdropdown={selectdropdown}
+          handledropdown={handledropdown}
+        />
+        {(selectdropdown === 'Views' && <Viewsscreen />) ||
+          (selectdropdown === 'Live parameters' && <LiveparametersScreen />) ||
+          (selectdropdown === 'Devices' && <DevicesScreen />) ||
+          (selectdropdown === 'Devices Health' && <DevicesHealthScreen />) ||
+          (selectdropdown === 'Alarms' && <Alarmsscreen />)}
       </ScrollView>
     </View>
   );

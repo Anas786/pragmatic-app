@@ -50,7 +50,6 @@ const Barchart: React.FC = () => {
       <BarChart
         data={dataSet}
         height={200}
-        width={285}
         barWidth={10}
         maxValue={100}
         noOfSections={5}
@@ -70,6 +69,29 @@ const Barchart: React.FC = () => {
         verticalLinesColor={theme.colors.overlaybackground}
         yAxisColor="transparent"
         xAxisColor="transparent"
+        isAnimated
+        
+        renderTooltip={(baritem:any, index:number) => {
+          return (
+            <View
+            key={index}
+              style={{
+                marginBottom: baritem.value > 90 ? -20 : 8,
+                marginLeft: baritem.value > 90 ? 15 : -10,
+                backgroundColor: theme.colors.overlaybackground,
+                paddingHorizontal: 6,
+                paddingVertical: 4,
+                borderRadius: 4,
+                borderWidth: 1,
+                borderColor: theme.colors.bordercolor,
+              }}
+            >
+              <Text style={{ color: theme.colors.title, fontSize: 10 }}>
+                {baritem.value}
+              </Text>
+            </View>
+          );
+        }}
       />
 
       <View

@@ -1,4 +1,10 @@
-import { ImageSourcePropType, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ImageSourcePropType,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import React from 'react';
 import FontAwesome6 from '@react-native-vector-icons/fontawesome6';
 import { getFontFamily } from '../../assets/utils/fontfamily';
@@ -6,51 +12,187 @@ import { Image } from 'react-native';
 import Themestore from '../../store/themestore';
 import { CompanyCardProps } from '../../types/companycard';
 
-
-const CompanyCard: React.FC<CompanyCardProps> = ({ companyName, date, time, logo, powerReadings, efficiency, onExpandView, onverticalView, isactive, isopen }) => {
+const CompanyCard: React.FC<CompanyCardProps> = ({
+  companyName,
+  date,
+  time,
+  logo,
+  powerReadings,
+  efficiency,
+  isactive,
+  isopen,
+}) => {
   const theme = Themestore(state => state.theme);
+  const [isExpanded, setIsExpanded] = React.useState(false);
+
+  const handleExpandView = () => {
+    setIsExpanded(prev => !prev);
+  };
+
+  const collapseddata = isExpanded ? powerReadings : powerReadings.slice(0, 3);
   return (
-    <TouchableOpacity onPress={isopen} style={[styles.companycard, {backgroundColor: theme.colors.overlaybackground, borderColor: theme.colors.bordercolor}]}>
+    <TouchableOpacity
+      activeOpacity={0.8}
+      onPress={isopen}
+      style={[
+        styles.companycard,
+        {
+          backgroundColor: theme.colors.overlaybackground,
+          borderColor: theme.colors.bordercolor,
+        },
+      ]}
+    >
       <View style={styles.companyheader}>
         <View style={styles.companylogoandtitle}>
-          <View style={[styles.companylogo, {backgroundColor: theme.colors.background, borderColor: theme.colors.bordercolor}]}>
-            <Image source={logo as ImageSourcePropType} style={{ width: 40, height: 40, borderRadius: 20, }} />
-            <View style={{position: 'absolute', bottom: 0, right: -5, width: 6, height: 6, padding: 4, borderRadius: 100, borderWidth: 2, borderColor: theme.colors.companyactiveborder, backgroundColor: isactive ? theme.colors.companyactivebg: theme.colors.companyinactivebg}}/>
+          <View
+            style={[
+              styles.companylogo,
+              {
+                backgroundColor: theme.colors.background,
+                borderColor: theme.colors.bordercolor,
+              },
+            ]}
+          >
+            <Image
+              source={logo as ImageSourcePropType}
+              style={{ width: 40, height: 40, borderRadius: 20 }}
+            />
+            <View
+              style={{
+                position: 'absolute',
+                bottom: 0,
+                right: -5,
+                width: 6,
+                height: 6,
+                padding: 4,
+                borderRadius: 100,
+                borderWidth: 2,
+                borderColor: theme.colors.companyactiveborder,
+                backgroundColor: isactive
+                  ? theme.colors.companyactivebg
+                  : theme.colors.companyinactivebg,
+              }}
+            />
           </View>
           <View>
-            <Text style={[styles.companyname, {color: theme.colors.title}]}>{companyName}</Text>
-            <Text style={[styles.companydate, {color: theme.colors.text}]}>{date}, {time}</Text>
+            <Text style={[styles.companyname, { color: theme.colors.title }]}>
+              {companyName}
+            </Text>
+            <Text style={[styles.companydate, { color: theme.colors.text }]}>
+              {date}, {time}
+            </Text>
           </View>
         </View>
-        <FontAwesome6 iconStyle="solid" color={theme.colors.iconsecondary} onPress={onverticalView} size={16} name="ellipsis-vertical" />
       </View>
-      <View style={styles.powerreadingscontainer}>
-        {powerReadings.map((reading, index) => (
-          <View key={index} style={[styles.powerreadingcard, {backgroundColor: theme.colors.overlaybackground, borderColor: theme.colors.inputborder}]}>
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center' }}>
-              <FontAwesome6 iconStyle="solid" color={reading.iconcolor} size={12} name={reading.icon} />
-              <Text style={[styles.powerreadingname, {color: theme.colors.title}]}>{reading.name}</Text>
+      <View style={[styles.powerreadingscontainer]}>
+        {collapseddata.map(
+          (reading, index) => (
+            <View
+              key={index}
+              style={[
+                styles.powerreadingcard,
+                {
+                  backgroundColor: theme.colors.overlaybackground,
+                  borderColor: theme.colors.inputborder,
+                },
+              ]}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <FontAwesome6
+                  iconStyle="solid"
+                  color={reading.iconcolor}
+                  size={12}
+                  name={reading.icon}
+                />
+                <Text
+                  style={[
+                    styles.powerreadingname,
+                    { color: theme.colors.title },
+                  ]}
+                >
+                  {reading.name}
+                </Text>
+              </View>
+
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text
+                  style={[
+                    styles.powerreadingvalue,
+                    { color: theme.colors.title },
+                  ]}
+                >
+                  {reading.value}
+                </Text>
+                <Text
+                  style={[
+                    styles.powerreadinglabel,
+                    { color: theme.colors.text },
+                  ]}
+                >
+                  {reading.label}
+                </Text>
+              </View>
             </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center' }}>
-              <Text style={[styles.powerreadingvalue, {color: theme.colors.title}]}>{reading.value}</Text>
-              <Text style={[styles.powerreadinglabel, {color: theme.colors.text}]}>{reading.label}</Text>
-            </View>
-          </View>
-        ))}
+          ),
+        )}
       </View>
-      <View style={styles.poweroutputefficiency}>
-        <Text style={[styles.poweroutputefficiencytext, {color: theme.colors.title}]}>Power Output Efficiency</Text>
-        <Text style={[styles.efficiencypercentage, {color: theme.colors.highlighted}]}>{efficiency}%</Text>
-        <View style={[styles.progressbarcontainer, {backgroundColor: theme.colors.progressbarbg}]}>
-          <View style={[styles.progressbar, { width: `${efficiency}%`, backgroundColor: theme.colors.progressbar }]} />
+      <View style={[styles.poweroutputefficiency]}>
+        <Text
+          style={[
+            styles.poweroutputefficiencytext,
+            { color: theme.colors.title },
+          ]}
+        >
+          Power Output Efficiency
+        </Text>
+        <Text
+          style={[
+            styles.efficiencypercentage,
+            { color: theme.colors.highlighted },
+          ]}
+        >
+          {efficiency}%
+        </Text>
+        <View
+          style={[
+            styles.progressbarcontainer,
+            { backgroundColor: theme.colors.progressbarbg },
+          ]}
+        >
+          <View
+            style={[
+              styles.progressbar,
+              {
+                width: `${efficiency}%`,
+                backgroundColor: theme.colors.progressbar,
+              },
+            ]}
+          />
         </View>
       </View>
       <TouchableOpacity
         activeOpacity={0.8}
-        style={[styles.expandviewbutton, {backgroundColor: theme.colors.overlaybackground, borderColor: theme.colors.inputborder}]}
-        onPress={onExpandView}>
-        <Text style={[styles.expandviewbuttontext, {color: theme.colors.title}]}>Expand View</Text>
-        <FontAwesome6 iconStyle="solid" color={theme.colors.iconsecondary} style={{ width: 8, height: 8, marginLeft: 8 }} size={8} name="chevron-down" />
+        style={[
+          styles.expandviewbutton,
+          {
+            backgroundColor: theme.colors.overlaybackground,
+            borderColor: theme.colors.inputborder,
+          },
+        ]}
+        onPress={handleExpandView}
+      >
+        <Text
+          style={[styles.expandviewbuttontext, { color: theme.colors.title }]}
+        >
+          {isExpanded ? 'Collapse View' : 'Expand View'}
+        </Text>
+        <FontAwesome6
+          iconStyle="solid"
+          color={theme.colors.iconsecondary}
+          style={{ width: 8, height: 8, marginLeft: 8 }}
+          size={8}
+          name={isExpanded ? 'chevron-up' : 'chevron-down'}
+        />
       </TouchableOpacity>
     </TouchableOpacity>
   );
@@ -135,7 +277,8 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: getFontFamily('true', 'medium'),
     lineHeight: 12,
-    marginBottom: 8
+    marginBottom: 8,
+    zIndex: 999,
   },
   progressbarcontainer: {
     height: 4,
@@ -172,4 +315,3 @@ const styles = StyleSheet.create({
 });
 
 export default CompanyCard;
-

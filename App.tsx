@@ -8,7 +8,6 @@ import { RootStackParamList } from './types/navigation';
 import Themestore from './store/themestore';
 import { StatusBar } from 'react-native';
 import { darkTheme } from './theme/color';
-import Tabbar from './components/tabbar/tabbar';
 import Editpersonalinfo from './screens/main/profile/editpersonalinfo';
 import Editpassword from './screens/main/profile/editpassword';
 import Deactivateaccount from './screens/main/profile/deactivateaccount';
@@ -19,11 +18,11 @@ import Headerrightsecondary from './components/secondaryheader/headerrightsecond
 import HeaderCenterSecondary from './components/secondaryheader/headercentersecondary';
 import Companydetailscreen from './screens/main/companydetail/companydetailscreen';
 import SearchScreen from './screens/search/searchscreen';
+import Homescreen from './screens/main/homescreen/homescreen';
 
 const Stack = createStackNavigator<RootStackParamList>();
 const App: React.FC = () => {
   const theme = Themestore(state => state.theme);
-
   return (
     <>
       <StatusBar
@@ -56,9 +55,9 @@ const App: React.FC = () => {
             component={Loginscreen}
           />
           <Stack.Screen
-            options={{ gestureEnabled: false }}
-            name="Tabbar"
-            component={Tabbar}
+            options={{ gestureEnabled: true, headerShown: false}}
+            name="Homescreen"
+            component={Homescreen}
           />
           <Stack.Screen
             options={{

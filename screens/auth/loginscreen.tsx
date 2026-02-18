@@ -32,7 +32,7 @@ export default function Loginscreen() {
     // const adminpass: string = '123456';
     // if (adminemail === email && adminpass === password) {
       // setTimeout(() => {
-        navigation.replace('Tabbar');
+        navigation.replace('Homescreen');
       // }, 3000);
     // } else {
     //   Alert.alert(

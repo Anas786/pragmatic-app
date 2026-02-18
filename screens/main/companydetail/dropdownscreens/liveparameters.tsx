@@ -8,9 +8,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const LiveparametersScreen: React.FC = () => {
   const theme = Themestore(state => state.theme);
-  const [isExpanded, setIsExpanded] = useState<boolean>(true);
+  const [isExpanded, setIsExpanded] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const inset = useSafeAreaInsets();
+  const handleexpand = (id: string) => {
+    setIsExpanded(prev => (prev === id ? null : id));
+  };
   return (
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
@@ -25,7 +28,7 @@ const LiveparametersScreen: React.FC = () => {
       >
         <TouchableOpacity
           activeOpacity={0.8}
-          onPress={() => setIsExpanded(!isExpanded)}
+          onPress={() => handleexpand('inv1')}
           style={[
             styles.cardHeader,
             {
@@ -84,7 +87,7 @@ const LiveparametersScreen: React.FC = () => {
               />
             </View>
             <FontAwesome6
-              name={isExpanded ? 'chevron-up' : 'chevron-down'}
+              name={isExpanded === 'inv1' ? 'chevron-up' : 'chevron-down'}
               iconStyle="solid"
               size={14}
               color={theme.colors.title}
@@ -93,7 +96,7 @@ const LiveparametersScreen: React.FC = () => {
           </View>
         </TouchableOpacity>
 
-        {isExpanded && (
+        {isExpanded === 'inv1' && (
           <>
             <View
               style={[
@@ -372,7 +375,7 @@ const LiveparametersScreen: React.FC = () => {
       >
         <TouchableOpacity
           activeOpacity={0.8}
-          onPress={() => setIsExpanded(!isExpanded)}
+          onPress={() => handleexpand('dg1')}
           style={[
             styles.cardHeader,
             {
@@ -431,7 +434,7 @@ const LiveparametersScreen: React.FC = () => {
               />
             </View>
             <FontAwesome6
-              name={isExpanded ? 'chevron-up' : 'chevron-down'}
+              name={isExpanded === 'dg1' ? 'chevron-up' : 'chevron-down'}
               iconStyle="solid"
               size={14}
               color={theme.colors.title}
@@ -439,6 +442,17 @@ const LiveparametersScreen: React.FC = () => {
             />
           </View>
         </TouchableOpacity>
+
+        {isExpanded === 'dg1' && (
+          <View
+            style={[
+              styles.cardBody,
+              { backgroundColor: theme.colors.overlaybackground },
+            ]}
+          >
+            <Text style={{ color: theme.colors.text }}>Content Area</Text>
+          </View>
+        )}
       </View>
 
       <View
@@ -451,7 +465,7 @@ const LiveparametersScreen: React.FC = () => {
       >
         <TouchableOpacity
           activeOpacity={0.8}
-          onPress={() => setIsExpanded(!isExpanded)}
+          onPress={() => handleexpand('wind1')}
           style={[
             styles.cardHeader,
             {
@@ -510,7 +524,7 @@ const LiveparametersScreen: React.FC = () => {
               />
             </View>
             <FontAwesome6
-              name={isExpanded ? 'chevron-up' : 'chevron-down'}
+              name={isExpanded=== 'wind1' ? 'chevron-up' : 'chevron-down'}
               iconStyle="solid"
               size={14}
               color={theme.colors.title}
@@ -518,6 +532,16 @@ const LiveparametersScreen: React.FC = () => {
             />
           </View>
         </TouchableOpacity>
+        {isExpanded === 'wind1' && (
+          <View
+            style={[
+              styles.cardBody,
+              { backgroundColor: theme.colors.overlaybackground },
+            ]}
+          >
+            <Text style={{ color: theme.colors.text }}>Content Area</Text>
+          </View>
+        )}
       </View>
 
       <View
@@ -530,7 +554,7 @@ const LiveparametersScreen: React.FC = () => {
       >
         <TouchableOpacity
           activeOpacity={0.8}
-          onPress={() => setIsExpanded(!isExpanded)}
+          onPress={() => handleexpand('pcs1')}
           style={[
             styles.cardHeader,
             {
@@ -544,7 +568,7 @@ const LiveparametersScreen: React.FC = () => {
               name="bolt"
               iconStyle="solid"
               size={20}
-              color='#e8f80c'
+              color="#e8f80c"
               style={{ marginRight: 6, width: 20, height: 20 }}
             />
             <Text style={[styles.headerTitle, { color: theme.colors.title }]}>
@@ -589,7 +613,7 @@ const LiveparametersScreen: React.FC = () => {
               />
             </View>
             <FontAwesome6
-              name={isExpanded ? 'chevron-up' : 'chevron-down'}
+              name={isExpanded === 'pcs1' ? 'chevron-up' : 'chevron-down'}
               iconStyle="solid"
               size={14}
               color={theme.colors.title}
@@ -597,6 +621,16 @@ const LiveparametersScreen: React.FC = () => {
             />
           </View>
         </TouchableOpacity>
+        {isExpanded === 'pcs1' && (
+          <View
+            style={[
+              styles.cardBody,
+              { backgroundColor: theme.colors.overlaybackground },
+            ]}
+          >
+            <Text style={{ color: theme.colors.text }}>Content Area</Text>
+          </View>
+        )}
       </View>
 
       <View
@@ -610,7 +644,7 @@ const LiveparametersScreen: React.FC = () => {
       >
         <TouchableOpacity
           activeOpacity={0.8}
-          onPress={() => setIsExpanded(!isExpanded)}
+          onPress={() => handleexpand('solar1')}
           style={[
             styles.cardHeader,
             {
@@ -625,7 +659,7 @@ const LiveparametersScreen: React.FC = () => {
               iconStyle="solid"
               size={20}
               color={theme.colors.iconcolor}
-              style={{marginRight: 6, width: 25, height: 20 }}
+              style={{ marginRight: 6, width: 25, height: 20 }}
             />
             <Text style={[styles.headerTitle, { color: theme.colors.title }]}>
               Solar
@@ -669,7 +703,7 @@ const LiveparametersScreen: React.FC = () => {
               />
             </View>
             <FontAwesome6
-              name={isExpanded ? 'chevron-up' : 'chevron-down'}
+              name={isExpanded === 'solar1' ? 'chevron-up' : 'chevron-down'}
               iconStyle="solid"
               size={14}
               color={theme.colors.title}
@@ -677,8 +711,17 @@ const LiveparametersScreen: React.FC = () => {
             />
           </View>
         </TouchableOpacity>
+        {isExpanded === 'solar1' && (
+          <View
+            style={[
+              styles.cardBody,
+              { backgroundColor: theme.colors.overlaybackground },
+            ]}
+          >
+            <Text style={{ color: theme.colors.text }}>Content Area</Text>
+          </View>
+        )}
       </View>
-
     </View>
   );
 };
@@ -704,7 +747,7 @@ const styles = StyleSheet.create({
   },
   headerLeft: {
     flexDirection: 'row',
-    alignItems: 'center'
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 12,

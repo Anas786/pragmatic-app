@@ -1,17 +1,12 @@
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import React, { useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import React from 'react';
 import FontAwesome6 from '@react-native-vector-icons/fontawesome6';
 import Themestore from '../../../store/themestore';
 import { getFontFamily } from '../../../assets/utils/fontfamily';
 
 const Alarmblock: React.FC = () => {
   const theme = Themestore(state => state.theme);
-  const [toggleactive, settoggleactive] = useState<boolean>(false);
-  const [priorityalarm, setpriorityalarm] = useState<boolean>(false);
-  const handletoggle = () => {
-    settoggleactive(prev => !prev);
-    setpriorityalarm(prev => !prev);
-  };
+
   return (
     <View style={[styles.alarmbox, { borderColor: theme.colors.bordercolor }]}>
       <View
@@ -39,17 +34,15 @@ const Alarmblock: React.FC = () => {
         <View
           style={[
             styles.indicatorBar,
-            { backgroundColor: !priorityalarm
-                ? theme.colors.cardscolorred
-                : theme.colors.cardscolorlightblue },
+            { backgroundColor: theme.colors.cardscolorred },
           ]}
         />
         <FontAwesome6
-          iconStyle="regular"
-          name="clock"
+          iconStyle="solid"
+          name="triangle-exclamation"
           size={20}
           style={{ width: 20, height: 20, marginRight: 8 }}
-          color={theme.colors.iconsecondary}
+          color={theme.colors.alarmstatusiconred}
         />
         <View style={styles.alarmcontent}>
           <View
@@ -59,57 +52,48 @@ const Alarmblock: React.FC = () => {
               alignItems: 'center',
             }}
           >
-            <View style={{ marginRight: 8 }}>
-              <Text style={[styles.alarmLabel, { color: theme.colors.text }]}>
-                Alarm Name
-              </Text>
-              <Text style={[styles.alarmValue, { color: theme.colors.title }]}>
-                10:15 AM
-              </Text>
-            </View>
-            <View
-              style={[
-                styles.priorityindicator,
-                {
-                  backgroundColor: !priorityalarm
-                    ? theme.colors.cardscolorred
-                    : theme.colors.cardscolorlightblue,
-                    borderWidth: 1, 
-                    borderColor: !priorityalarm ? theme.colors.cardscolorred : theme.colors.cardscolorlightblue,
-                },
-              ]}
-            >
-              <Text
+            <View style={{ marginLeft: 4 }}>
+              <View
                 style={[
-                  styles.priorityindicatortext,
-                  { color: theme.colors.iconbuttontext },
+                  styles.priorityindicator,
+                  {
+                    backgroundColor: theme.colors.cardscolorred,
+                    borderWidth: 1,
+                    borderColor: theme.colors.cardscolorred,
+                  },
                 ]}
               >
-                {!priorityalarm ? 'Priority' : 'Normal'}
+                <Text
+                  style={[
+                    styles.priorityindicatortext,
+                    { color: theme.colors.iconbuttontext },
+                  ]}
+                >
+                  Priority
+                </Text>
+              </View>
+              <Text style={[styles.alarmValue, { color: theme.colors.title }]}>
+                Wind Turbine 01 - 10:15 AM
               </Text>
             </View>
           </View>
         </View>
-        <View style={styles.alarmtoggleContainer}>
-          <TouchableOpacity
-            onPress={handletoggle}
-            style={[
-              styles.togglebutton,
-              {
-                backgroundColor: toggleactive
-                  ? theme.colors.buttonbg
-                  : 'transparent',
-                borderColor: toggleactive
-                  ? theme.colors.buttonbg
-                  : theme.colors.alarmtoggleborder,
-              },
-            ]}
+        <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'flex-end',
+              alignItems: 'flex-end',
+            }}
           >
-            <View
-              style={[styles.togglecircle, {backgroundColor: !toggleactive ? theme.colors.alarmtoggle : theme.colors.alarmtoggledcolor, left: !toggleactive ? 5 : 25 }]}
-            />
-          </TouchableOpacity>
-        </View>
+            <View style={{ marginRight: 4 }}>
+            <Text style={[styles.alarmLabel, { color: theme.colors.highlighted }]}>
+                Solved
+              </Text>
+              <Text style={[styles.alarmValue, { color: theme.colors.title }]}>
+                At 12:15 PM
+              </Text>
+            </View>
+          </View>
       </View>
 
       <View
@@ -124,17 +108,15 @@ const Alarmblock: React.FC = () => {
         <View
           style={[
             styles.indicatorBar,
-            { backgroundColor: priorityalarm
-                ? theme.colors.cardscolorred
-                : theme.colors.cardscolorlightblue },
+            { backgroundColor: theme.colors.alarmstatusiconorange },
           ]}
         />
         <FontAwesome6
-          iconStyle="regular"
-          name="clock"
+          iconStyle="solid"
+          name="circle-exclamation"
           size={20}
           style={{ width: 20, height: 20, marginRight: 8 }}
-          color={theme.colors.iconsecondary}
+          color={theme.colors.alarmstatusiconorange}
         />
         <View style={styles.alarmcontent}>
           <View
@@ -144,60 +126,50 @@ const Alarmblock: React.FC = () => {
               alignItems: 'center',
             }}
           >
-            <View style={{ marginRight: 8 }}>
-              <Text style={[styles.alarmLabel, { color: theme.colors.text }]}>
-                Alarm Name
-              </Text>
-              <Text style={[styles.alarmValue, { color: theme.colors.title }]}>
-                10:15 AM
-              </Text>
-            </View>
-            <View
-              style={[
-                styles.priorityindicator,
-                {
-                  backgroundColor: priorityalarm
-                    ? theme.colors.cardscolorred
-                    : theme.colors.cardscolorlightblue,
-                    borderWidth: 1, 
-                    borderColor: priorityalarm ? theme.colors.cardscolorred : theme.colors.cardscolorlightblue,
-                },
-              ]}
-            >
-              <Text
+            <View style={{ marginLeft: 4 }}>
+              <View
                 style={[
-                  styles.priorityindicatortext,
-                  { color: theme.colors.iconbuttontext 
+                  styles.priorityindicator,
+                  {
+                    backgroundColor: theme.colors.alarmstatusiconorange,
+                    borderWidth: 1,
+                    borderColor: theme.colors.alarmstatusiconorange,
                   },
                 ]}
               >
-                {priorityalarm ? 'Priority' : 'Normal'}
+                <Text
+                  style={[
+                    styles.priorityindicatortext,
+                    { color: theme.colors.iconbuttontext },
+                  ]}
+                >
+                  Major
+                </Text>
+              </View>
+              <Text style={[styles.alarmValue, { color: theme.colors.title }]}>
+                Solar 01 - 11:15 AM
               </Text>
             </View>
           </View>
         </View>
-        <View style={styles.alarmtoggleContainer}>
-          <TouchableOpacity
-            onPress={handletoggle}
-            style={[
-              styles.togglebutton,
-              {
-                backgroundColor: !toggleactive
-                  ? theme.colors.buttonbg
-                  : 'transparent',
-                borderColor: !toggleactive
-                  ? theme.colors.buttonbg
-                  : theme.colors.alarmtoggleborder,
-              },
-            ]}
+        <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'flex-end',
+              alignItems: 'flex-end',
+            }}
           >
-            <View
-              style={[styles.togglecircle, { backgroundColor: toggleactive ? theme.colors.alarmtoggle : theme.colors.alarmtoggledcolor, left: toggleactive ? 5 : 25 }]}
-            />
-          </TouchableOpacity>
-        </View>
+            <View style={{ marginRight: 4 }}>
+            <Text style={[styles.alarmLabel, { color: theme.colors.alarmstatusiconred }]}>
+                Unsolved
+              </Text>
+              <Text style={[styles.alarmValue, { color: theme.colors.title }]}>
+                ETA 2:15 PM
+              </Text>
+            </View>
+          </View>
       </View>
-      
+
       <View
         style={[
           styles.alarmCardContainer,
@@ -210,17 +182,15 @@ const Alarmblock: React.FC = () => {
         <View
           style={[
             styles.indicatorBar,
-            { backgroundColor: priorityalarm
-                ? theme.colors.cardscolorred
-                : theme.colors.cardscolorlightblue },
+            { backgroundColor: theme.colors.alarmstatusicongreen },
           ]}
         />
         <FontAwesome6
-          iconStyle="regular"
-          name="clock"
+          iconStyle="solid"
+          name="bell"
           size={20}
           style={{ width: 20, height: 20, marginRight: 8 }}
-          color={theme.colors.iconsecondary}
+          color={theme.colors.alarmstatusicongreen}
         />
         <View style={styles.alarmcontent}>
           <View
@@ -230,59 +200,123 @@ const Alarmblock: React.FC = () => {
               alignItems: 'center',
             }}
           >
-            <View style={{ marginRight: 8 }}>
-              <Text style={[styles.alarmLabel, { color: theme.colors.text }]}>
-                Alarm Name
-              </Text>
-              <Text style={[styles.alarmValue, { color: theme.colors.title }]}>
-                10:15 AM
-              </Text>
-            </View>
-            <View
-              style={[
-                styles.priorityindicator,
-                {
-                  backgroundColor: priorityalarm
-                    ? theme.colors.cardscolorred
-                    : theme.colors.cardscolorlightblue,
-                    borderWidth: 1, 
-                    borderColor: priorityalarm ? theme.colors.cardscolorred : theme.colors.cardscolorlightblue,
-                },
-              ]}
-            >
-              <Text
+            <View style={{ marginLeft: 4 }}>
+              <View
                 style={[
-                  styles.priorityindicatortext,
-                  { color: theme.colors.iconbuttontext },
+                  styles.priorityindicator,
+                  {
+                    backgroundColor: theme.colors.alarmstatusicongreen,
+                    borderWidth: 1,
+                    borderColor: theme.colors.alarmstatusicongreen,
+                  },
                 ]}
               >
-                {priorityalarm ? 'Priority' : 'Normal'}
+                <Text
+                  style={[
+                    styles.priorityindicatortext,
+                    { color: theme.colors.iconbuttontext },
+                  ]}
+                >
+                  Minor
+                </Text>
+              </View>
+              <Text style={[styles.alarmValue, { color: theme.colors.title }]}>
+                Solar 02 Dusty - 11:15 AM
               </Text>
             </View>
           </View>
         </View>
-        <View style={styles.alarmtoggleContainer}>
-          <TouchableOpacity
-            onPress={handletoggle}
-            style={[
-              styles.togglebutton,
-              {
-                backgroundColor: !toggleactive
-                  ? theme.colors.buttonbg
-                  : 'transparent',
-                borderColor: !toggleactive
-                  ? theme.colors.buttonbg
-                  : theme.colors.alarmtoggleborder,
-              },
-            ]}
+        <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'flex-end',
+              alignItems: 'flex-end',
+            }}
           >
-            <View
-              style={[styles.togglecircle, {backgroundColor: toggleactive ? theme.colors.alarmtoggle : theme.colors.alarmtoggledcolor, left: toggleactive ? 5 : 25 }]}
-            />
-          </TouchableOpacity>
-        </View>
+            <View style={{ marginRight: 4 }}>
+            <Text style={[styles.alarmLabel, { color: theme.colors.alarmstatusicongreen }]}>
+                Solved
+              </Text>
+              <Text style={[styles.alarmValue, { color: theme.colors.title }]}>
+                At 12:15 PM
+              </Text>
+            </View>
+          </View>
       </View>
-      
+
+      <View
+        style={[
+          styles.alarmCardContainer,
+          {
+            backgroundColor: theme.colors.overlaybackground,
+            marginBottom: 8,
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.indicatorBar,
+            { backgroundColor: theme.colors.alarmstatusiconblue },
+          ]}
+        />
+        <FontAwesome6
+          iconStyle="solid"
+          name="comment-dots"
+          size={20}
+          style={{ width: 20, height: 20, marginRight: 8 }}
+          color={theme.colors.alarmstatusiconblue}
+        />
+        <View style={styles.alarmcontent}>
+          <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'flex-start',
+              alignItems: 'center',
+            }}
+          >
+            <View style={{ marginLeft: 4 }}>
+              <View
+                style={[
+                  styles.priorityindicator,
+                  {
+                    backgroundColor: theme.colors.alarmstatusiconblue,
+                    borderWidth: 1,
+                    borderColor: theme.colors.alarmstatusiconblue,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.priorityindicatortext,
+                    { color: theme.colors.iconbuttontext },
+                  ]}
+                >
+                  Warning
+                </Text>
+              </View>
+              <Text style={[styles.alarmValue, { color: theme.colors.title }]}>
+                Solar Battery Weak - 11:39 AM
+              </Text>
+            </View>
+          </View>
+        </View>
+        <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'flex-end',
+              alignItems: 'flex-end',
+            }}
+          >
+            <View style={{ marginRight: 4 }}>
+            <Text style={[styles.alarmLabel, { color: theme.colors.alarmstatusiconred }]}>
+                Unsolved
+              </Text>
+              <Text style={[styles.alarmValue, { color: theme.colors.title }]}>
+                ETA 1:05 PM
+              </Text>
+            </View>
+          </View>
+      </View>
     </View>
   );
 };
@@ -341,32 +375,17 @@ const styles = StyleSheet.create({
   alarmtoggleContainer: {
     marginLeft: 8,
   },
-  togglebutton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 100,
-    borderWidth: 1,
-    position: 'relative',
-  },
-  togglecircle: {
-    position: 'absolute',
-    borderRadius: 100,
-    width: 10,
-    height: 10,
-  },
   priorityindicator: {
-    height: 28,
-    padding: 6,
+    padding: 2,
     borderRadius: 65,
     borderWidth: 1,
-    width: 60,
+    width: 40,
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 4,
   },
   priorityindicatortext: {
-    fontSize: 8,
+    fontSize: 7,
     fontFamily: getFontFamily('true', 'medium'),
     lineHeight: 12,
   },

@@ -17,7 +17,6 @@ const Dashboardscreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
 
-
   return (
     <SafeAreaView edges={['top']} style={[styles.dashboardview, {backgroundColor: theme.colors.background}]}>
       <ScrollView
@@ -95,7 +94,6 @@ const Dashboardscreen = () => {
             date="17/12/2025"
             time="07:49 PM"
             logo={require("../../../assets/luckycementlogo.png")}
-            onverticalView={() => Alert.alert('Vertical Options')}
             powerReadings={[
               { icon: "solar-panel", name: "Solar", iconcolor: "#05c80e", value: "3.2345", label: "kWp" },
               { icon: "fan", name: "Wind", iconcolor: "#3a5fd0", value: "3.2345", label: "kWp" },
@@ -117,7 +115,6 @@ const Dashboardscreen = () => {
             date="17/12/2025"
             time="07:49 PM"
             logo={require("../../../assets/mastermoltylogo.jpg")}
-            onverticalView={() => Alert.alert('Vertical Options')}
             powerReadings={[
               { icon: "solar-panel", name: "Solar", iconcolor: "#05c80e", value: "3.2345", label: "kWp" },
               { icon: "solar-panel", name: "Solar", iconcolor: "#05c80e", value: "3.2345", label: "kWp" },
@@ -136,14 +133,16 @@ const Dashboardscreen = () => {
             date="17/12/2025"
             time="07:49 PM"
             logo={require("../../../assets/youngsfoodlogo.jpg")}
-            onverticalView={() => Alert.alert('Vertical Options')}
             powerReadings={[
+              { icon: "chart-line", name: "PV Size", iconcolor: "#e8f80c", value: "18,235", label: "kW" },
+              { icon: "solar-panel", name: "Solar", iconcolor: "#05c80e", value: "3.2345", label: "kWp" },
+              { icon: "solar-panel", name: "Solar", iconcolor: "#05c80e", value: "3.2345", label: "kWp" },
               { icon: "chart-line", name: "PV Size", iconcolor: "#e8f80c", value: "18,235", label: "kW" },
               { icon: "solar-panel", name: "Solar", iconcolor: "#05c80e", value: "3.2345", label: "kWp" },
               { icon: "solar-panel", name: "Solar", iconcolor: "#05c80e", value: "3.2345", label: "kWp" },
             ]}
             efficiency={86.56}
-            onExpandView={() => Alert.alert('Expand Young Food Pvt.')}
+            onExpandView={() => Alert.alert('Expand Young Food Pvt')}
             isactive={false}
             isopen={() => Alert.alert('Expand Young Food Pvt.')}
           />

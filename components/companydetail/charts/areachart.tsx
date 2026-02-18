@@ -63,9 +63,13 @@ const Areachart: React.FC = () => {
     { value: 82 },
     { value: 22 },
   ];
+  const firstitem = lineData1.map((item,index)=> ({
+    ...item,
+    index: index,
+  }))
   const dataSet = [
     {
-      data: lineData1.map(item => ({
+      data: firstitem.map(item => ({
         ...item,
         customDataPoint: () => customdatapoint(theme.colors.linechartdatapointbordergreen), 
       })),
@@ -109,9 +113,10 @@ const Areachart: React.FC = () => {
       <LineChart
         dataSet={dataSet}
         height={220}
-        width={285}
-        spacing={25}
+        spacing={35}
         initialSpacing={10}
+        scrollAnimation={true}
+        focusEnabled={true}
         maxValue={100}
         noOfSections={5}
         yAxisTextStyle={{ color: theme.colors.text, fontSize: 10 }}
@@ -126,6 +131,48 @@ const Areachart: React.FC = () => {
         curved={false}
         thickness={1}
         hideDataPoints={false}
+        pointerConfig={{
+          pointerStripHeight: 160,
+          pointerStripColor: theme.colors.title,
+          pointerStripWidth: 1,
+          pointerColor: theme.colors.text,
+          radius: 6,
+          pointerLabelWidth: 100,
+          pointerLabelHeight: 90,
+          activatePointersOnLongPress: true,
+          autoAdjustPointerLabelPosition: false,
+          pointerLabelComponent: (items: any) => {
+            const isfirstitem = items[0]?.index === 0;
+            return (
+              <View
+                style={{
+                  height: 90,
+                  width: 100,
+                  justifyContent: 'center',
+                  marginTop: 0,
+                  marginLeft: isfirstitem ? 0 : -40,
+                  borderRadius: 8,
+                  backgroundColor: theme.colors.overlaybackground,
+                  borderWidth: 1,
+                  borderColor: theme.colors.bordercolor,
+                  padding: 8,
+                }}
+              >
+                {items.map((item: any, index: number) => (
+                   <View key={index} style={{flexDirection: 'row', alignItems: 'center', marginBottom: 4}}>
+                      <View style={{width: 6, height: 6, borderRadius: 3, backgroundColor: theme.colors.highlighted, marginRight: 6}}/>
+                      <Text style={{color: theme.colors.title, fontSize: 10, fontFamily: getFontFamily('true', 'medium')}}>
+                        {item.value}
+                      </Text>
+                   </View>
+                ))}
+                <Text style={{color: theme.colors.text, fontSize: 8, marginTop: 4}}>
+                   {items[0].label || 'Data Point'}
+                </Text>
+              </View>
+            );
+          },
+        }}
         xAxisLabelTexts={[
           '19 Dec',
           '20 Dec',
