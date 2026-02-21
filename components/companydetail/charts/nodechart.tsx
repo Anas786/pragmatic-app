@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo} from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
 import RNEChartsPro from 'react-native-echarts-pro';
 import { getFontFamily } from '../../../assets/utils/fontfamily';
@@ -21,6 +21,7 @@ const Nodechart: React.FC<NodeChartProps> = ({
   roamType,
   onZoomChange,
 }) => {
+ 
   const setScrollEnabled = useUIStore(state => state.setScrollEnabled);
   const theme = Themestore(state => state.theme);
   const cardlayout = useMemo(() => {
@@ -396,7 +397,7 @@ const Nodechart: React.FC<NodeChartProps> = ({
           type: 'graph',
           layout: 'none',
           edgeShape: 'polyline',
-            center: [cX, cY],
+          center: [cX, cY],
           z: 2,
           lineStyle: {
             curveness: 0,
@@ -415,7 +416,7 @@ const Nodechart: React.FC<NodeChartProps> = ({
             max: MAX_ZOOM,
           },
           label: { show: true, fontSize: 10, color: '#000' },
-          edgeSymbol: ['none', 'arrow'],
+          edgeSymbol: ['none', 'none'],
           edgeSymbolSize: [1, 10],
           data: graphData,
           links: graphLinks,
@@ -436,6 +437,7 @@ const Nodechart: React.FC<NodeChartProps> = ({
       onTouchCancel={() => setScrollEnabled(true)}
     >
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
+
         <Svg width="100%" height="100%">
           <Defs>
             <Pattern

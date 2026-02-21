@@ -355,9 +355,9 @@ const Summaryblock: React.FC = () => {
                 size={12}
                 disabled={zoomLevel === MAX_ZOOM || isLocked === true}
                 color={
-                  zoomLevel !== MIN_ZOOM || isLocked !== true
-                    ? theme.colors.iconsecondary
-                    : theme.colors.inputborder
+                  zoomLevel === MAX_ZOOM || isLocked === true
+                    ? theme.colors.inputborder
+                    : theme.colors.iconsecondary
                 }
               />
             </TouchableOpacity>
@@ -373,9 +373,9 @@ const Summaryblock: React.FC = () => {
                 size={12}
                 disabled={zoomLevel === MIN_ZOOM || isLocked === true}
                 color={
-                  zoomLevel !== MIN_ZOOM || isLocked !== true
-                    ? theme.colors.iconsecondary
-                    : theme.colors.inputborder
+                  zoomLevel === MIN_ZOOM || isLocked === true
+                    ? theme.colors.inputborder
+                    : theme.colors.iconsecondary
                 }
               />
             </TouchableOpacity>
@@ -681,9 +681,9 @@ const Summaryblock: React.FC = () => {
                     size={12}
                     disabled={zoomLevel === MAX_ZOOM || isLocked === true}
                     color={
-                      zoomLevel !== MIN_ZOOM || isLocked !== true
-                        ? theme.colors.iconsecondary
-                        : theme.colors.inputborder
+                      zoomLevel === MAX_ZOOM || isLocked === true
+                      ? theme.colors.inputborder
+                      : theme.colors.iconsecondary
                     }
                   />
                 </TouchableOpacity>
@@ -699,9 +699,9 @@ const Summaryblock: React.FC = () => {
                     size={12}
                     disabled={zoomLevel === MIN_ZOOM || isLocked === true}
                     color={
-                      zoomLevel !== MIN_ZOOM || isLocked !== true
-                        ? theme.colors.iconsecondary
-                        : theme.colors.inputborder
+                      zoomLevel === MIN_ZOOM || isLocked === true
+                      ? theme.colors.inputborder
+                      : theme.colors.iconsecondary
                     }
                   />
                 </TouchableOpacity>
