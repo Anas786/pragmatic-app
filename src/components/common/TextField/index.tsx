@@ -14,7 +14,6 @@ import {
 import AppText from '../AppText';
 import Spacer from '../Spacer';
 import CustomIcon, { IconName } from '../CustomIcon';
-import { useTranslation } from 'react-i18next';
 
 interface TextFieldProps extends TextInputProps {
   label?: string;
@@ -39,9 +38,6 @@ const TextField: FC<TextFieldProps> = ({
   ...rest
 }) => {
   const [focus, setFocus] = useState(rest.autoFocus);
-  const {
-    i18n: { language },
-  } = useTranslation();
 
   const renderInputContainer = () => (
     <View
@@ -49,11 +45,8 @@ const TextField: FC<TextFieldProps> = ({
         ...styles.inputContainer,
         borderColor: error ? RED : focus ? BLUE : BORDER_GRAY,
         height: normalizeHeight(height),
-        width: type === 'phone' && language === 'ar' ? '70%' : '100%',
-        paddingHorizontal: language === 'ar' && type === 'phone' ? normalizeWidth(30) : '2.5%',
-        ...(language === 'ar'
-          ? { flexDirection: 'row-reverse' }
-          : { flexDirection: 'row' }),
+        width: type === 'phone' ? '70%' : '100%',
+        paddingHorizontal: type === 'phone' ? normalizeWidth(30) : '2.5%',
       }}>
       {icon ? (
         <View>
@@ -65,10 +58,9 @@ const TextField: FC<TextFieldProps> = ({
           ...styles.input,
           flex: type === 'phone' ? 1 : undefined,
           width: type === 'phone' ? undefined : '100%',
-          textAlign: language === 'ar' ? 'right' : 'left',
           paddingHorizontal: 0,
-          paddingRight: language === 'ar' ? normalizeWidth(30) : normalizeWidth(8),
-          paddingLeft: language === 'ar' ? normalizeWidth(8) : normalizeWidth(12),
+          paddingRight: normalizeWidth(8),
+          paddingLeft: normalizeWidth(12),
           ...(rest.multiline
             ? {
                 paddingTop: normalizeHeight(15),
@@ -104,9 +96,7 @@ const TextField: FC<TextFieldProps> = ({
       <View
         style={{
           ...styles.innerContainer,
-          ...(language === 'ar'
-            ? { flexDirection: 'row-reverse' }
-            : { flexDirection: 'row' }),
+          flexDirection: 'row',
         }}>
         {type === 'phone' && (
           <View

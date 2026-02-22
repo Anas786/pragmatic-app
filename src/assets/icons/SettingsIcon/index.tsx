@@ -2,7 +2,7 @@ import React, { FC } from "react";
 import { ClipPath, Defs, G, Path, Rect, Svg } from "react-native-svg";
 import { IconProps } from "src/types";
 
-const SettingsIcon: FC<IconProps> = ({ size, color }) => {
+const SettingsIcon: FC<IconProps> = ({ size }) => {
   return (
     <Svg width={size} height={size} viewBox="0 0 20 21" fill="none">
       <G clip-path="url(#clip0_575_11152)">

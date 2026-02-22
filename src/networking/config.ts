@@ -53,29 +53,7 @@ appAxios.interceptors.request.use(
     const token = await AsyncStorage.getItem('token');
     if(token) {
       config.headers.Authorization = token;
-    }
-
-    // Get current language from i18n (defaults to 'en' if not set)
-    // Note: We need to import i18n here, but since it's initialized synchronously,
-    // we can safely access it. For async access, we'll use AsyncStorage as fallback.
-    let lang = 'en';
-    try {
-      const storedLang = await AsyncStorage.getItem('language');
-      lang = storedLang === 'ar' ? 'ar' : 'en';
-    } catch {
-      // Fallback to 'en' if AsyncStorage fails
-      lang = 'en';
-    }
-
-    // Add lang parameter to all requests
-    if (config.params) {
-      // If params already exist, add lang to them
-      config.params.lang = lang;
-    } else {
-      // If no params exist, create params object with lang
-      config.params = { lang };
-    }
-
+    }    
     return config;
   },
   (error) => {

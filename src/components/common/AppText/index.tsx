@@ -2,7 +2,6 @@ import React, { FC } from 'react';
 import {
   ColorValue,
   DimensionValue,
-  I18nManager,
   Text,
   TextProps,
   TextStyle,
@@ -42,7 +41,7 @@ const AppText: FC<AppTextProps> = ({
     style={{
       color,
       fontSize: normalizeFont(fontSize),
-      textAlign: center ? 'center' : I18nManager.isRTL ? 'left' : 'left',
+      textAlign: center ? 'center' : 'left',
       lineHeight: lineHeight ? lineHeight : undefined,
       width,
       opacity,

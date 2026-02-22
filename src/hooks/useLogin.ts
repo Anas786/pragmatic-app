@@ -4,7 +4,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Alert } from 'react-native';
-import { login } from 'src/networking';
+// import { login } from 'src/networking';
 import { ILogin, RootStackParamList } from 'src/types';
 import { LoginSchema } from 'src/utils';
 
@@ -21,10 +21,12 @@ export const useLogin = () => {
   });
   const [loading, setLoading] = useState(false);
 
-  const onSubmit = async (data: ILogin) => {
+  const onSubmit = async () => {
+    console.log('Login submitted');
     setLoading(true);
     try {
-      await login(data);
+      // await login(data);
+      console.log('Login successful');
       navigate('Dashboard');
     } catch (error) {
       Alert.alert('Login Failed', error as string);

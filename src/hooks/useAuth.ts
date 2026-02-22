@@ -1,13 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useCallback } from 'react';
 import { setAuthToken, setGlobalLogout } from 'src/networking';
-import { getUser } from 'src/networking/user';
 import { useUserStore } from './useUserStore';
 
 export const useAuth = () => {
   // const { reset } =
   //   useNavigation<NativeStackNavigationProp<OnboardingStackParamList>>();
-  const { setUser, removeUser } = useUserStore();
+  const { removeUser } = useUserStore();
 
   // const resetTo = useCallback((name: keyof OnboardingStackParamList['Splash']) => {
   //   reset({
@@ -41,16 +40,15 @@ export const useAuth = () => {
       const token = await AsyncStorage.getItem('token');
       if (token) {
         setAuthToken(token);
-        const { data } = await getUser();
-        setUser(data);
         // resetTo('Authenticated');
       } else {
         // resetTo('Welcome');
       }
     } catch (error) {
+      console.error('Error verifying auth:', error);
       // resetTo('Welcome');
     }
-  }, [setUser]);
+  }, []);
 
   const initializeApp = useCallback(async () => {
     try {

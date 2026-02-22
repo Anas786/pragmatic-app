@@ -2,7 +2,7 @@ import React, { FC } from "react";
 import { Path, Svg } from "react-native-svg";
 import { IconProps } from "src/types";
 
-const RightIcon: FC<IconProps> = ({ size, color }) => {
+const RightIcon: FC<IconProps> = ({ size }) => {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path

@@ -7,15 +7,7 @@ export type RootStackParamList = {
 
 export type OnboardingStackParamList = {
   Splash: undefined;
-  Welcome: undefined;
   Login: undefined;
-  SignUp: undefined;
-  Verify: {
-    origin: 'signup' | 'login';
-    email: string;
-  };
-  Authenticated: undefined;
-  PortableStorageStack: undefined;
 };
 
 export type AuthenticatedStackParamList = {
