@@ -26,7 +26,7 @@ export const useLogout = () => {
       reset({
         routes: [
           {
-            name: 'Welcome',
+            name: 'Login',
           },
         ],
       });
@@ -36,7 +36,7 @@ export const useLogout = () => {
       reset({
         routes: [
           {
-            name: 'Welcome',
+            name: 'Login',
           },
         ],
       });

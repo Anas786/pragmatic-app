@@ -42,10 +42,15 @@ export const INPUT_DARK_BORDER = '#303030';
 export const TEXT_SECONDARY = '#6e6e6e';
 export const LOGIN_BUTTON_BG = '#00a908';
 export const TERMS_LINK = '#05c80e';
-export const STATUS_ACTIVE = '#3ad04b';
-export const STATUS_INACTIVE = '#6e6e6e';
 export const CARD_BG = '#171717';
 export const PROGRESS_BG = '#262626';
+export const SUCCESS_GREEN = '#11B95C';
+export const ACCENT_GREEN = '#3AD04B';
+export const ACCENT_RED = '#EF4444';
+export const METRIC_CARD_BG = '#1F1F1F';
+export const TAB_ACTIVE_BG = '#08820E';
+export const TAB_INACTIVE_BG = '#1B1A1B';
+export const DROPDOWN_BG = '#1F1F1F';
 
 // Font Sizes
 export const FONT_SIZE_XXS = 10;

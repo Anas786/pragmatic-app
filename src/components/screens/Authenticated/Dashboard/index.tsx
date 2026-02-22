@@ -8,6 +8,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AppText } from 'src/components/common';
 import { Logo } from 'src/assets';
 import {
@@ -15,41 +17,40 @@ import {
   FONT_SIZE_LG,
   FONT_SIZE_MD,
   FONT_SIZE_SM,
-  FONT_SIZE_XL,
   FONT_SIZE_XS,
   FONT_SIZE_XXS,
   INPUT_DARK_BG,
   INPUT_DARK_BORDER,
   normalizeHeight,
   normalizeWidth,
+  PRIMARY,
   PROGRESS_BG,
   SPLASH_BG,
-  STATUS_ACTIVE,
-  STATUS_INACTIVE,
   TEXT_SECONDARY,
   WHITE,
 } from 'src/utils';
+import { RootStackParamList } from 'src/types';
 
 interface SiteCardProps {
   name: string;
   timestamp: string;
-  isActive: boolean;
   efficiency: number;
   metrics: Array<{ label: string; value: string; unit: string; icon: string }>;
+  onPress: () => void;
 }
 
 const SiteCard: FC<SiteCardProps> = ({
   name,
   timestamp,
-  isActive,
   efficiency,
   metrics,
+  onPress,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const displayedMetrics = isExpanded ? metrics : metrics.slice(0, 3);
 
   return (
-    <View style={styles.siteCard}>
+    <TouchableOpacity style={styles.siteCard} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.siteHeader}>
         <View style={styles.siteAvatarContainer}>
           <View style={styles.siteAvatar}>
@@ -57,44 +58,32 @@ const SiteCard: FC<SiteCardProps> = ({
               {name.substring(0, 2).toUpperCase()}
             </AppText>
           </View>
-          <View
-            style={[
-              styles.statusDot,
-              { backgroundColor: isActive ? STATUS_ACTIVE : STATUS_INACTIVE },
-            ]}
-          />
         </View>
 
         <View style={styles.siteInfo}>
-          <AppText fontSize={FONT_SIZE_XXS} medium color={WHITE}>
+          <AppText fontSize={FONT_SIZE_XS} medium color={WHITE}>
             {name}
           </AppText>
-          <AppText fontSize={FONT_SIZE_XXS - 2} color={TEXT_SECONDARY}>
+          <AppText fontSize={FONT_SIZE_XXS} color={TEXT_SECONDARY}>
             {timestamp}
           </AppText>
         </View>
-
-        <TouchableOpacity style={styles.menuButton}>
-          <AppText fontSize={FONT_SIZE_XL} color={TEXT_SECONDARY}>
-            ⋮
-          </AppText>
-        </TouchableOpacity>
       </View>
 
       <View style={styles.metricsContainer}>
         {displayedMetrics.map((metric, index) => (
           <View key={index} style={styles.metricCard}>
             <View style={styles.metricHeader}>
-              <AppText fontSize={FONT_SIZE_SM}>{metric.icon}</AppText>
-              <AppText fontSize={FONT_SIZE_XXS - 2} color={WHITE}>
+              <AppText fontSize={FONT_SIZE_MD}>{metric.icon}</AppText>
+              <AppText fontSize={FONT_SIZE_XXS} color={WHITE}>
                 {metric.label}
               </AppText>
             </View>
             <View style={styles.metricValue}>
-              <AppText fontSize={FONT_SIZE_XXS} semi_bold color={WHITE}>
+              <AppText fontSize={FONT_SIZE_XS} semi_bold color={WHITE}>
                 {metric.value}
               </AppText>
-              <AppText fontSize={FONT_SIZE_XXS - 2} color={TEXT_SECONDARY}>
+              <AppText fontSize={FONT_SIZE_XXS} color={TEXT_SECONDARY}>
                 {metric.unit}
               </AppText>
             </View>
@@ -104,10 +93,10 @@ const SiteCard: FC<SiteCardProps> = ({
 
       <View style={styles.efficiencyContainer}>
         <View style={styles.efficiencyHeader}>
-          <AppText fontSize={FONT_SIZE_XXS} medium color={WHITE}>
+          <AppText fontSize={FONT_SIZE_XS} medium color={WHITE}>
             Power Output Efficiency
           </AppText>
-          <AppText fontSize={FONT_SIZE_XXS - 2} medium color={STATUS_ACTIVE}>
+          <AppText fontSize={FONT_SIZE_XXS} medium color={PRIMARY}>
             {efficiency}%
           </AppText>
         </View>
@@ -123,24 +112,29 @@ const SiteCard: FC<SiteCardProps> = ({
 
       <TouchableOpacity
         style={styles.expandButton}
-        onPress={() => setIsExpanded(!isExpanded)}>
-        <AppText fontSize={FONT_SIZE_XXS} color={TEXT_SECONDARY}>
+        onPress={(e) => {
+          e.stopPropagation();
+          setIsExpanded(!isExpanded);
+        }}>
+        <AppText fontSize={FONT_SIZE_XS} color={TEXT_SECONDARY}>
           {isExpanded ? 'Collapse View' : 'Expand View'}
         </AppText>
-        <AppText fontSize={FONT_SIZE_XS} color={TEXT_SECONDARY}>
+        <AppText fontSize={FONT_SIZE_SM} color={TEXT_SECONDARY}>
           {isExpanded ? '↑' : '↓'}
         </AppText>
       </TouchableOpacity>
-    </View>
+    </TouchableOpacity>
   );
 };
 
 const Dashboard: FC = () => {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [isDarkTheme, setIsDarkTheme] = useState(true);
+  
   const sitesData: SiteCardProps[] = [
     {
       name: 'Lucky Cement Nooribad',
       timestamp: '17/12/2025, 07:49 PM',
-      isActive: true,
       efficiency: 86.56,
       metrics: [
         { label: 'Solar', value: '3.2345', unit: 'kWp', icon: '☀️' },
@@ -153,11 +147,16 @@ const Dashboard: FC = () => {
         { label: 'Wind', value: '3.2345', unit: 'kWp', icon: '💨' },
         { label: 'Solar', value: '3.2345', unit: 'kWp', icon: '☀️' },
       ],
+      onPress: () => navigation.navigate('SiteDetail', {
+        siteId: '1',
+        siteName: 'Lucky Cement Nooribad',
+        siteSubtitle: '30MW PV+ 28.8MW Wind MGCS',
+        efficiency: 86.56,
+      }),
     },
     {
       name: 'Master Molty Foam',
       timestamp: '17/12/2025, 07:49 PM',
-      isActive: false,
       efficiency: 86.56,
       metrics: [
         { label: 'Solar', value: '3.2345', unit: 'kWp', icon: '☀️' },
@@ -167,17 +166,28 @@ const Dashboard: FC = () => {
         { label: 'Wind', value: '3.2345', unit: 'kWp', icon: '💨' },
         { label: 'Solar', value: '3.2345', unit: 'kWp', icon: '☀️' },
       ],
+      onPress: () => navigation.navigate('SiteDetail', {
+        siteId: '2',
+        siteName: 'Master Molty Foam',
+        siteSubtitle: '25MW PV+ 15MW Wind MGCS',
+        efficiency: 86.56,
+      }),
     },
     {
       name: 'Young Food Pvt.',
       timestamp: '17/12/2025, 07:49 PM',
-      isActive: true,
       efficiency: 86.56,
       metrics: [
         { label: 'PV Size', value: '18,235', unit: 'kW', icon: '📊' },
         { label: 'Solar', value: '3.2345', unit: 'kWp', icon: '☀️' },
         { label: 'Solar', value: '3.2345', unit: 'kWp', icon: '☀️' },
       ],
+      onPress: () => navigation.navigate('SiteDetail', {
+        siteId: '3',
+        siteName: 'Young Food Pvt.',
+        siteSubtitle: '10MW PV MGCS',
+        efficiency: 86.56,
+      }),
     },
   ];
 
@@ -194,8 +204,10 @@ const Dashboard: FC = () => {
 
         <Image source={Logo} style={styles.logo} resizeMode="contain" />
 
-        <TouchableOpacity style={styles.notificationButton}>
-          <AppText fontSize={FONT_SIZE_LG}>🔔</AppText>
+        <TouchableOpacity 
+          style={styles.themeButton}
+          onPress={() => setIsDarkTheme(!isDarkTheme)}>
+          <AppText fontSize={FONT_SIZE_LG}>{isDarkTheme ? '🌙' : '☀️'}</AppText>
         </TouchableOpacity>
       </View>
 
@@ -204,14 +216,14 @@ const Dashboard: FC = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
         <View style={styles.searchContainer}>
-          <AppText fontSize={FONT_SIZE_XS}>🔍</AppText>
-          <AppText fontSize={FONT_SIZE_XS} color={TEXT_SECONDARY}>
+          <AppText fontSize={FONT_SIZE_SM}>🔍</AppText>
+          <AppText fontSize={FONT_SIZE_SM} color={TEXT_SECONDARY}>
             Search
           </AppText>
         </View>
 
         <View style={styles.sectionHeader}>
-          <AppText fontSize={FONT_SIZE_XS} medium color={WHITE}>
+          <AppText fontSize={FONT_SIZE_SM} medium color={WHITE}>
             Site Summary
           </AppText>
         </View>
@@ -257,6 +269,9 @@ const styles = StyleSheet.create({
   notificationButton: {
     padding: normalizeWidth(4),
   },
+  themeButton: {
+    padding: normalizeWidth(4),
+  },
   scrollView: {
     flex: 1,
   },
@@ -281,6 +296,7 @@ const styles = StyleSheet.create({
     borderColor: INPUT_DARK_BORDER,
     borderRadius: 16,
     padding: normalizeWidth(12),
+    alignItems: 'center',
   },
   sitesContainer: {
     gap: normalizeHeight(8),
@@ -369,7 +385,7 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: '100%',
-    backgroundColor: STATUS_ACTIVE,
+    backgroundColor: PRIMARY,
     borderRadius: 1000,
   },
   expandButton: {
