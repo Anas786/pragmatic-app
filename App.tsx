@@ -1,188 +1,97 @@
-import React from 'react';
-import SplashScreenone from './screens/splash/splashscreen_one';
-import SplashScreentwo from './screens/splash/splashscreen_two';
-import Loginscreen from './screens/auth/loginscreen';
-import { createStackNavigator } from '@react-navigation/stack';
-import { NavigationContainer } from '@react-navigation/native';
-import { RootStackParamList } from './types/navigation';
-import Themestore from './store/themestore';
-import { StatusBar } from 'react-native';
-import { darkTheme } from './theme/color';
-import Editpersonalinfo from './screens/main/profile/editpersonalinfo';
-import Editpassword from './screens/main/profile/editpassword';
-import Deactivateaccount from './screens/main/profile/deactivateaccount';
-import Termsandcondition from './screens/main/profile/termsandcondition';
-import Headerleft from './components/secondaryheader/headerleftsecondary';
-import { getFontFamily } from './assets/utils/fontfamily';
-import Headerrightsecondary from './components/secondaryheader/headerrightsecondary';
-import HeaderCenterSecondary from './components/secondaryheader/headercentersecondary';
-import Companydetailscreen from './screens/main/companydetail/companydetailscreen';
-import SearchScreen from './screens/search/searchscreen';
-import Homescreen from './screens/main/homescreen/homescreen';
+if (__DEV__) {
+  require('./ReactotronConfig.ts');
+}
+/**
+ * Sample React Native App
+ * https://github.com/facebook/react-native
+ *
+ * @format
+ */
 
-const Stack = createStackNavigator<RootStackParamList>();
-const App: React.FC = () => {
-  const theme = Themestore(state => state.theme);
-  return (
-    <>
-      <StatusBar
-        barStyle={theme === darkTheme ? 'light-content' : 'dark-content'}
-        backgroundColor={theme.colors.background}
-        translucent={false}
-      />
+import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
+import React, { useEffect, useState } from 'react';
+import RNBootSplash from 'react-native-bootsplash';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Routes } from 'src/routes';
+import { BACKGROUND } from 'src/utils';
+import { I18nManager } from 'react-native';
+import FlashMessage from 'react-native-flash-message';
+import i18n, { initI18n } from './i18n';
+import RNRestart from 'react-native-restart';
 
-      <NavigationContainer>
-        <Stack.Navigator
-          screenOptions={{
-            headerShown: false,
-            animationTypeForReplace: 'push',
-            animation: 'slide_from_right',
-          }}
-        >
-          <Stack.Screen
-            options={{ gestureEnabled: false }}
-            name="SplashOne"
-            component={SplashScreenone}
-          />
-          <Stack.Screen
-            options={{ gestureEnabled: false }}
-            name="SplashTwo"
-            component={SplashScreentwo}
-          />
-          <Stack.Screen
-            options={{ gestureEnabled: false }}
-            name="Loginscreen"
-            component={Loginscreen}
-          />
-          <Stack.Screen
-            options={{ gestureEnabled: true, headerShown: false}}
-            name="Homescreen"
-            component={Homescreen}
-          />
-          <Stack.Screen
-            options={{
-              gestureEnabled: false,
-              headerShown: true,
-              headerTitle: 'Personal Information',
-              headerTitleAlign: 'center',
-              headerStyle: {
-                backgroundColor: theme.colors.overlaybackground,
-                borderBottomWidth: 1,
-                borderBottomColor: theme.colors.bordercolor,
-              },
-              headerTitleStyle: {
-                fontSize: 12,
-                fontFamily: getFontFamily('true', 'medium'),
-                lineHeight: 18,
-                color: theme.colors.title,
-                paddingTop: 8,
-              },
-              headerLeft: () => <Headerleft />
-            }}
-            name="Editpersonalinfo"
-            component={Editpersonalinfo}
-          />
-          <Stack.Screen
-            options={{
-              gestureEnabled: false,
-              headerShown: true,
-              headerTitle: 'Password',
-              headerTitleAlign: 'center',
-              headerStyle: {
-                backgroundColor: theme.colors.overlaybackground,
-                borderBottomWidth: 1,
-                borderBottomColor: theme.colors.bordercolor,
-              },
-              headerTitleStyle: {
-                fontSize: 12,
-                fontFamily: getFontFamily('true', 'medium'),
-                lineHeight: 18,
-                color: theme.colors.title,
-                paddingTop: 8,
-              },
-              headerLeft: () => <Headerleft />
-            }}
-            name="Editpassword"
-            component={Editpassword}
-          />
-          <Stack.Screen
-            options={{
-              gestureEnabled: false,
-              headerShown: true,
-              headerTitle: 'Account Deactivate',
-              headerTitleAlign: 'center',
-              headerStyle: {
-                backgroundColor: theme.colors.overlaybackground,
-                borderBottomWidth: 1,
-                borderBottomColor: theme.colors.bordercolor,
-              },
-              headerTitleStyle: {
-                fontSize: 12,
-                fontFamily: getFontFamily('true', 'medium'),
-                lineHeight: 18,
-                color: theme.colors.title,
-                paddingTop: 8,
-              },
-              headerLeft: () => <Headerleft />
-            }}
-            name="Deactivateaccount"
-            component={Deactivateaccount}
-          />
-          <Stack.Screen
-            options={{
-              gestureEnabled: false,
-              headerShown: true,
-              headerTitle: 'Terms and Condition',
-              headerTitleAlign: 'center',
-              headerStyle: {
-                backgroundColor: theme.colors.overlaybackground,
-                borderBottomWidth: 1,
-                borderBottomColor: theme.colors.bordercolor,
-              },
-              headerTitleStyle: {
-                fontSize: 12,
-                fontFamily: getFontFamily('true', 'medium'),
-                lineHeight: 18,
-                color: theme.colors.title,
-                paddingTop: 8,
-              },
-              headerLeft: () => <Headerleft />
-            }}
-            name="Termsandcondition"
-            component={Termsandcondition}
-          />
-          <Stack.Screen
-            options={{
-              gestureEnabled: false,
-              headerShown: true,
-              headerStyle: {
-                backgroundColor: theme.colors.overlaybackground,
-                borderBottomWidth: 1,
-                borderBottomColor: theme.colors.bordercolor,
-              },
-              headerTitleAlign: 'center',
-              headerTitle: () => <HeaderCenterSecondary />,
-              headerLeft: () => <Headerleft />,
-              headerRight: () => <Headerrightsecondary />
-            }}
-            name="Companydetailscreen"
-            component={Companydetailscreen}
-          />
-          <Stack.Screen
-            options={{
-              gestureEnabled: false,
-              headerShown: false,
-              animationTypeForReplace: 'push',
-              animation: 'slide_from_bottom',
-            }}
-            name="SearchScreen"
-            component={SearchScreen}
-          />
-
-        </Stack.Navigator>
-      </NavigationContainer>
-    </>
-  );
+const MyTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    background: BACKGROUND,
+  },
 };
+
+const queryClient = new QueryClient();
+
+function App(): React.JSX.Element {
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    initializeApp();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const initializeApp = async () => {
+    try {
+      // Initialize i18n and get the language/RTL settings
+      const { languageTag, isRTL } = await initI18n();
+
+      // Check if RTL direction needs to be changed
+      const needsRTLChange = I18nManager.isRTL !== isRTL;
+
+      if (needsRTLChange) {
+        // Force RTL change
+        I18nManager.allowRTL(isRTL);
+        I18nManager.forceRTL(isRTL);
+        // Swap left and right in RTL mode for proper layout
+        I18nManager.swapLeftAndRightInRTL(isRTL);
+
+        // Restart app to apply RTL layout changes
+        // This is necessary for proper layout updates, especially on iOS
+        setTimeout(() => {
+          RNRestart.Restart();
+        }, 100);
+        return; // Don't set isReady, let restart handle it
+      }
+
+      // Ensure i18n language matches (should already be set by initI18n, but double-check)
+      if (i18n.language !== languageTag) {
+        await i18n.changeLanguage(languageTag);
+      }
+
+      setIsReady(true);
+    } catch (error) {
+      console.error('Error initializing app:', error);
+      // Continue with default settings if initialization fails
+      setIsReady(true);
+    }
+  };
+
+  // Don't render until initialization is complete
+  if (!isReady) {
+    return <></>;
+  }
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <NavigationContainer
+        theme={MyTheme}
+        onReady={() => {
+          RNBootSplash.hide({
+            fade: true,
+          });
+        }}>
+        <Routes />
+        <FlashMessage position="top" />
+      </NavigationContainer>
+    </QueryClientProvider>
+  );
+}
 
 export default App;
