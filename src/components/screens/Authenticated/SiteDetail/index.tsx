@@ -12,6 +12,7 @@ import { AppText } from 'src/components/common';
 import {
   FONT_SIZE_LG,
   FONT_SIZE_MD,
+  FONT_SIZE_SM,
   FONT_SIZE_XS,
   FONT_SIZE_XXS,
   INPUT_DARK_BG,
@@ -92,6 +93,13 @@ const SiteDetail: FC = () => {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
+        <View style={styles.searchContainer}>
+          <AppText fontSize={FONT_SIZE_SM}>🔍</AppText>
+          <AppText fontSize={FONT_SIZE_SM} color={TEXT_SECONDARY}>
+            Search
+          </AppText>
+        </View>
+
         <DropdownSelector
           selected={selectedDropdown}
           onSelect={setSelectedDropdown}
@@ -151,6 +159,17 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: normalizeWidth(12),
     gap: normalizeHeight(16),
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: INPUT_DARK_BG,
+    borderWidth: 1,
+    borderColor: INPUT_DARK_BORDER,
+    borderRadius: 100,
+    paddingHorizontal: normalizeWidth(16),
+    paddingVertical: normalizeHeight(12),
+    gap: normalizeWidth(8),
   },
 });
 

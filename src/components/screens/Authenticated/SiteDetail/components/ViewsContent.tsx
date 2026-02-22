@@ -3,6 +3,8 @@ import { StyleSheet, View } from 'react-native';
 import { normalizeHeight } from 'src/utils';
 import TabSelector, { TabOption } from './TabSelector';
 import SummaryView from './SummaryView';
+import CardsView from './CardsView';
+import AlarmsView from './AlarmsView';
 import EmptyState from './EmptyState';
 
 const ViewsContent: FC = () => {
@@ -13,9 +15,9 @@ const ViewsContent: FC = () => {
       case 'Summary':
         return <SummaryView />;
       case 'Cards':
-        return <EmptyState title="Cards" description="Cards view will be displayed here" />;
+        return <CardsView />;
       case 'Alarms':
-        return <EmptyState title="Alarms" description="Alarm data will be displayed here" />;
+        return <AlarmsView />;
       case 'Trend':
         return <EmptyState title="Trend" description="Trend analysis will be displayed here" />;
       default:
