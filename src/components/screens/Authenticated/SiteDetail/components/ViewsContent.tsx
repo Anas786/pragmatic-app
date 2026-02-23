@@ -5,7 +5,7 @@ import TabSelector, { TabOption } from './TabSelector';
 import SummaryView from './SummaryView';
 import CardsView from './CardsView';
 import AlarmsView from './AlarmsView';
-import EmptyState from './EmptyState';
+import TrendView from './TrendView';
 
 const ViewsContent: FC = () => {
   const [selectedTab, setSelectedTab] = useState<TabOption>('Summary');
@@ -19,7 +19,7 @@ const ViewsContent: FC = () => {
       case 'Alarms':
         return <AlarmsView />;
       case 'Trend':
-        return <EmptyState title="Trend" description="Trend analysis will be displayed here" />;
+        return <TrendView />;
       default:
         return null;
     }

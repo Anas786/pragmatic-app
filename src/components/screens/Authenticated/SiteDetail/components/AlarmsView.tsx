@@ -1,39 +1,30 @@
 import React, { FC } from 'react';
 import { StyleSheet, View } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppText } from 'src/components/common';
 import {
-  ACCENT_BLUE,
-  ACCENT_GREEN,
-  ACCENT_RED,
+  CARD_BG,
+  FONT_SIZE_SM,
   FONT_SIZE_XS,
   FONT_SIZE_XXS,
+  ICON_SIZE_LG,
+  INPUT_DARK_BG,
   INPUT_DARK_BORDER,
-  METRIC_CARD_BG,
   normalizeHeight,
   normalizeWidth,
   TEXT_SECONDARY,
   WHITE,
 } from 'src/utils';
+import { AlarmCardData, mockAlarmsData } from 'src/data/mock';
 
-interface AlarmCardProps {
-  priority: 'Priority' | 'Major' | 'Minor' | 'Warning';
-  title: string;
-  time: string;
-  status: 'Solved' | 'Unsolved';
-  statusTime: string;
-  icon: string;
-  accentColor: string;
-  priorityColor: string;
-  statusColor: string;
-}
-
-const AlarmCard: FC<AlarmCardProps> = ({
+const AlarmCard: FC<AlarmCardData> = ({
   priority,
   title,
   time,
   status,
   statusTime,
-  icon,
+  iconName,
+  iconColor,
   accentColor,
   priorityColor,
   statusColor,
@@ -41,9 +32,9 @@ const AlarmCard: FC<AlarmCardProps> = ({
   return (
     <View style={styles.card}>
       <View style={[styles.accentBar, { backgroundColor: accentColor }]} />
-      
+
       <View style={styles.iconContainer}>
-        <AppText fontSize={24}>{icon}</AppText>
+        <Icon name={iconName} size={ICON_SIZE_LG} color={iconColor} />
       </View>
 
       <View style={styles.cardContent}>
@@ -52,7 +43,7 @@ const AlarmCard: FC<AlarmCardProps> = ({
             {priority}
           </AppText>
         </View>
-        
+
         <AppText fontSize={FONT_SIZE_XS} color={WHITE}>
           {title} - {time}
         </AppText>
@@ -71,60 +62,15 @@ const AlarmCard: FC<AlarmCardProps> = ({
 };
 
 const AlarmsView: FC = () => {
-  const alarmsData: AlarmCardProps[] = [
-    {
-      priority: 'Priority',
-      title: 'Wind Turbine 01',
-      time: '10:15 AM',
-      status: 'Solved',
-      statusTime: 'At 12:15 PM',
-      icon: '⚠️',
-      accentColor: ACCENT_RED,
-      priorityColor: ACCENT_RED,
-      statusColor: ACCENT_GREEN,
-    },
-    {
-      priority: 'Major',
-      title: 'Solar 01',
-      time: '11:15 AM',
-      status: 'Unsolved',
-      statusTime: 'ETA 2:15 PM',
-      icon: '❗',
-      accentColor: '#FF8C00',
-      priorityColor: '#FF8C00',
-      statusColor: ACCENT_RED,
-    },
-    {
-      priority: 'Minor',
-      title: 'Solar 02 Dusty',
-      time: '11:15 AM',
-      status: 'Solved',
-      statusTime: 'At 12:15 PM',
-      icon: '🔔',
-      accentColor: ACCENT_GREEN,
-      priorityColor: ACCENT_GREEN,
-      statusColor: ACCENT_GREEN,
-    },
-    {
-      priority: 'Warning',
-      title: 'Solar Battery Weak',
-      time: '11:39 AM',
-      status: 'Unsolved',
-      statusTime: 'ETA 1:05 PM',
-      icon: '💬',
-      accentColor: ACCENT_BLUE,
-      priorityColor: ACCENT_BLUE,
-      statusColor: ACCENT_RED,
-    },
-  ];
-
   return (
     <View style={styles.container}>
-      <AppText fontSize={FONT_SIZE_XS} medium color={WHITE}>
-        Alarms
-      </AppText>
-      <View style={styles.alarmsList}>
-        {alarmsData.map((alarm, index) => (
+      <View style={styles.header}>
+        <AppText fontSize={FONT_SIZE_SM} medium color={WHITE}>
+          Alarms
+        </AppText>
+      </View>
+      <View style={styles.body}>
+        {mockAlarmsData.map((alarm, index) => (
           <AlarmCard key={index} {...alarm} />
         ))}
       </View>
@@ -134,18 +80,28 @@ const AlarmsView: FC = () => {
 
 const styles = StyleSheet.create({
   container: {
-    gap: normalizeHeight(12),
+    borderWidth: 1,
+    borderColor: INPUT_DARK_BORDER,
+    borderRadius: 16,
+    overflow: 'hidden',
   },
-  alarmsList: {
+  header: {
+    backgroundColor: CARD_BG,
+    paddingHorizontal: normalizeWidth(16),
+    paddingVertical: normalizeHeight(16),
+  },
+  body: {
+    backgroundColor: INPUT_DARK_BG,
+    padding: normalizeWidth(12),
     gap: normalizeHeight(12),
   },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: METRIC_CARD_BG,
+    backgroundColor: CARD_BG,
     borderWidth: 1,
-    borderColor: INPUT_DARK_BORDER,
-    borderRadius: 16,
+    borderColor: TEXT_SECONDARY,
+    borderRadius: 12,
     padding: normalizeWidth(12),
     gap: normalizeWidth(12),
   },

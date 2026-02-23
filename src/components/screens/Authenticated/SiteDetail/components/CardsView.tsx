@@ -1,33 +1,28 @@
 import React, { FC } from 'react';
 import { StyleSheet, View } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppText } from 'src/components/common';
 import {
-  ACCENT_BLUE,
-  ACCENT_GREEN,
-  ACCENT_RED,
+  CARD_BG,
+  FONT_SIZE_SM,
   FONT_SIZE_XS,
   FONT_SIZE_XXS,
+  ICON_SIZE_LG,
+  INPUT_DARK_BG,
   INPUT_DARK_BORDER,
-  METRIC_CARD_BG,
   normalizeHeight,
   normalizeWidth,
   TEXT_SECONDARY,
   WHITE,
 } from 'src/utils';
+import { mockCardsData, PowerCardData } from 'src/data/mock';
 
-interface PowerCardProps {
-  label: string;
-  value: string;
-  unit: string;
-  icon: string;
-  accentColor: string;
-}
-
-const PowerCard: FC<PowerCardProps> = ({
+const PowerCard: FC<PowerCardData> = ({
   label,
   value,
   unit,
-  icon,
+  iconName,
+  iconColor,
   accentColor,
 }) => {
   return (
@@ -42,102 +37,32 @@ const PowerCard: FC<PowerCardProps> = ({
             {value}
           </AppText>
           <AppText fontSize={FONT_SIZE_XXS} color={WHITE}>
+            {' '}
             {unit}
           </AppText>
         </View>
       </View>
-      <AppText fontSize={20} style={styles.icon}>
-        {icon}
-      </AppText>
+      <Icon name={iconName} size={ICON_SIZE_LG} color={iconColor} />
     </View>
   );
 };
 
 const CardsView: FC = () => {
-  const cardsData = [
-    {
-      label: 'Wind Generation - RealTime',
-      value: '4,484.25',
-      unit: 'kW',
-      icon: '💨',
-      accentColor: ACCENT_BLUE,
-    },
-    {
-      label: 'Wind Energy Today',
-      value: '7,514.00',
-      unit: 'kWh',
-      icon: '💨',
-      accentColor: ACCENT_BLUE,
-    },
-    {
-      label: 'PV-SG-CI-01',
-      value: '16,124.80',
-      unit: 'kWh',
-      icon: '☀️',
-      accentColor: ACCENT_GREEN,
-    },
-    {
-      label: 'PV-SG-CI-05',
-      value: '15,217.80',
-      unit: 'kWh',
-      icon: '☀️',
-      accentColor: ACCENT_GREEN,
-    },
-    {
-      label: 'PV-SG-CI-01',
-      value: '16,124.80',
-      unit: 'kWh',
-      icon: '☀️',
-      accentColor: ACCENT_GREEN,
-    },
-    {
-      label: 'PV-SG-CI-05',
-      value: '15,217.80',
-      unit: 'kWh',
-      icon: '☀️',
-      accentColor: ACCENT_GREEN,
-    },
-    {
-      label: 'PV-SG-CI-01',
-      value: '16,124.80',
-      unit: 'kWh',
-      icon: '⚡',
-      accentColor: ACCENT_RED,
-    },
-    {
-      label: 'PV-SG-CI-05',
-      value: '15,217.80',
-      unit: 'kWh',
-      icon: '⚡',
-      accentColor: ACCENT_RED,
-    },
-    {
-      label: 'Wind Generation - RealTime',
-      value: '4,484.25',
-      unit: 'kW',
-      icon: '💨',
-      accentColor: ACCENT_BLUE,
-    },
-    {
-      label: 'Wind Energy Today',
-      value: '7,514.00',
-      unit: 'kWh',
-      icon: '💨',
-      accentColor: ACCENT_BLUE,
-    },
-  ];
-
   return (
     <View style={styles.container}>
-      <AppText fontSize={FONT_SIZE_XS} medium color={WHITE}>
-        Cards
-      </AppText>
-      <View style={styles.grid}>
-        {cardsData.map((card, index) => (
-          <View key={index} style={styles.cardWrapper}>
-            <PowerCard {...card} />
-          </View>
-        ))}
+      <View style={styles.header}>
+        <AppText fontSize={FONT_SIZE_SM} medium color={WHITE}>
+          Cards
+        </AppText>
+      </View>
+      <View style={styles.body}>
+        <View style={styles.grid}>
+          {mockCardsData.map((card, index) => (
+            <View key={index} style={styles.cardWrapper}>
+              <PowerCard {...card} />
+            </View>
+          ))}
+        </View>
       </View>
     </View>
   );
@@ -145,29 +70,42 @@ const CardsView: FC = () => {
 
 const styles = StyleSheet.create({
   container: {
-    gap: normalizeHeight(12),
+    borderWidth: 1,
+    borderColor: INPUT_DARK_BORDER,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  header: {
+    backgroundColor: CARD_BG,
+    paddingHorizontal: normalizeWidth(16),
+    paddingVertical: normalizeHeight(16),
+  },
+  body: {
+    backgroundColor: INPUT_DARK_BG,
+    padding: normalizeWidth(12),
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: normalizeWidth(8),
+    gap: normalizeWidth(10),
   },
   cardWrapper: {
-    width: '48.5%',
+    width: '48%',
   },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: METRIC_CARD_BG,
+    backgroundColor: CARD_BG,
     borderWidth: 1,
-    borderColor: INPUT_DARK_BORDER,
+    borderColor: TEXT_SECONDARY,
     borderRadius: 12,
-    padding: normalizeWidth(12),
+    paddingVertical: normalizeHeight(14),
+    paddingHorizontal: normalizeWidth(12),
     gap: normalizeWidth(8),
   },
   accentBar: {
     width: normalizeWidth(3),
-    height: normalizeHeight(40),
+    height: normalizeHeight(36),
     borderRadius: 2,
   },
   cardContent: {
@@ -177,10 +115,6 @@ const styles = StyleSheet.create({
   valueRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    gap: normalizeWidth(4),
-  },
-  icon: {
-    lineHeight: 20,
   },
 });
 

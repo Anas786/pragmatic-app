@@ -48,12 +48,35 @@ export const SUCCESS_GREEN = '#11B95C';
 export const ACCENT_GREEN = '#3AD04B';
 export const ACCENT_RED = '#D03A3A';
 export const ACCENT_BLUE = '#3A5FD0';
+export const ACCENT_ORANGE = '#FF8C00';
 export const METRIC_CARD_BG = '#1F1F1F';
 export const TAB_ACTIVE_BG = '#08820E';
 export const TAB_INACTIVE_BG = '#1B1A1B';
 export const DROPDOWN_BG = '#1F1F1F';
+export const DARK_BG_SECONDARY = '#2A2A2A';
+
+// Gradient colors for Trend charts
+export const GRADIENT_RED = '#FF0000';
+export const GRADIENT_YELLOW = '#E8F80C';
+export const GRADIENT_GREEN = '#08820E';
+
+// Overlay & transparency colors
+export const OVERLAY_DARK = 'rgba(0, 0, 0, 0.85)';
+export const OVERLAY_LIGHT_BORDER = 'rgba(255, 255, 255, 0.15)';
+export const OVERLAY_LIGHT_STRIP = 'rgba(255, 255, 255, 0.2)';
+export const CHART_RULE_COLOR = 'rgba(255, 255, 255, 0.08)';
+export const TRANSPARENT = 'transparent';
+export const BUBBLE_TEXT_DARK = '#1a1a1a';
+
+// Icon Sizes
+export const ICON_SIZE_XS = 14;
+export const ICON_SIZE_SM = 16;
+export const ICON_SIZE_MD = 18;
+export const ICON_SIZE_LG = 24;
+export const ICON_SIZE_XL = 28;
 
 // Font Sizes
+export const FONT_SIZE_MICRO = 8;
 export const FONT_SIZE_XXS = 10;
 export const FONT_SIZE_XS = 12;
 export const FONT_SIZE_SM = 14;

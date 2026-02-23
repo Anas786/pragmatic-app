@@ -1,24 +1,21 @@
 import React, { FC } from 'react';
 import { StyleSheet, View } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppText } from 'src/components/common';
 import {
+  CARD_BG,
+  FONT_SIZE_SM,
   FONT_SIZE_XS,
   FONT_SIZE_XXS,
+  ICON_SIZE_XL,
+  INPUT_DARK_BG,
   INPUT_DARK_BORDER,
-  METRIC_CARD_BG,
   normalizeHeight,
   normalizeWidth,
   TEXT_SECONDARY,
   WHITE,
 } from 'src/utils';
-
-export interface MetricItem {
-  label: string;
-  value: string;
-  unit?: string;
-  icon: string;
-  accentColor: string;
-}
+import { MetricItem } from 'src/data/mock/summary';
 
 interface MetricCardProps {
   title: string;
@@ -28,11 +25,13 @@ interface MetricCardProps {
 const MetricCard: FC<MetricCardProps> = ({ title, items }) => {
   return (
     <View style={styles.container}>
-      <AppText fontSize={FONT_SIZE_XS} medium color={WHITE}>
-        {title}
-      </AppText>
+      <View style={styles.header}>
+        <AppText fontSize={FONT_SIZE_SM} medium color={WHITE}>
+          {title}
+        </AppText>
+      </View>
 
-      <View style={styles.metricsContainer}>
+      <View style={styles.body}>
         {items.map((item, index) => (
           <View key={index} style={styles.metricRow}>
             <View
@@ -43,17 +42,18 @@ const MetricCard: FC<MetricCardProps> = ({ title, items }) => {
                 {item.label}
               </AppText>
               <View style={styles.valueRow}>
-                <AppText fontSize={FONT_SIZE_XS} medium color={WHITE}>
+                <AppText fontSize={FONT_SIZE_SM} medium color={WHITE}>
                   {item.value}
                 </AppText>
                 {item.unit && (
-                  <AppText fontSize={FONT_SIZE_XXS} color={TEXT_SECONDARY}>
+                  <AppText fontSize={FONT_SIZE_XS} color={TEXT_SECONDARY}>
+                    {' '}
                     {item.unit}
                   </AppText>
                 )}
               </View>
             </View>
-            <AppText fontSize={FONT_SIZE_XS}>{item.icon}</AppText>
+            <Icon name={item.iconName} size={ICON_SIZE_XL} color={item.iconColor} />
           </View>
         ))}
       </View>
@@ -63,24 +63,35 @@ const MetricCard: FC<MetricCardProps> = ({ title, items }) => {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: METRIC_CARD_BG,
     borderWidth: 1,
     borderColor: INPUT_DARK_BORDER,
     borderRadius: 16,
-    padding: normalizeWidth(16),
-    gap: normalizeHeight(12),
+    overflow: 'hidden',
   },
-  metricsContainer: {
+  header: {
+    backgroundColor: CARD_BG,
+    paddingHorizontal: normalizeWidth(16),
+    paddingVertical: normalizeHeight(16),
+  },
+  body: {
+    backgroundColor: INPUT_DARK_BG,
+    padding: normalizeWidth(12),
     gap: normalizeHeight(12),
   },
   metricRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: CARD_BG,
+    borderWidth: 1,
+    borderColor: TEXT_SECONDARY,
+    borderRadius: 12,
+    paddingVertical: normalizeHeight(14),
+    paddingHorizontal: normalizeWidth(14),
     gap: normalizeWidth(12),
   },
   accentBar: {
     width: normalizeWidth(3),
-    height: normalizeHeight(40),
+    height: normalizeHeight(36),
     borderRadius: 2,
   },
   metricContent: {
@@ -90,7 +101,6 @@ const styles = StyleSheet.create({
   valueRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    gap: normalizeWidth(4),
   },
 });
 

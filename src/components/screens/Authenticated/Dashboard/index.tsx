@@ -30,12 +30,9 @@ import {
   WHITE,
 } from 'src/utils';
 import { RootStackParamList } from 'src/types';
+import { mockSitesData, SiteCardData } from 'src/data/mock';
 
-interface SiteCardProps {
-  name: string;
-  timestamp: string;
-  efficiency: number;
-  metrics: Array<{ label: string; value: string; unit: string; icon: string }>;
+interface SiteCardProps extends SiteCardData {
   onPress: () => void;
 }
 
@@ -131,65 +128,17 @@ const Dashboard: FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [isDarkTheme, setIsDarkTheme] = useState(true);
   
-  const sitesData: SiteCardProps[] = [
-    {
-      name: 'Lucky Cement Nooribad',
-      timestamp: '17/12/2025, 07:49 PM',
-      efficiency: 86.56,
-      metrics: [
-        { label: 'Solar', value: '3.2345', unit: 'kWp', icon: '☀️' },
-        { label: 'Wind', value: '3.2345', unit: 'kWp', icon: '💨' },
-        { label: 'Grid', value: '4,553.2', unit: 'kWp', icon: '⚡' },
-        { label: 'Solar', value: '3.2345', unit: 'kWp', icon: '☀️' },
-        { label: 'Solar', value: '3.2345', unit: 'kWp', icon: '☀️' },
-        { label: 'PV Size', value: '18,235', unit: 'kW', icon: '📊' },
-        { label: 'PV Size', value: '18,235', unit: 'kW', icon: '📊' },
-        { label: 'Wind', value: '3.2345', unit: 'kWp', icon: '💨' },
-        { label: 'Solar', value: '3.2345', unit: 'kWp', icon: '☀️' },
-      ],
-      onPress: () => navigation.navigate('SiteDetail', {
-        siteId: '1',
-        siteName: 'Lucky Cement Nooribad',
-        siteSubtitle: '30MW PV+ 28.8MW Wind MGCS',
-        efficiency: 86.56,
-      }),
-    },
-    {
-      name: 'Master Molty Foam',
-      timestamp: '17/12/2025, 07:49 PM',
-      efficiency: 86.56,
-      metrics: [
-        { label: 'Solar', value: '3.2345', unit: 'kWp', icon: '☀️' },
-        { label: 'Solar', value: '3.2345', unit: 'kWp', icon: '☀️' },
-        { label: 'PV Size', value: '18,235', unit: 'kW', icon: '📊' },
-        { label: 'PV Size', value: '18,235', unit: 'kW', icon: '📊' },
-        { label: 'Wind', value: '3.2345', unit: 'kWp', icon: '💨' },
-        { label: 'Solar', value: '3.2345', unit: 'kWp', icon: '☀️' },
-      ],
-      onPress: () => navigation.navigate('SiteDetail', {
-        siteId: '2',
-        siteName: 'Master Molty Foam',
-        siteSubtitle: '25MW PV+ 15MW Wind MGCS',
-        efficiency: 86.56,
-      }),
-    },
-    {
-      name: 'Young Food Pvt.',
-      timestamp: '17/12/2025, 07:49 PM',
-      efficiency: 86.56,
-      metrics: [
-        { label: 'PV Size', value: '18,235', unit: 'kW', icon: '📊' },
-        { label: 'Solar', value: '3.2345', unit: 'kWp', icon: '☀️' },
-        { label: 'Solar', value: '3.2345', unit: 'kWp', icon: '☀️' },
-      ],
-      onPress: () => navigation.navigate('SiteDetail', {
-        siteId: '3',
-        siteName: 'Young Food Pvt.',
-        siteSubtitle: '10MW PV MGCS',
-        efficiency: 86.56,
-      }),
-    },
-  ];
+  const sitesData: SiteCardProps[] = mockSitesData.map((site, index) => ({
+    ...site,
+    onPress: () => navigation.navigate('SiteDetail', {
+      siteId: String(index + 1),
+      siteName: site.name,
+      siteSubtitle: index === 0 ? '30MW PV+ 28.8MW Wind MGCS' : 
+                    index === 1 ? '25MW PV+ 15MW Wind MGCS' : 
+                    '10MW PV MGCS',
+      efficiency: site.efficiency,
+    }),
+  }));
 
   return (
     <SafeAreaView style={styles.container}>
