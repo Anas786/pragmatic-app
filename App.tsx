@@ -10,6 +10,7 @@ if (__DEV__) {
 
 import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import React, { useEffect, useState } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import RNBootSplash from 'react-native-bootsplash';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Routes } from 'src/routes';
@@ -49,18 +50,20 @@ function App(): React.JSX.Element {
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <NavigationContainer
-        theme={MyTheme}
-        onReady={() => {
-          RNBootSplash.hide({
-            fade: true,
-          });
-        }}>
-        <Routes />
-        <FlashMessage position="top" />
-      </NavigationContainer>
-    </QueryClientProvider>
+    <GestureHandlerRootView style={{flex: 1}}>
+      <QueryClientProvider client={queryClient}>
+        <NavigationContainer
+          theme={MyTheme}
+          onReady={() => {
+            RNBootSplash.hide({
+              fade: true,
+            });
+          }}>
+          <Routes />
+          <FlashMessage position="top" />
+        </NavigationContainer>
+      </QueryClientProvider>
+    </GestureHandlerRootView>
   );
 }
 

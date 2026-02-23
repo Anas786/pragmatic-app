@@ -1697,6 +1697,27 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
+  - RNGestureHandler (2.30.0):
+    - DoubleConversion
+    - glog
+    - hermes-engine
+    - RCT-Folly (= 2024.11.18.00)
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - Yoga
   - RNPermissions (5.4.4):
     - DoubleConversion
     - glog
@@ -1995,6 +2016,7 @@ DEPENDENCIES:
   - RNBootSplash (from `../node_modules/react-native-bootsplash`)
   - "RNCAsyncStorage (from `../node_modules/@react-native-async-storage/async-storage`)"
   - "RNDateTimePicker (from `../node_modules/@react-native-community/datetimepicker`)"
+  - RNGestureHandler (from `../node_modules/react-native-gesture-handler`)
   - RNPermissions (from `../node_modules/react-native-permissions`)
   - RNReanimated (from `../node_modules/react-native-reanimated`)
   - RNScreens (from `../node_modules/react-native-screens`)
@@ -2158,6 +2180,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/@react-native-async-storage/async-storage"
   RNDateTimePicker:
     :path: "../node_modules/@react-native-community/datetimepicker"
+  RNGestureHandler:
+    :path: "../node_modules/react-native-gesture-handler"
   RNPermissions:
     :path: "../node_modules/react-native-permissions"
   RNReanimated:
@@ -2247,6 +2271,7 @@ SPEC CHECKSUMS:
   RNBootSplash: 3752909d19b63f6aa16fbca9108cc44716ec3b4d
   RNCAsyncStorage: efa02b644121f4e1f7f33e712f4f82c30aa4ff4a
   RNDateTimePicker: 38a9d4781c3812512d4f8322fd717ae2b43c1df4
+  RNGestureHandler: f0580b83fe9ce7732dec4a8add37bf3204f85e27
   RNPermissions: 3b887f336a91de4b0e823a63eb9bd347fd7dd2fe
   RNReanimated: ef80cf675203a39bb5e5464234cb08a0f0040ac2
   RNScreens: d0854539b51a53e38b61bcc9fb402439a9c73b26
