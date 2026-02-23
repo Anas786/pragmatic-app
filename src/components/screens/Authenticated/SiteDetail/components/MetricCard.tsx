@@ -26,7 +26,7 @@ const MetricCard: FC<MetricCardProps> = ({ title, items }) => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <AppText fontSize={FONT_SIZE_SM} medium color={WHITE}>
+        <AppText fontSize={FONT_SIZE_SM} bold color={WHITE}>
           {title}
         </AppText>
       </View>

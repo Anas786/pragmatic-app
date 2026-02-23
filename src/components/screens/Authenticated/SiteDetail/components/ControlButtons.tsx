@@ -1,8 +1,8 @@
 import React, { FC } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
-import { AppText } from 'src/components/common';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {
-  FONT_SIZE_LG,
+  ICON_SIZE_MD,
   INPUT_DARK_BORDER,
   normalizeHeight,
   normalizeWidth,
@@ -28,23 +28,20 @@ const ControlButtons: FC<ControlButtonsProps> = ({
   return (
     <View style={styles.container}>
       <TouchableOpacity style={styles.button} onPress={onZoomIn}>
-        <AppText fontSize={FONT_SIZE_LG} color={WHITE}>
-          +
-        </AppText>
+        <Icon name="plus" size={ICON_SIZE_MD} color={WHITE} />
       </TouchableOpacity>
-
       <TouchableOpacity style={styles.button} onPress={onZoomOut}>
-        <AppText fontSize={FONT_SIZE_LG} color={WHITE}>
-          −
-        </AppText>
+        <Icon name="minus" size={ICON_SIZE_MD} color={WHITE} />
       </TouchableOpacity>
-
-      <TouchableOpacity style={styles.button} onPress={onToggleLock}>
-        <AppText fontSize={FONT_SIZE_LG}>{isLocked ? '🔒' : '🔓'}</AppText>
-      </TouchableOpacity>
-
       <TouchableOpacity style={styles.button} onPress={onFullscreen}>
-        <AppText fontSize={FONT_SIZE_LG}>⛶</AppText>
+        <Icon name="arrow-expand-all" size={ICON_SIZE_MD} color={WHITE} />
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.button} onPress={onToggleLock}>
+        <Icon
+          name={isLocked ? 'lock' : 'lock-open-variant'}
+          size={ICON_SIZE_MD}
+          color={isLocked ? WHITE : TEXT_SECONDARY}
+        />
       </TouchableOpacity>
     </View>
   );
@@ -54,21 +51,20 @@ const styles = StyleSheet.create({
   container: {
     position: 'absolute',
     bottom: normalizeHeight(16),
-    right: normalizeWidth(16),
-    flexDirection: 'row',
+    left: normalizeWidth(16),
     backgroundColor: 'rgba(27, 26, 27, 0.9)',
-    borderRadius: 100,
+    borderRadius: normalizeWidth(12),
     borderWidth: 1,
     borderColor: INPUT_DARK_BORDER,
-    padding: normalizeWidth(8),
-    gap: normalizeWidth(4),
+    padding: normalizeWidth(6),
+    gap: normalizeWidth(2),
   },
   button: {
     width: normalizeWidth(36),
     height: normalizeWidth(36),
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 100,
+    borderRadius: normalizeWidth(8),
   },
 });
 

@@ -18,6 +18,8 @@ import {
 import { formatDate } from 'src/utils/format';
 import GradientRangeBar from './GradientRangeBar';
 import TrendAnalysisCard from './TrendAnalysisCard';
+import PerformanceReportCard from './PerformanceReportCard';
+import InverterTableCard from './InverterTableCard';
 import DateRangePickerModal from './DateRangePickerModal';
 import { mockTrendsData } from 'src/data/mock';
 
@@ -41,7 +43,7 @@ const TrendView: FC = () => {
     <View style={styles.wrapper}>
     <View style={styles.container}>
       <View style={styles.header}>
-        <AppText fontSize={FONT_SIZE_SM} medium color={WHITE}>
+        <AppText fontSize={FONT_SIZE_SM} bold color={WHITE}>
           Chart Analysis
         </AppText>
 
@@ -77,6 +79,10 @@ const TrendView: FC = () => {
     </View>
 
     <TrendAnalysisCard />
+
+    <PerformanceReportCard />
+
+    <InverterTableCard />
 
     <DateRangePickerModal
       visible={showDatePicker}
