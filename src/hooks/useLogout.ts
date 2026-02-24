@@ -1,14 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useNavigation } from '@react-navigation/native';
+import { CommonActions, useNavigation } from '@react-navigation/native';
 import { useCallback } from 'react';
 import { deleteToken } from 'src/networking';
 import { useUserStore } from './useUserStore';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { OnboardingStackParamList } from 'src/types';
 
 export const useLogout = () => {
-  const { reset } =
-    useNavigation<NativeStackNavigationProp<OnboardingStackParamList>>();
+  const navigation = useNavigation();
   const { removeUser } = useUserStore();
 
   const logout = useCallback(async () => {
@@ -22,26 +19,24 @@ export const useLogout = () => {
       // Clear user data from the store
       removeUser();
 
-      // Navigate to Welcome screen
-      reset({
-        routes: [
-          {
-            name: 'Login',
-          },
-        ],
-      });
+      // Navigate to Onboarding (Login) screen
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: 'Onboarding' }],
+        }),
+      );
     } catch (error) {
       console.error('Error during logout:', error);
       // Even if there's an error, try to navigate to welcome screen
-      reset({
-        routes: [
-          {
-            name: 'Login',
-          },
-        ],
-      });
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: 'Onboarding' }],
+        }),
+      );
     }
-  }, [reset, removeUser]);
+  }, [navigation, removeUser]);
 
   return { logout };
 };

@@ -1,4 +1,4 @@
-import React, { FC, useState } from 'react';
+import React, { FC, useMemo, useState } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { LineChart, BarChart } from 'react-native-gifted-charts';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -7,25 +7,19 @@ import {
   ACCENT_BLUE,
   ACCENT_GREEN,
   ACCENT_RED,
-  CARD_BG,
-  CHART_RULE_COLOR,
   FONT_SIZE_MICRO,
   FONT_SIZE_SM,
   FONT_SIZE_XS,
   FONT_SIZE_XXS,
   ICON_SIZE_MD,
   ICON_SIZE_XS,
-  INPUT_DARK_BG,
-  INPUT_DARK_BORDER,
   normalizeHeight,
   normalizeWidth,
-  OVERLAY_DARK,
-  OVERLAY_LIGHT_BORDER,
-  OVERLAY_LIGHT_STRIP,
-  TEXT_SECONDARY,
+  ThemeColors,
   TRANSPARENT,
   WHITE,
 } from 'src/utils';
+import { useThemeStore } from 'src/hooks';
 import { formatDate } from 'src/utils/format';
 import { trendAnalysisSeries } from 'src/data/mock';
 import DateRangePickerModal from './DateRangePickerModal';
@@ -53,86 +47,9 @@ const TOOLTIP_DOT_SIZE = normalizeWidth(8);
 const BAR_GROUP_SPACING = 2;
 const BAR_SET_SPACING = normalizeWidth(18);
 
-const Legend: FC = () => (
-  <View style={styles.legendRow}>
-    {trendAnalysisSeries.map(series => (
-      <View
-        key={series.year}
-        style={[styles.legendBadge, { backgroundColor: series.color }]}>
-        <AppText fontSize={FONT_SIZE_XXS} bold color={WHITE}>
-          {series.year}
-        </AppText>
-      </View>
-    ))}
-  </View>
-);
-
-const ZoomControls: FC<{
-  zoom: number;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
-}> = ({ zoom, onZoomIn, onZoomOut }) => (
-  <View style={styles.zoomControls}>
-    <TouchableOpacity
-      style={[styles.zoomButton, zoom <= MIN_ZOOM && styles.zoomButtonDisabled]}
-      onPress={onZoomOut}
-      disabled={zoom <= MIN_ZOOM}>
-      <Icon
-        name="minus"
-        size={ICON_SIZE_XS}
-        color={zoom <= MIN_ZOOM ? TEXT_SECONDARY : WHITE}
-      />
-    </TouchableOpacity>
-    <AppText fontSize={FONT_SIZE_XXS} color={TEXT_SECONDARY}>
-      {zoom.toFixed(1)}x
-    </AppText>
-    <TouchableOpacity
-      style={[styles.zoomButton, zoom >= MAX_ZOOM && styles.zoomButtonDisabled]}
-      onPress={onZoomIn}
-      disabled={zoom >= MAX_ZOOM}>
-      <Icon
-        name="plus"
-        size={ICON_SIZE_XS}
-        color={zoom >= MAX_ZOOM ? TEXT_SECONDARY : WHITE}
-      />
-    </TouchableOpacity>
-  </View>
-);
-
-const pointerLabelComponent = (items: any[]) => {
-  return (
-    <View style={styles.tooltip}>
-      {items.map((item: any, index: number) => {
-        const colors = [ACCENT_GREEN, ACCENT_RED, ACCENT_BLUE];
-        const years = ['2021', '2022', '2023'];
-        return (
-          <View key={index} style={styles.tooltipRow}>
-            <View
-              style={[styles.tooltipDot, { backgroundColor: colors[index] }]}
-            />
-            <AppText fontSize={FONT_SIZE_XXS} color={WHITE}>
-              {years[index]}: {item.value}
-            </AppText>
-          </View>
-        );
-      })}
-    </View>
-  );
-};
-
-const pointerConfig = {
-  pointerStripColor: OVERLAY_LIGHT_STRIP,
-  pointerStripWidth: POINTER_STRIP_WIDTH,
-  pointerColor: WHITE,
-  radius: POINTER_RADIUS,
-  pointerLabelWidth: POINTER_LABEL_WIDTH,
-  pointerLabelHeight: POINTER_LABEL_HEIGHT,
-  activatePointersOnLongPress: false,
-  autoAdjustPointerLabelPosition: true,
-  pointerLabelComponent,
-};
-
 const TrendAnalysisCard: FC = () => {
+  const { colors } = useThemeStore();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [startDate, setStartDate] = useState(new Date(2025, 11, 16));
   const [endDate, setEndDate] = useState(new Date(2025, 11, 17));
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -150,6 +67,85 @@ const TrendAnalysisCard: FC = () => {
 
   const [greenData, redData, blueData] = trendAnalysisSeries.map(s => s.data);
 
+  const Legend: FC = () => (
+    <View style={styles.legendRow}>
+      {trendAnalysisSeries.map(series => (
+        <View
+          key={series.year}
+          style={[styles.legendBadge, { backgroundColor: series.color }]}>
+          <AppText fontSize={FONT_SIZE_XXS} bold color={WHITE}>
+            {series.year}
+          </AppText>
+        </View>
+      ))}
+    </View>
+  );
+
+  const ZoomControls: FC<{
+    zoom: number;
+    onZoomIn: () => void;
+    onZoomOut: () => void;
+  }> = ({ zoom, onZoomIn, onZoomOut }) => (
+    <View style={styles.zoomControls}>
+      <TouchableOpacity
+        style={[styles.zoomButton, zoom <= MIN_ZOOM && styles.zoomButtonDisabled]}
+        onPress={onZoomOut}
+        disabled={zoom <= MIN_ZOOM}>
+        <Icon
+          name="minus"
+          size={ICON_SIZE_XS}
+          color={zoom <= MIN_ZOOM ? colors.textSecondary : colors.primaryText}
+        />
+      </TouchableOpacity>
+      <AppText fontSize={FONT_SIZE_XXS} color={colors.textSecondary}>
+        {zoom.toFixed(1)}x
+      </AppText>
+      <TouchableOpacity
+        style={[styles.zoomButton, zoom >= MAX_ZOOM && styles.zoomButtonDisabled]}
+        onPress={onZoomIn}
+        disabled={zoom >= MAX_ZOOM}>
+        <Icon
+          name="plus"
+          size={ICON_SIZE_XS}
+          color={zoom >= MAX_ZOOM ? colors.textSecondary : colors.primaryText}
+        />
+      </TouchableOpacity>
+    </View>
+  );
+
+  const pointerLabelComponent = (items: any[]) => {
+    return (
+      <View style={styles.tooltip}>
+        {items.map((item: any, index: number) => {
+          const accentColors = [ACCENT_GREEN, ACCENT_RED, ACCENT_BLUE];
+          const years = ['2021', '2022', '2023'];
+          return (
+            <View key={index} style={styles.tooltipRow}>
+              <View
+                style={[styles.tooltipDot, { backgroundColor: accentColors[index] }]}
+              />
+              <AppText fontSize={FONT_SIZE_XXS} color={colors.primaryText}>
+                {years[index]}: {item.value}
+              </AppText>
+            </View>
+          );
+        })}
+      </View>
+    );
+  };
+
+  const pointerConfig = {
+    pointerStripColor: colors.overlayLightStrip,
+    pointerStripWidth: POINTER_STRIP_WIDTH,
+    pointerColor: colors.primaryText,
+    radius: POINTER_RADIUS,
+    pointerLabelWidth: POINTER_LABEL_WIDTH,
+    pointerLabelHeight: POINTER_LABEL_HEIGHT,
+    activatePointersOnLongPress: false,
+    autoAdjustPointerLabelPosition: true,
+    pointerLabelComponent,
+  };
+
   const getLineProps = (zoom: number) => ({
     width: BASE_CHART_WIDTH * zoom,
     height: CHART_HEIGHT,
@@ -158,11 +154,11 @@ const TrendAnalysisCard: FC = () => {
     endSpacing: CHART_END_SPACING,
     maxValue: CHART_MAX_VALUE,
     noOfSections: CHART_SECTIONS,
-    yAxisTextStyle: { color: TEXT_SECONDARY, fontSize: FONT_SIZE_XXS },
-    xAxisLabelTextStyle: { color: TEXT_SECONDARY, fontSize: FONT_SIZE_MICRO },
-    xAxisColor: TEXT_SECONDARY,
+    yAxisTextStyle: { color: colors.textSecondary, fontSize: FONT_SIZE_XXS },
+    xAxisLabelTextStyle: { color: colors.textSecondary, fontSize: FONT_SIZE_MICRO },
+    xAxisColor: colors.textSecondary,
     yAxisColor: TRANSPARENT,
-    rulesColor: CHART_RULE_COLOR,
+    rulesColor: colors.chartRuleColor,
     rulesType: 'solid' as const,
     hideDataPoints: false,
     dataPointsRadius: DATA_POINT_RADIUS,
@@ -179,7 +175,7 @@ const TrendAnalysisCard: FC = () => {
       frontColor: ACCENT_GREEN,
       label: item.label,
       spacing: BAR_GROUP_SPACING,
-      labelTextStyle: { color: TEXT_SECONDARY, fontSize: FONT_SIZE_MICRO },
+      labelTextStyle: { color: colors.textSecondary, fontSize: FONT_SIZE_MICRO },
     },
     {
       value: redData[i].value,
@@ -195,7 +191,7 @@ const TrendAnalysisCard: FC = () => {
 
   const renderBarTooltip = (item: any) => (
     <View style={styles.barTooltip}>
-      <AppText fontSize={FONT_SIZE_XXS} bold color={WHITE}>
+      <AppText fontSize={FONT_SIZE_XXS} bold color={colors.primaryText}>
         {item.value}
       </AppText>
     </View>
@@ -212,7 +208,7 @@ const TrendAnalysisCard: FC = () => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <AppText fontSize={FONT_SIZE_SM} bold color={WHITE}>
+        <AppText fontSize={FONT_SIZE_SM} bold color={colors.primaryText}>
           Trend Analysis
         </AppText>
 
@@ -220,8 +216,8 @@ const TrendAnalysisCard: FC = () => {
           <TouchableOpacity
             style={styles.dateRangeContainer}
             onPress={() => setShowDatePicker(true)}>
-            <Icon name="calendar-outline" size={ICON_SIZE_XS} color={WHITE} />
-            <AppText fontSize={FONT_SIZE_XS} color={WHITE}>
+            <Icon name="calendar-outline" size={ICON_SIZE_XS} color={colors.dateFilterText} />
+            <AppText fontSize={FONT_SIZE_XS} color={colors.dateFilterText}>
               {dateRange}
             </AppText>
           </TouchableOpacity>
@@ -249,9 +245,9 @@ const TrendAnalysisCard: FC = () => {
             color1={ACCENT_GREEN}
             color2={ACCENT_RED}
             color3={ACCENT_BLUE}
-            dataPointsColor1={WHITE}
-            dataPointsColor2={WHITE}
-            dataPointsColor3={WHITE}
+            dataPointsColor1={colors.primaryText}
+            dataPointsColor2={colors.primaryText}
+            dataPointsColor3={colors.primaryText}
             startFillColor1={ACCENT_GREEN}
             endFillColor1={TRANSPARENT}
             startOpacity={AREA_START_OPACITY}
@@ -284,9 +280,9 @@ const TrendAnalysisCard: FC = () => {
             color1={ACCENT_GREEN}
             color2={ACCENT_RED}
             color3={ACCENT_BLUE}
-            dataPointsColor1={WHITE}
-            dataPointsColor2={WHITE}
-            dataPointsColor3={WHITE}
+            dataPointsColor1={colors.primaryText}
+            dataPointsColor2={colors.primaryText}
+            dataPointsColor3={colors.primaryText}
             thickness={LINE_THICKNESS}
           />
           <Legend />
@@ -306,10 +302,10 @@ const TrendAnalysisCard: FC = () => {
             barWidth={BASE_BAR_WIDTH * barZoom}
             noOfSections={CHART_SECTIONS}
             maxValue={CHART_MAX_VALUE}
-            yAxisTextStyle={{ color: TEXT_SECONDARY, fontSize: FONT_SIZE_XXS }}
-            xAxisColor={TEXT_SECONDARY}
+            yAxisTextStyle={{ color: colors.textSecondary, fontSize: FONT_SIZE_XXS }}
+            xAxisColor={colors.textSecondary}
             yAxisColor={TRANSPARENT}
-            rulesColor={CHART_RULE_COLOR}
+            rulesColor={colors.chartRuleColor}
             isAnimated={false}
             renderTooltip={renderBarTooltip}
             disableScroll={false}
@@ -329,111 +325,112 @@ const TrendAnalysisCard: FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    borderWidth: 1,
-    borderColor: INPUT_DARK_BORDER,
-    borderRadius: normalizeWidth(16),
-    overflow: 'hidden',
-  },
-  header: {
-    backgroundColor: CARD_BG,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: normalizeWidth(16),
-    paddingVertical: normalizeHeight(16),
-  },
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: normalizeWidth(10),
-  },
-  dateRangeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: INPUT_DARK_BORDER,
-    borderWidth: 1,
-    borderColor: INPUT_DARK_BORDER,
-    borderRadius: 100,
-    paddingHorizontal: normalizeWidth(14),
-    paddingVertical: normalizeHeight(8),
-    gap: normalizeWidth(8),
-  },
-  refreshButton: {
-    width: normalizeWidth(38),
-    height: normalizeWidth(38),
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: ACCENT_GREEN,
-    borderRadius: 100,
-  },
-  body: {
-    backgroundColor: INPUT_DARK_BG,
-    padding: normalizeWidth(12),
-    gap: normalizeHeight(24),
-  },
-  chartSection: {
-    alignItems: 'center',
-    gap: normalizeHeight(12),
-  },
-  zoomControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-end',
-    gap: normalizeWidth(8),
-  },
-  zoomButton: {
-    width: normalizeWidth(28),
-    height: normalizeWidth(28),
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: INPUT_DARK_BORDER,
-    borderRadius: normalizeWidth(6),
-  },
-  zoomButtonDisabled: {
-    opacity: 0.4,
-  },
-  legendRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: normalizeWidth(8),
-  },
-  legendBadge: {
-    paddingHorizontal: normalizeWidth(14),
-    paddingVertical: normalizeHeight(4),
-    borderRadius: 100,
-  },
-  tooltip: {
-    backgroundColor: OVERLAY_DARK,
-    borderRadius: normalizeWidth(8),
-    paddingHorizontal: normalizeWidth(10),
-    paddingVertical: normalizeHeight(8),
-    gap: normalizeHeight(4),
-    borderWidth: 1,
-    borderColor: OVERLAY_LIGHT_BORDER,
-  },
-  tooltipRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: normalizeWidth(6),
-  },
-  tooltipDot: {
-    width: TOOLTIP_DOT_SIZE,
-    height: TOOLTIP_DOT_SIZE,
-    borderRadius: TOOLTIP_DOT_SIZE / 2,
-  },
-  barTooltip: {
-    backgroundColor: OVERLAY_DARK,
-    borderRadius: normalizeWidth(6),
-    paddingHorizontal: normalizeWidth(8),
-    paddingVertical: normalizeHeight(4),
-    marginBottom: normalizeHeight(4),
-    borderWidth: 1,
-    borderColor: OVERLAY_LIGHT_BORDER,
-  },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {
+      borderWidth: 1,
+      borderColor: colors.inputDarkBorder,
+      borderRadius: normalizeWidth(16),
+      overflow: 'hidden',
+    },
+    header: {
+      backgroundColor: colors.inputDarkBg,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: normalizeWidth(16),
+      paddingVertical: normalizeHeight(16),
+    },
+    actions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: normalizeWidth(10),
+    },
+    dateRangeContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.dateFilterBg,
+      borderWidth: 1,
+      borderColor: colors.dateFilterBg,
+      borderRadius: 100,
+      paddingHorizontal: normalizeWidth(14),
+      paddingVertical: normalizeHeight(8),
+      gap: normalizeWidth(8),
+    },
+    refreshButton: {
+      width: normalizeWidth(38),
+      height: normalizeWidth(38),
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1.5,
+      borderColor: ACCENT_GREEN,
+      borderRadius: 100,
+    },
+    body: {
+      backgroundColor: colors.cardBg,
+      padding: normalizeWidth(12),
+      gap: normalizeHeight(24),
+    },
+    chartSection: {
+      alignItems: 'center',
+      gap: normalizeHeight(12),
+    },
+    zoomControls: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-end',
+      gap: normalizeWidth(8),
+    },
+    zoomButton: {
+      width: normalizeWidth(28),
+      height: normalizeWidth(28),
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.inputDarkBorder,
+      borderRadius: normalizeWidth(6),
+    },
+    zoomButtonDisabled: {
+      opacity: 0.4,
+    },
+    legendRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: normalizeWidth(8),
+    },
+    legendBadge: {
+      paddingHorizontal: normalizeWidth(14),
+      paddingVertical: normalizeHeight(4),
+      borderRadius: 100,
+    },
+    tooltip: {
+      backgroundColor: colors.overlayDark,
+      borderRadius: normalizeWidth(8),
+      paddingHorizontal: normalizeWidth(10),
+      paddingVertical: normalizeHeight(8),
+      gap: normalizeHeight(4),
+      borderWidth: 1,
+      borderColor: colors.overlayLightBorder,
+    },
+    tooltipRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: normalizeWidth(6),
+    },
+    tooltipDot: {
+      width: TOOLTIP_DOT_SIZE,
+      height: TOOLTIP_DOT_SIZE,
+      borderRadius: TOOLTIP_DOT_SIZE / 2,
+    },
+    barTooltip: {
+      backgroundColor: colors.overlayDark,
+      borderRadius: normalizeWidth(6),
+      paddingHorizontal: normalizeWidth(8),
+      paddingVertical: normalizeHeight(4),
+      marginBottom: normalizeHeight(4),
+      borderWidth: 1,
+      borderColor: colors.overlayLightBorder,
+    },
+  });
 
 export default TrendAnalysisCard;

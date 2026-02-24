@@ -2,7 +2,17 @@
   "permissions": {
     "allow": [
       "Bash(npm install:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(python3:*)",
+      "Bash(find:*)",
+      "Bash(while read file)",
+      "Bash(do if file \"$file\")",
+      "Bash(then if hexdump -C \"$file\")",
+      "Bash(then echo \"$file\")",
+      "Bash(fi)",
+      "Bash(done)",
+      "Bash(do if hexdump -C \"$file\")",
+      "Bash(xargs:*)"
     ]
   }
 }

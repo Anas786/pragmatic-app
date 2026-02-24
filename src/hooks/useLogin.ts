@@ -7,10 +7,12 @@ import { Alert } from 'react-native';
 // import { login } from 'src/networking';
 import { ILogin, RootStackParamList } from 'src/types';
 import { LoginSchema } from 'src/utils';
+import { useUserStore } from './useUserStore';
 
 export const useLogin = () => {
   const { navigate } =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { setUser } = useUserStore();
   const { handleSubmit, control, formState } = useForm<ILogin>({
     defaultValues: {
       email: '',
@@ -27,7 +29,19 @@ export const useLogin = () => {
     try {
       // await login(data);
       console.log('Login successful');
-      navigate('Dashboard');
+
+      // Set mock user data
+      setUser({
+        user_id: 1,
+        name: 'Muhammad Anas',
+        email: 'anas@pragmatic.com',
+        phone: '+92 300 1234567',
+        company_id: 1,
+        company: 'Pragmatic Engineering Solutions',
+        login_date: new Date(),
+      });
+
+      navigate('Drawer');
     } catch (error) {
       Alert.alert('Login Failed', error as string);
     } finally {

@@ -1,5 +1,6 @@
 import React, { FC } from "react";
 import { View, StyleSheet, ActivityIndicator, Modal } from "react-native";
+import { useThemeStore } from "src/hooks/useThemeStore";
 import { BLACK, hexToRGB, WHITE } from "src/utils";
 
 interface LoadingProps {
@@ -7,10 +8,12 @@ interface LoadingProps {
 }
 
 const Loading: FC<LoadingProps> = ({ visible }) => {
+  const { isDark } = useThemeStore();
+
   return (
     <Modal transparent animationType="fade" visible={visible}>
       <View style={styles.overlay}>
-        <ActivityIndicator size="large" color={WHITE} />
+        <ActivityIndicator size="large" color={isDark ? WHITE : BLACK} />
       </View>
     </Modal>
   );

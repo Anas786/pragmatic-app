@@ -88,3 +88,5 @@ export const FONT_SIZE_XL = 20;
 export const FONT_SIZE_XXL = 24;
 export const FONT_SIZE_XXXL = 28;
 export const FONT_SIZE_HUGE = 32;
+
+export * from './colors';

@@ -1,4 +1,4 @@
-import React, { FC, useCallback, useEffect, useRef, useState } from 'react';
+import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated as RNAnimated,
   Dimensions,
@@ -21,19 +21,15 @@ import { AppText } from 'src/components/common';
 import {
   ACCENT_GREEN,
   ACCENT_RED,
-  BLACK,
-  CARD_BG,
   FONT_SIZE_MICRO,
   FONT_SIZE_SM,
   FONT_SIZE_XS,
   FONT_SIZE_XXS,
-  INPUT_DARK_BORDER,
-  METRIC_CARD_BG,
   normalizeHeight,
   normalizeWidth,
-  TEXT_SECONDARY,
-  WHITE,
+  ThemeColors,
 } from 'src/utils';
+import { useThemeStore } from 'src/hooks';
 import { sldCenter, sldSources, SLDSourceNode } from 'src/data/mock';
 import ControlButtons from './ControlButtons';
 
@@ -129,71 +125,80 @@ const SolidLine: FC<{
   </>
 );
 
-const SourceCard: FC<{ source: SLDSourceNode; x: number; y: number }> = ({
+const SourceCard: FC<{ source: SLDSourceNode; x: number; y: number; colors: ThemeColors }> = ({
   source,
   x,
   y,
-}) => (
-  <View style={[styles.sourceCard, { left: x, top: y, width: CW, height: CH }]}>
-    <AppText fontSize={FONT_SIZE_SM} bold color={WHITE} numberOfLines={1}>
-      {source.title}
-    </AppText>
-    <View style={styles.cardContent}>
-      <Icon
-        name={source.iconName}
-        size={normalizeWidth(34)}
-        color={source.iconColor}
-      />
-      <View style={styles.metricsCol}>
-        {source.metrics.map((m, i) => (
-          <View key={i} style={styles.metricRow}>
-            <AppText
-              fontSize={FONT_SIZE_XS}
-              bold
-              color={WHITE}
-              style={styles.metricLabel}>
-              {m.label}
-            </AppText>
-            <AppText
-              fontSize={FONT_SIZE_XS}
-              bold
-              color={WHITE}
-              style={styles.metricValue}>
-              {m.value}
-            </AppText>
-            {m.unit ? (
-              <AppText fontSize={FONT_SIZE_XXS} color={TEXT_SECONDARY}>
-                {m.unit}
+  colors,
+}) => {
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
+  return (
+    <View style={[styles.sourceCard, { left: x, top: y, width: CW, height: CH }]}>
+      <AppText fontSize={FONT_SIZE_SM} bold color={colors.primaryText} numberOfLines={1}>
+        {source.title}
+      </AppText>
+      <View style={styles.cardContent}>
+        <Icon
+          name={source.iconName}
+          size={normalizeWidth(34)}
+          color={source.iconColor}
+        />
+        <View style={styles.metricsCol}>
+          {source.metrics.map((m, i) => (
+            <View key={i} style={styles.metricRow}>
+              <AppText
+                fontSize={FONT_SIZE_XS}
+                bold
+                color={colors.primaryText}
+                style={styles.metricLabel}>
+                {m.label}
               </AppText>
-            ) : null}
-          </View>
-        ))}
+              <AppText
+                fontSize={FONT_SIZE_XS}
+                bold
+                color={colors.primaryText}
+                style={styles.metricValue}>
+                {m.value}
+              </AppText>
+              {m.unit ? (
+                <AppText fontSize={FONT_SIZE_XXS} color={colors.textSecondary}>
+                  {m.unit}
+                </AppText>
+              ) : null}
+            </View>
+          ))}
+        </View>
       </View>
     </View>
-  </View>
-);
+  );
+};
 
-const CenterNode: FC<{ vw: number; vh: number }> = ({ vw, vh }) => (
-  <View
-    style={[
-      styles.centerNode,
-      {
-        left: (vw - CD) / 2,
-        top: (vh - CD) / 2,
-        width: CD,
-        height: CD,
-        borderRadius: CD / 2,
-      },
-    ]}>
-    <Icon name={sldCenter.iconName} size={normalizeWidth(24)} color={ACCENT_RED} />
-    <AppText fontSize={FONT_SIZE_XS} bold color={WHITE}>
-      {sldCenter.title}
-    </AppText>
-    <AppText fontSize={FONT_SIZE_MICRO} color={TEXT_SECONDARY}>
-      Load ={sldCenter.loadValue}
-    </AppText>
-  </View>
-);
+const CenterNode: FC<{ vw: number; vh: number; colors: ThemeColors }> = ({ vw, vh, colors }) => {
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
+  return (
+    <View
+      style={[
+        styles.centerNode,
+        {
+          left: (vw - CD) / 2,
+          top: (vh - CD) / 2,
+          width: CD,
+          height: CD,
+          borderRadius: CD / 2,
+        },
+      ]}>
+      <Icon name={sldCenter.iconName} size={normalizeWidth(24)} color={ACCENT_RED} />
+      <AppText fontSize={FONT_SIZE_XS} bold color={colors.primaryText}>
+        {sldCenter.title}
+      </AppText>
+      <AppText fontSize={FONT_SIZE_MICRO} color={colors.textSecondary}>
+        Load ={sldCenter.loadValue}
+      </AppText>
+    </View>
+  );
+};
 
 // --- Main Canvas Content ---
 
@@ -201,7 +206,8 @@ const DiagramCanvas: FC<{
   vw: number;
   vh: number;
   dashAnim: RNAnimated.Value;
-}> = ({ vw, vh, dashAnim }) => {
+  colors: ThemeColors;
+}> = ({ vw, vh, dashAnim, colors }) => {
   const positions = getPositions(vw, vh);
   const keys = ['dg', 'grid', 'solar', 'bess'] as const;
   const dots = makeGridDots(vw, vh);
@@ -248,11 +254,11 @@ const DiagramCanvas: FC<{
       {sldSources.map((source, idx) => {
         const pos = positions[keys[idx]];
         return (
-          <SourceCard key={source.id} source={source} x={pos.x} y={pos.y} />
+          <SourceCard key={source.id} source={source} x={pos.x} y={pos.y} colors={colors} />
         );
       })}
 
-      <CenterNode vw={vw} vh={vh} />
+      <CenterNode vw={vw} vh={vh} colors={colors} />
     </>
   );
 };
@@ -260,6 +266,8 @@ const DiagramCanvas: FC<{
 // --- Main Component ---
 
 const SLDDiagram: FC = () => {
+  const { colors } = useThemeStore();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [isLocked, setIsLocked] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -359,7 +367,7 @@ const SLDDiagram: FC = () => {
     <View style={[styles.viewport, { width: vw, height: vh }]}>
       <GestureDetector gesture={gesture}>
         <Animated.View style={[{ width: vw, height: vh }, canvasStyle]}>
-          <DiagramCanvas vw={vw} vh={vh} dashAnim={dashAnim} />
+          <DiagramCanvas vw={vw} vh={vh} dashAnim={dashAnim} colors={colors} />
         </Animated.View>
       </GestureDetector>
       <ControlButtons
@@ -386,7 +394,7 @@ const SLDDiagram: FC = () => {
           <View style={[styles.viewport, { width: SW, height: SH, borderRadius: 0 }]}>
             <GestureDetector gesture={gesture}>
               <Animated.View style={[{ width: SW, height: SH }, canvasStyle]}>
-                <DiagramCanvas vw={SW} vh={SH} dashAnim={dashAnim} />
+                <DiagramCanvas vw={SW} vh={SH} dashAnim={dashAnim} colors={colors} />
               </Animated.View>
             </GestureDetector>
             <ControlButtons
@@ -399,7 +407,7 @@ const SLDDiagram: FC = () => {
             <TouchableOpacity
               style={styles.closeBtn}
               onPress={handleCloseFullscreen}>
-              <Icon name="close" size={normalizeWidth(22)} color={WHITE} />
+              <Icon name="close" size={normalizeWidth(22)} color={colors.primaryText} />
             </TouchableOpacity>
           </View>
         </View>
@@ -408,73 +416,74 @@ const SLDDiagram: FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    position: 'relative',
-  },
-  viewport: {
-    overflow: 'hidden',
-    backgroundColor: METRIC_CARD_BG,
-    borderWidth: 1,
-    borderColor: INPUT_DARK_BORDER,
-    borderRadius: normalizeWidth(16),
-  },
-  sourceCard: {
-    position: 'absolute',
-    backgroundColor: CARD_BG,
-    borderWidth: 1,
-    borderColor: INPUT_DARK_BORDER,
-    borderRadius: normalizeWidth(12),
-    padding: normalizeWidth(10),
-    gap: normalizeHeight(6),
-  },
-  cardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: normalizeWidth(8),
-  },
-  metricsCol: {
-    flex: 1,
-    gap: normalizeHeight(2),
-  },
-  metricRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: normalizeWidth(4),
-  },
-  metricLabel: {
-    width: normalizeWidth(26),
-  },
-  metricValue: {
-    flex: 1,
-    textAlign: 'right',
-  },
-  centerNode: {
-    position: 'absolute',
-    backgroundColor: CARD_BG,
-    borderWidth: 2,
-    borderColor: ACCENT_RED,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: normalizeHeight(2),
-  },
-  fullscreenWrap: {
-    flex: 1,
-    backgroundColor: BLACK,
-  },
-  closeBtn: {
-    position: 'absolute',
-    top: normalizeHeight(16),
-    right: normalizeWidth(16),
-    width: normalizeWidth(40),
-    height: normalizeWidth(40),
-    borderRadius: normalizeWidth(20),
-    backgroundColor: 'rgba(27, 26, 27, 0.9)',
-    borderWidth: 1,
-    borderColor: INPUT_DARK_BORDER,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {
+      position: 'relative',
+    },
+    viewport: {
+      overflow: 'hidden',
+      backgroundColor: colors.metricCardBg,
+      borderWidth: 1,
+      borderColor: colors.inputDarkBorder,
+      borderRadius: normalizeWidth(16),
+    },
+    sourceCard: {
+      position: 'absolute',
+      backgroundColor: colors.cardBg,
+      borderWidth: 1,
+      borderColor: colors.inputDarkBorder,
+      borderRadius: normalizeWidth(12),
+      padding: normalizeWidth(10),
+      gap: normalizeHeight(6),
+    },
+    cardContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: normalizeWidth(8),
+    },
+    metricsCol: {
+      flex: 1,
+      gap: normalizeHeight(2),
+    },
+    metricRow: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      gap: normalizeWidth(4),
+    },
+    metricLabel: {
+      width: normalizeWidth(26),
+    },
+    metricValue: {
+      flex: 1,
+      textAlign: 'right',
+    },
+    centerNode: {
+      position: 'absolute',
+      backgroundColor: colors.cardBg,
+      borderWidth: 2,
+      borderColor: ACCENT_RED,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: normalizeHeight(2),
+    },
+    fullscreenWrap: {
+      flex: 1,
+      backgroundColor: colors.fullscreenBg,
+    },
+    closeBtn: {
+      position: 'absolute',
+      top: normalizeHeight(16),
+      right: normalizeWidth(16),
+      width: normalizeWidth(40),
+      height: normalizeWidth(40),
+      borderRadius: normalizeWidth(20),
+      backgroundColor: colors.controlButtonBg,
+      borderWidth: 1,
+      borderColor: colors.inputDarkBorder,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+  });
 
 export default SLDDiagram;

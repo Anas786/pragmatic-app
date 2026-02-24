@@ -8,27 +8,32 @@ if (__DEV__) {
  * @format
  */
 
-import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
+import {
+  DarkTheme,
+  DefaultTheme,
+  NavigationContainer,
+} from '@react-navigation/native';
 import React, { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import RNBootSplash from 'react-native-bootsplash';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Routes } from 'src/routes';
-import { BACKGROUND } from 'src/utils';
+import { useThemeStore } from 'src/hooks';
 import FlashMessage from 'react-native-flash-message';
-
-const MyTheme = {
-  ...DefaultTheme,
-  colors: {
-    ...DefaultTheme.colors,
-    background: BACKGROUND,
-  },
-};
 
 const queryClient = new QueryClient();
 
 function App(): React.JSX.Element {
   const [isReady, setIsReady] = useState(false);
+  const { isDark, colors } = useThemeStore();
+
+  const navTheme = {
+    ...(isDark ? DarkTheme : DefaultTheme),
+    colors: {
+      ...(isDark ? DarkTheme : DefaultTheme).colors,
+      background: colors.splashBg,
+    },
+  };
 
   useEffect(() => {
     initializeApp();
@@ -53,7 +58,7 @@ function App(): React.JSX.Element {
     <GestureHandlerRootView style={{flex: 1}}>
       <QueryClientProvider client={queryClient}>
         <NavigationContainer
-          theme={MyTheme}
+          theme={navTheme}
           onReady={() => {
             RNBootSplash.hide({
               fade: true,

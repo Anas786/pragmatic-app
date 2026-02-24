@@ -1,4 +1,4 @@
-import React, { FC, useState } from 'react';
+import React, { FC, useMemo, useState } from 'react';
 import {
   Modal,
   StyleSheet,
@@ -8,30 +8,32 @@ import {
 } from 'react-native';
 import { AppText } from 'src/components/common';
 import {
-  DROPDOWN_BG,
   FONT_SIZE_SM,
-  INPUT_DARK_BORDER,
   normalizeHeight,
   normalizeWidth,
-  TEXT_SECONDARY,
-  WHITE,
+  ThemeColors,
 } from 'src/utils';
+import { useThemeStore } from 'src/hooks';
 import CustomIcon from 'src/components/common/CustomIcon';
 
+type DropdownOption = 'Views' | 'Live Parameter' | 'Alarm';
+
 interface DropdownSelectorProps {
-  selected: string;
-  onSelect: (value: string) => void;
+  selected: DropdownOption;
+  onSelect: (value: DropdownOption) => void;
 }
 
-const options = ['Views', 'Live Parameter', 'Alarm'];
+const options: DropdownOption[] = ['Views', 'Live Parameter', 'Alarm'];
 
 const DropdownSelector: FC<DropdownSelectorProps> = ({
   selected,
   onSelect,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const { colors } = useThemeStore();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
-  const handleSelect = (option: string) => {
+  const handleSelect = (option: DropdownOption) => {
     onSelect(option);
     setIsOpen(false);
   };
@@ -41,10 +43,10 @@ const DropdownSelector: FC<DropdownSelectorProps> = ({
       <TouchableOpacity
         style={styles.container}
         onPress={() => setIsOpen(true)}>
-        <AppText fontSize={FONT_SIZE_SM} color={TEXT_SECONDARY}>
+        <AppText fontSize={FONT_SIZE_SM} color={colors.textSecondary}>
           {selected}
         </AppText>
-        <CustomIcon name="down_arrow" size={18} color={TEXT_SECONDARY} />
+        <CustomIcon name="down_arrow" size={18} color={colors.textSecondary} />
       </TouchableOpacity>
 
       <Modal
@@ -66,7 +68,7 @@ const DropdownSelector: FC<DropdownSelectorProps> = ({
                     onPress={() => handleSelect(option)}>
                     <AppText
                       fontSize={FONT_SIZE_SM}
-                      color={selected === option ? WHITE : TEXT_SECONDARY}>
+                      color={selected === option ? colors.primaryText : colors.textSecondary}>
                       {option}
                     </AppText>
                   </TouchableOpacity>
@@ -80,40 +82,41 @@ const DropdownSelector: FC<DropdownSelectorProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: DROPDOWN_BG,
-    borderWidth: 1,
-    borderColor: INPUT_DARK_BORDER,
-    borderRadius: 100,
-    paddingHorizontal: normalizeWidth(16),
-    paddingVertical: normalizeHeight(12),
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: DROPDOWN_BG,
-    borderWidth: 1,
-    borderColor: INPUT_DARK_BORDER,
-    borderRadius: 16,
-    paddingVertical: normalizeHeight(8),
-    width: normalizeWidth(200),
-  },
-  optionItem: {
-    paddingHorizontal: normalizeWidth(16),
-    paddingVertical: normalizeHeight(12),
-  },
-  optionBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: INPUT_DARK_BORDER,
-  },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: colors.dropdownBg,
+      borderWidth: 1,
+      borderColor: colors.inputDarkBorder,
+      borderRadius: 100,
+      paddingHorizontal: normalizeWidth(16),
+      paddingVertical: normalizeHeight(12),
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    modalContent: {
+      backgroundColor: colors.dropdownBg,
+      borderWidth: 1,
+      borderColor: colors.inputDarkBorder,
+      borderRadius: 16,
+      paddingVertical: normalizeHeight(8),
+      width: normalizeWidth(200),
+    },
+    optionItem: {
+      paddingHorizontal: normalizeWidth(16),
+      paddingVertical: normalizeHeight(12),
+    },
+    optionBorder: {
+      borderBottomWidth: 1,
+      borderBottomColor: colors.inputDarkBorder,
+    },
+  });
 
 export default DropdownSelector;

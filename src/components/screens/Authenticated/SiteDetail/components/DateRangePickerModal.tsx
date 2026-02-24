@@ -1,4 +1,4 @@
-import React, { FC, useState } from 'react';
+import React, { FC, useMemo, useState } from 'react';
 import { Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
 import Modal from 'react-native-modal';
 import DateTimePicker, {
@@ -8,18 +8,16 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppText } from 'src/components/common';
 import {
   ACCENT_GREEN,
-  CARD_BG,
   FONT_SIZE_SM,
   FONT_SIZE_XS,
   FONT_SIZE_XXS,
   ICON_SIZE_XS,
-  INPUT_DARK_BG,
-  INPUT_DARK_BORDER,
   normalizeHeight,
   normalizeWidth,
-  TEXT_SECONDARY,
+  ThemeColors,
   WHITE,
 } from 'src/utils';
+import { useThemeStore } from 'src/hooks';
 import { formatDate } from 'src/utils/format';
 
 interface DateRangePickerModalProps {
@@ -39,6 +37,8 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
   endDate,
   onApply,
 }) => {
+  const { isDark, colors } = useThemeStore();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [tempStart, setTempStart] = useState(startDate);
   const [tempEnd, setTempEnd] = useState(endDate);
   const [activePicker, setActivePicker] = useState<'start' | 'end' | null>(
@@ -88,11 +88,11 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
       style={styles.modal}>
       <View style={styles.container}>
         <View style={styles.header}>
-          <AppText fontSize={FONT_SIZE_SM} medium color={WHITE}>
+          <AppText fontSize={FONT_SIZE_SM} medium color={colors.primaryText}>
             Select Date Range
           </AppText>
           <TouchableOpacity onPress={handleCancel}>
-            <Icon name="close" size={ICON_SIZE_XS} color={TEXT_SECONDARY} />
+            <Icon name="close" size={ICON_SIZE_XS} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
 
@@ -107,10 +107,10 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
               setActivePicker(activePicker === 'start' ? null : 'start')
             }>
             <View style={styles.dateFieldContent}>
-              <AppText fontSize={FONT_SIZE_XXS} color={TEXT_SECONDARY}>
+              <AppText fontSize={FONT_SIZE_XXS} color={colors.textSecondary}>
                 Start Date
               </AppText>
-              <AppText fontSize={FONT_SIZE_XS} color={WHITE}>
+              <AppText fontSize={FONT_SIZE_XS} color={colors.primaryText}>
                 {formatDate(tempStart, DATE_DISPLAY_FORMAT)}
               </AppText>
             </View>
@@ -127,8 +127,8 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
               mode="date"
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
               onChange={handleStartChange}
-              themeVariant="dark"
-              textColor={WHITE}
+              themeVariant={isDark ? 'dark' : 'light'}
+              textColor={colors.primaryText}
             />
           )}
 
@@ -142,10 +142,10 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
               setActivePicker(activePicker === 'end' ? null : 'end')
             }>
             <View style={styles.dateFieldContent}>
-              <AppText fontSize={FONT_SIZE_XXS} color={TEXT_SECONDARY}>
+              <AppText fontSize={FONT_SIZE_XXS} color={colors.textSecondary}>
                 End Date
               </AppText>
-              <AppText fontSize={FONT_SIZE_XS} color={WHITE}>
+              <AppText fontSize={FONT_SIZE_XS} color={colors.primaryText}>
                 {formatDate(tempEnd, DATE_DISPLAY_FORMAT)}
               </AppText>
             </View>
@@ -163,15 +163,15 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
               onChange={handleEndChange}
               minimumDate={tempStart}
-              themeVariant="dark"
-              textColor={WHITE}
+              themeVariant={isDark ? 'dark' : 'light'}
+              textColor={colors.primaryText}
             />
           )}
         </View>
 
         <View style={styles.footer}>
           <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
-            <AppText fontSize={FONT_SIZE_XS} medium color={TEXT_SECONDARY}>
+            <AppText fontSize={FONT_SIZE_XS} medium color={colors.textSecondary}>
               Cancel
             </AppText>
           </TouchableOpacity>
@@ -186,68 +186,69 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  modal: {
-    justifyContent: 'center',
-    margin: normalizeWidth(20),
-  },
-  container: {
-    borderRadius: normalizeWidth(16),
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: INPUT_DARK_BORDER,
-  },
-  header: {
-    backgroundColor: CARD_BG,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: normalizeWidth(16),
-    paddingVertical: normalizeHeight(16),
-  },
-  body: {
-    backgroundColor: INPUT_DARK_BG,
-    padding: normalizeWidth(16),
-    gap: normalizeHeight(12),
-  },
-  dateField: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: CARD_BG,
-    borderWidth: 1,
-    borderColor: TEXT_SECONDARY,
-    borderRadius: normalizeWidth(12),
-    paddingHorizontal: normalizeWidth(14),
-    paddingVertical: normalizeHeight(12),
-  },
-  dateFieldActive: {
-    borderColor: ACCENT_GREEN,
-  },
-  dateFieldContent: {
-    flex: 1,
-    gap: normalizeHeight(4),
-  },
-  footer: {
-    backgroundColor: INPUT_DARK_BG,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingHorizontal: normalizeWidth(16),
-    paddingBottom: normalizeHeight(16),
-    gap: normalizeWidth(12),
-  },
-  cancelButton: {
-    paddingHorizontal: normalizeWidth(20),
-    paddingVertical: normalizeHeight(10),
-    borderRadius: 100,
-    borderWidth: 1,
-    borderColor: TEXT_SECONDARY,
-  },
-  applyButton: {
-    paddingHorizontal: normalizeWidth(20),
-    paddingVertical: normalizeHeight(10),
-    borderRadius: 100,
-    backgroundColor: ACCENT_GREEN,
-  },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    modal: {
+      justifyContent: 'center',
+      margin: normalizeWidth(20),
+    },
+    container: {
+      borderRadius: normalizeWidth(16),
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: colors.inputDarkBorder,
+    },
+    header: {
+      backgroundColor: colors.cardBg,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: normalizeWidth(16),
+      paddingVertical: normalizeHeight(16),
+    },
+    body: {
+      backgroundColor: colors.inputDarkBg,
+      padding: normalizeWidth(16),
+      gap: normalizeHeight(12),
+    },
+    dateField: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.cardBg,
+      borderWidth: 1,
+      borderColor: colors.textSecondary,
+      borderRadius: normalizeWidth(12),
+      paddingHorizontal: normalizeWidth(14),
+      paddingVertical: normalizeHeight(12),
+    },
+    dateFieldActive: {
+      borderColor: ACCENT_GREEN,
+    },
+    dateFieldContent: {
+      flex: 1,
+      gap: normalizeHeight(4),
+    },
+    footer: {
+      backgroundColor: colors.inputDarkBg,
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      paddingHorizontal: normalizeWidth(16),
+      paddingBottom: normalizeHeight(16),
+      gap: normalizeWidth(12),
+    },
+    cancelButton: {
+      paddingHorizontal: normalizeWidth(20),
+      paddingVertical: normalizeHeight(10),
+      borderRadius: 100,
+      borderWidth: 1,
+      borderColor: colors.textSecondary,
+    },
+    applyButton: {
+      paddingHorizontal: normalizeWidth(20),
+      paddingVertical: normalizeHeight(10),
+      borderRadius: 100,
+      backgroundColor: ACCENT_GREEN,
+    },
+  });
 
 export default DateRangePickerModal;
