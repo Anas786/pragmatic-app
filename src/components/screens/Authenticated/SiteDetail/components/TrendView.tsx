@@ -1,20 +1,18 @@
-import React, { FC, useState } from 'react';
+import React, { FC, useMemo, useState } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppText } from 'src/components/common';
 import {
   ACCENT_GREEN,
-  CARD_BG,
   FONT_SIZE_SM,
   FONT_SIZE_XS,
   ICON_SIZE_MD,
   ICON_SIZE_XS,
-  INPUT_DARK_BG,
-  INPUT_DARK_BORDER,
   normalizeHeight,
   normalizeWidth,
-  WHITE,
+  ThemeColors,
 } from 'src/utils';
+import { useThemeStore } from 'src/hooks';
 import { formatDate } from 'src/utils/format';
 import GradientRangeBar from './GradientRangeBar';
 import TrendAnalysisCard from './TrendAnalysisCard';
@@ -24,6 +22,8 @@ import DateRangePickerModal from './DateRangePickerModal';
 import { mockTrendsData } from 'src/data/mock';
 
 const TrendView: FC = () => {
+  const { colors } = useThemeStore();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [startDate, setStartDate] = useState(new Date(2025, 11, 16));
   const [endDate, setEndDate] = useState(new Date(2025, 11, 17));
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -43,7 +43,7 @@ const TrendView: FC = () => {
     <View style={styles.wrapper}>
     <View style={styles.container}>
       <View style={styles.header}>
-        <AppText fontSize={FONT_SIZE_SM} bold color={WHITE}>
+        <AppText fontSize={FONT_SIZE_SM} bold color={colors.primaryText}>
           Chart Analysis
         </AppText>
 
@@ -51,8 +51,8 @@ const TrendView: FC = () => {
           <TouchableOpacity
             style={styles.dateRangeContainer}
             onPress={() => setShowDatePicker(true)}>
-            <Icon name="calendar-outline" size={ICON_SIZE_XS} color={WHITE} />
-            <AppText fontSize={FONT_SIZE_XS} color={WHITE}>
+            <Icon name="calendar-outline" size={ICON_SIZE_XS} color={colors.dateFilterText} />
+            <AppText fontSize={FONT_SIZE_XS} color={colors.dateFilterText}>
               {dateRange}
             </AppText>
           </TouchableOpacity>
@@ -95,54 +95,55 @@ const TrendView: FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  wrapper: {
-    gap: normalizeHeight(16),
-  },
-  container: {
-    borderWidth: 1,
-    borderColor: INPUT_DARK_BORDER,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  header: {
-    backgroundColor: CARD_BG,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: normalizeWidth(16),
-    paddingVertical: normalizeHeight(16),
-  },
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: normalizeWidth(10),
-  },
-  dateRangeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: INPUT_DARK_BORDER,
-    borderWidth: 1,
-    borderColor: INPUT_DARK_BORDER,
-    borderRadius: 100,
-    paddingHorizontal: normalizeWidth(14),
-    paddingVertical: normalizeHeight(8),
-    gap: normalizeWidth(8),
-  },
-  refreshButton: {
-    width: normalizeWidth(38),
-    height: normalizeWidth(38),
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: ACCENT_GREEN,
-    borderRadius: 100,
-  },
-  body: {
-    backgroundColor: INPUT_DARK_BG,
-    padding: normalizeWidth(12),
-    gap: normalizeHeight(16),
-  },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    wrapper: {
+      gap: normalizeHeight(16),
+    },
+    container: {
+      borderWidth: 1,
+      borderColor: colors.inputDarkBorder,
+      borderRadius: 16,
+      overflow: 'hidden',
+    },
+    header: {
+      backgroundColor: colors.inputDarkBg,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: normalizeWidth(16),
+      paddingVertical: normalizeHeight(16),
+    },
+    actions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: normalizeWidth(10),
+    },
+    dateRangeContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.dateFilterBg,
+      borderWidth: 1,
+      borderColor: colors.dateFilterBg,
+      borderRadius: 100,
+      paddingHorizontal: normalizeWidth(14),
+      paddingVertical: normalizeHeight(8),
+      gap: normalizeWidth(8),
+    },
+    refreshButton: {
+      width: normalizeWidth(38),
+      height: normalizeWidth(38),
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1.5,
+      borderColor: ACCENT_GREEN,
+      borderRadius: 100,
+    },
+    body: {
+      backgroundColor: colors.cardBg,
+      padding: normalizeWidth(12),
+      gap: normalizeHeight(16),
+    },
+  });
 
 export default TrendView;

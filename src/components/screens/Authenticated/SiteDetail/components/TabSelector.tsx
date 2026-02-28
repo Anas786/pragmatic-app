@@ -1,18 +1,16 @@
-import React, { FC } from 'react';
+import React, { FC, useMemo } from 'react';
 import { ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppText } from 'src/components/common';
 import {
   FONT_SIZE_XS,
   ICON_SIZE_SM,
-  INPUT_DARK_BORDER,
   normalizeHeight,
   normalizeWidth,
-  TAB_ACTIVE_BG,
-  TAB_INACTIVE_BG,
-  TEXT_SECONDARY,
+  ThemeColors,
   WHITE,
 } from 'src/utils';
+import { useThemeStore } from 'src/hooks';
 
 export type TabOption = 'Summary' | 'Cards' | 'Alarms' | 'Trend';
 
@@ -34,6 +32,9 @@ const tabs: TabConfig[] = [
 ];
 
 const TabSelector: FC<TabSelectorProps> = ({ selected, onSelect }) => {
+  const { colors } = useThemeStore();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   return (
     <ScrollView
       horizontal
@@ -52,12 +53,12 @@ const TabSelector: FC<TabSelectorProps> = ({ selected, onSelect }) => {
             <Icon
               name={tab.iconName}
               size={ICON_SIZE_SM}
-              color={isActive ? WHITE : TEXT_SECONDARY}
+              color={isActive ? WHITE : colors.textSecondary}
             />
             <AppText
               fontSize={FONT_SIZE_XS}
               medium
-              color={isActive ? WHITE : TEXT_SECONDARY}>
+              color={isActive ? WHITE : colors.textSecondary}>
               {tab.name}
             </AppText>
           </TouchableOpacity>
@@ -67,29 +68,30 @@ const TabSelector: FC<TabSelectorProps> = ({ selected, onSelect }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    gap: normalizeWidth(8),
-    paddingVertical: normalizeHeight(4),
-  },
-  tabButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: normalizeWidth(6),
-    paddingHorizontal: normalizeWidth(16),
-    paddingVertical: normalizeHeight(10),
-    borderRadius: 100,
-    borderWidth: 1,
-  },
-  activeTab: {
-    backgroundColor: TAB_ACTIVE_BG,
-    borderColor: TAB_ACTIVE_BG,
-  },
-  inactiveTab: {
-    backgroundColor: TAB_INACTIVE_BG,
-    borderColor: INPUT_DARK_BORDER,
-  },
-});
+const createStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    container: {
+      flexDirection: 'row',
+      gap: normalizeWidth(8),
+      paddingVertical: normalizeHeight(4),
+    },
+    tabButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: normalizeWidth(6),
+      paddingHorizontal: normalizeWidth(16),
+      paddingVertical: normalizeHeight(10),
+      borderRadius: 100,
+      borderWidth: 1,
+    },
+    activeTab: {
+      backgroundColor: colors.tabActiveBg,
+      borderColor: colors.tabActiveBg,
+    },
+    inactiveTab: {
+      backgroundColor: colors.tabInactiveBg,
+      borderColor: colors.inputDarkBorder,
+    },
+  });
 
 export default TabSelector;

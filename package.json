@@ -17,6 +17,7 @@
     "@react-native-community/datetimepicker": "^8.4.4",
     "@react-native-community/geolocation": "^3.4.0",
     "@react-navigation/bottom-tabs": "^7.2.0",
+    "@react-navigation/drawer": "^7.8.1",
     "@react-navigation/native": "^7.0.14",
     "@react-navigation/native-stack": "^7.2.0",
     "@reduxjs/toolkit": "^2.5.0",
