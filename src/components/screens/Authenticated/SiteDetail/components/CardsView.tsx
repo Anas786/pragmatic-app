@@ -1,6 +1,5 @@
 import React, { FC, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppText } from 'src/components/common';
 import {
   FONT_SIZE_SM,
@@ -13,6 +12,16 @@ import {
 } from 'src/utils';
 import { useThemeStore } from 'src/hooks';
 import { mockCardsData, PowerCardData } from 'src/data/mock';
+
+interface CardsIconProps {
+  IconComponent: FC<{ size?: number; color?: string }>;
+  size: number;
+  color: string;
+}
+
+const CardsIcon: FC<CardsIconProps> = ({ IconComponent, size, color }) => {
+  return <IconComponent size={size} color={color} />;
+};
 
 const CardsView: FC = () => {
   const { colors } = useThemeStore();
@@ -43,7 +52,7 @@ const CardsView: FC = () => {
             </AppText>
           </View>
         </View>
-        <Icon name={iconName} size={ICON_SIZE_LG} color={iconColor} />
+        <CardsIcon IconComponent={iconName} size={ICON_SIZE_LG} color={iconColor} />
       </View>
     );
   };

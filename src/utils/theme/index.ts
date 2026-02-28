@@ -44,6 +44,7 @@ export const LOGIN_BUTTON_BG = '#00a908';
 export const TERMS_LINK = '#05c80e';
 export const CARD_BG = '#171717';
 export const PROGRESS_BG = '#262626';
+export const PROGRESS_FILLED = '#3AD04B';
 export const SUCCESS_GREEN = '#11B95C';
 export const ACCENT_GREEN = '#3AD04B';
 export const ACCENT_RED = '#D03A3A';

@@ -1,11 +1,20 @@
-import React, { FC, useMemo, useState } from 'react';
-import { Controller } from 'react-hook-form';
-import { Image, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { AppText } from 'src/components/common';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useLogin } from 'src/hooks';
-import { useThemeStore } from 'src/hooks/useThemeStore';
+import React, { FC, useMemo, useState } from "react";
+import { Controller } from "react-hook-form";
+import {
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { AppText } from "src/components/common";
+import { useLogin } from "src/hooks";
+import { useThemeStore } from "src/hooks/useThemeStore";
 import {
   normalizeHeight,
   normalizeWidth,
@@ -14,10 +23,11 @@ import {
   FONT_SIZE_XS,
   FONT_SIZE_MD,
   ICON_SIZE_MD,
-  ICON_SIZE_SM,
   ThemeColors,
-} from 'src/utils';
-import { Logo } from 'src/assets';
+  ICON_SIZE_XS,
+} from "src/utils";
+import { Logo } from "src/assets";
+import { EmailPlainIcon, PasswordIcon, Tick } from "src/assets/icons";
 
 const Login: FC = () => {
   const { control, onSubmit, loading } = useLogin();
@@ -27,47 +37,53 @@ const Login: FC = () => {
 
   const EmailIcon = () => (
     <View style={styles.iconContainer}>
-      <Icon name="email-outline" size={ICON_SIZE_MD} color={colors.textSecondary} />
+      <EmailPlainIcon size={ICON_SIZE_MD} />
     </View>
   );
 
   const LockIcon = () => (
     <View style={styles.iconContainer}>
-      <Icon name="lock-outline" size={ICON_SIZE_MD} color={colors.textSecondary} />
+      <PasswordIcon size={ICON_SIZE_MD} />
     </View>
   );
 
-  const CheckIcon = () => (
-    <Icon name="check" size={ICON_SIZE_SM} color={colors.loginButtonBg} />
-  );
+  const CheckIcon = () => <Tick size={ICON_SIZE_XS} />;
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.splashBg} />
+      <StatusBar
+        barStyle={colors.statusBarStyle}
+        backgroundColor={colors.splashBg}
+      />
 
       <KeyboardAvoidingView
         style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        behavior={Platform.OS === "ios" ? "padding" : 'height'}>
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled">
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="none"
+          >
           <View style={styles.content}>
             <View style={styles.headerContainer}>
-            <View style={styles.logoContainer}>
-              <Image source={Logo} style={styles.logo} resizeMode="contain" />
-              <AppText color={colors.primaryText} fontSize={FONT_SIZE_XL} medium>
-                Welcome
+              <View style={styles.logoContainer}>
+                <Image source={Logo} style={styles.logo} resizeMode="contain" />
+                <AppText
+                  color={colors.primaryText}
+                  fontSize={FONT_SIZE_XL}
+                  medium>
+                  Welcome
+                </AppText>
+              </View>
+              <AppText
+                color={colors.textSecondary}
+                fontSize={FONT_SIZE_XS}
+                center
+                style={styles.subtitle}>
+                Please enter your email/phone or connect to your accounts to
+                continue.
               </AppText>
-            </View>
-            <AppText
-              color={colors.textSecondary}
-              fontSize={FONT_SIZE_XS}
-              center
-              style={styles.subtitle}>
-              Please enter your email/phone or connect to your accounts to
-              continue.
-            </AppText>
             </View>
 
             <View style={styles.formContainer}>
@@ -113,35 +129,52 @@ const Login: FC = () => {
 
                 <TouchableOpacity
                   style={styles.rememberMeContainer}
-                  onPress={() => setRememberMe(!rememberMe)}>
-                  <View style={styles.checkbox}>
+                  onPress={() => setRememberMe(prev => !prev)}>
+                  <View
+                    style={[
+                      styles.checkbox,
+                      rememberMe && styles.checkboxFilled,
+                    ]}>
                     {rememberMe && <CheckIcon />}
                   </View>
-                  <AppText color={colors.primaryText} fontSize={FONT_SIZE_XS} medium>
+                  <AppText
+                    color={colors.primaryText}
+                    fontSize={FONT_SIZE_XS}
+                    medium>
                     Remember Me
                   </AppText>
                 </TouchableOpacity>
               </View>
 
-            <TouchableOpacity
-              style={styles.loginButton}
-              onPress={onSubmit}
-              disabled={loading}>
-              <AppText color={WHITE} fontSize={FONT_SIZE_MD} semi_bold>
-                Login
-              </AppText>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.loginButton}
+                onPress={onSubmit}
+                disabled={loading}>
+                <AppText color={WHITE} fontSize={FONT_SIZE_MD} semi_bold>
+                  Login
+                </AppText>
+              </TouchableOpacity>
             </View>
           </View>
 
           <View style={styles.footer}>
-            <AppText color={colors.primaryText} fontSize={FONT_SIZE_XS} center style={styles.footerText}>
-              By clicking Continue, you agree to Dart{' '}
-              <AppText color={colors.termsLink} fontSize={FONT_SIZE_XS} semi_bold>
+            <AppText
+              color={colors.primaryText}
+              fontSize={FONT_SIZE_XS}
+              center
+              style={styles.footerText}>
+              By clicking Continue, you agree to Dart{" "}
+              <AppText
+                color={colors.termsLink}
+                fontSize={FONT_SIZE_XS}
+                semi_bold>
                 Terms of Use
-              </AppText>{' '}
-              and{' '}
-              <AppText color={colors.termsLink} fontSize={FONT_SIZE_XS} semi_bold>
+              </AppText>{" "}
+              and{" "}
+              <AppText
+                color={colors.termsLink}
+                fontSize={FONT_SIZE_XS}
+                semi_bold>
                 Privacy Policy
               </AppText>
               .
@@ -164,22 +197,22 @@ const createStyles = (colors: ThemeColors) =>
     },
     scrollContent: {
       flexGrow: 1,
-      justifyContent: 'space-between',
+      justifyContent: "space-between",
     },
     content: {
       flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
       paddingHorizontal: normalizeWidth(28),
       paddingTop: normalizeHeight(40),
     },
     headerContainer: {
-      alignItems: 'center',
+      alignItems: "center",
       gap: normalizeHeight(8),
       marginBottom: normalizeHeight(28),
     },
     logoContainer: {
-      alignItems: 'center',
+      alignItems: "center",
       gap: normalizeHeight(28),
     },
     logo: {
@@ -192,7 +225,7 @@ const createStyles = (colors: ThemeColors) =>
       paddingHorizontal: normalizeWidth(10),
     },
     formContainer: {
-      width: '100%',
+      width: "100%",
       maxWidth: normalizeWidth(337),
       gap: normalizeHeight(20),
     },
@@ -200,8 +233,8 @@ const createStyles = (colors: ThemeColors) =>
       gap: normalizeHeight(16),
     },
     inputWrapper: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       backgroundColor: colors.inputDarkBg,
       borderWidth: 1,
       borderColor: colors.inputDarkBorder,
@@ -213,19 +246,19 @@ const createStyles = (colors: ThemeColors) =>
     iconContainer: {
       width: normalizeWidth(20),
       height: normalizeHeight(20),
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
     },
     input: {
       flex: 1,
       color: colors.primaryText,
       fontSize: FONT_SIZE_XS,
-      fontFamily: 'Poppins-Regular',
+      fontFamily: "Poppins-Regular",
       paddingVertical: 0,
     },
     rememberMeContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: normalizeWidth(8),
     },
     checkbox: {
@@ -234,15 +267,19 @@ const createStyles = (colors: ThemeColors) =>
       borderWidth: 2,
       borderColor: colors.loginButtonBg,
       borderRadius: 4,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    checkboxFilled: {
+      backgroundColor: colors.rememberMeFilled,
     },
     loginButton: {
       backgroundColor: colors.loginButtonBg,
       height: normalizeHeight(48),
       borderRadius: normalizeHeight(100),
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: normalizeHeight(20),
     },
     footer: {
       paddingHorizontal: normalizeWidth(20),

@@ -1,3 +1,6 @@
+import { FC } from 'react';
+import { BatteryChargingGif, EngineGif, SolarPanelGif, TransmissionTowerGif } from 'src/assets/gif';
+import { GifProps } from 'src/types';
 import { ACCENT_BLUE, ACCENT_GREEN, ACCENT_RED } from 'src/utils/theme';
 
 export interface SLDMetric {
@@ -11,8 +14,7 @@ export type SLDLineStyle = 'animated' | 'solid';
 export interface SLDSourceNode {
   id: string;
   title: string;
-  iconName: string;
-  iconColor: string;
+  iconName: FC<GifProps>;
   lineColor: string;
   lineStyle: SLDLineStyle;
   metrics: SLDMetric[];
@@ -21,15 +23,15 @@ export interface SLDSourceNode {
 export interface SLDCenterNode {
   title: string;
   loadValue: string;
-  iconName: string;
 }
+
+// engine | transmission-tower | solar-panel-large | battery-charging | factory
 
 export const sldSources: SLDSourceNode[] = [
   {
     id: 'dg',
     title: "DG'S",
-    iconName: 'engine',
-    iconColor: ACCENT_RED,
+    iconName: EngineGif,
     lineColor: ACCENT_RED,
     lineStyle: 'solid',
     metrics: [
@@ -41,9 +43,8 @@ export const sldSources: SLDSourceNode[] = [
   {
     id: 'grid',
     title: 'NATIONAL GRID',
-    iconName: 'transmission-tower',
-    iconColor: '#00BCD4',
-    lineColor: '#00BCD4',
+    iconName: TransmissionTowerGif,
+    lineColor: ACCENT_BLUE,
     lineStyle: 'animated',
     metrics: [
       { label: 'P', value: '219.30', unit: 'kW' },
@@ -54,8 +55,7 @@ export const sldSources: SLDSourceNode[] = [
   {
     id: 'solar',
     title: 'SOLAR',
-    iconName: 'solar-panel-large',
-    iconColor: ACCENT_GREEN,
+    iconName: SolarPanelGif,
     lineColor: ACCENT_GREEN,
     lineStyle: 'solid',
     metrics: [
@@ -67,8 +67,7 @@ export const sldSources: SLDSourceNode[] = [
   {
     id: 'bess',
     title: 'BESS',
-    iconName: 'battery-charging',
-    iconColor: ACCENT_BLUE,
+    iconName: BatteryChargingGif,
     lineColor: ACCENT_BLUE,
     lineStyle: 'animated',
     metrics: [
@@ -82,5 +81,4 @@ export const sldSources: SLDSourceNode[] = [
 export const sldCenter: SLDCenterNode = {
   title: 'Total load',
   loadValue: '218.10',
-  iconName: 'factory',
 };

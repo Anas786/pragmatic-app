@@ -1,8 +1,7 @@
-import React, { FC, useMemo, useState } from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
-import { LineChart, BarChart } from 'react-native-gifted-charts';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { AppText } from 'src/components/common';
+import React, { FC, useMemo, useState } from "react";
+import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { LineChart, BarChart } from "react-native-gifted-charts";
+import { AppText } from "src/components/common";
 import {
   ACCENT_BLUE,
   ACCENT_GREEN,
@@ -18,11 +17,12 @@ import {
   ThemeColors,
   TRANSPARENT,
   WHITE,
-} from 'src/utils';
-import { useThemeStore } from 'src/hooks';
-import { formatDate } from 'src/utils/format';
-import { trendAnalysisSeries } from 'src/data/mock';
-import DateRangePickerModal from './DateRangePickerModal';
+} from "src/utils";
+import { useThemeStore } from "src/hooks";
+import { formatDate } from "src/utils/format";
+import { trendAnalysisSeries } from "src/data/mock";
+import DateRangePickerModal from "./DateRangePickerModal";
+import { CalendarIcon, Minus, Plus, RefreshIcon } from "src/assets/icons";
 
 const BASE_CHART_WIDTH = normalizeWidth(310);
 const BASE_SPACING = BASE_CHART_WIDTH / 7;
@@ -54,7 +54,10 @@ const TrendAnalysisCard: FC = () => {
   const [endDate, setEndDate] = useState(new Date(2025, 11, 17));
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  const dateRange = `${formatDate(startDate, 'DD/MM/YY')} - ${formatDate(endDate, 'DD/MM/YY')}`;
+  const dateRange = `${formatDate(startDate, "DD/MM/YY")} - ${formatDate(
+    endDate,
+    "DD/MM/YY",
+  )}`;
 
   const handleDateApply = (start: Date, end: Date) => {
     setStartDate(start);
@@ -88,11 +91,13 @@ const TrendAnalysisCard: FC = () => {
   }> = ({ zoom, onZoomIn, onZoomOut }) => (
     <View style={styles.zoomControls}>
       <TouchableOpacity
-        style={[styles.zoomButton, zoom <= MIN_ZOOM && styles.zoomButtonDisabled]}
+        style={[
+          styles.zoomButton,
+          zoom <= MIN_ZOOM && styles.zoomButtonDisabled,
+        ]}
         onPress={onZoomOut}
         disabled={zoom <= MIN_ZOOM}>
-        <Icon
-          name="minus"
+        <Minus
           size={ICON_SIZE_XS}
           color={zoom <= MIN_ZOOM ? colors.textSecondary : colors.primaryText}
         />
@@ -101,11 +106,13 @@ const TrendAnalysisCard: FC = () => {
         {zoom.toFixed(1)}x
       </AppText>
       <TouchableOpacity
-        style={[styles.zoomButton, zoom >= MAX_ZOOM && styles.zoomButtonDisabled]}
+        style={[
+          styles.zoomButton,
+          zoom >= MAX_ZOOM && styles.zoomButtonDisabled,
+        ]}
         onPress={onZoomIn}
         disabled={zoom >= MAX_ZOOM}>
-        <Icon
-          name="plus"
+        <Plus
           size={ICON_SIZE_XS}
           color={zoom >= MAX_ZOOM ? colors.textSecondary : colors.primaryText}
         />
@@ -118,11 +125,14 @@ const TrendAnalysisCard: FC = () => {
       <View style={styles.tooltip}>
         {items.map((item: any, index: number) => {
           const accentColors = [ACCENT_GREEN, ACCENT_RED, ACCENT_BLUE];
-          const years = ['2021', '2022', '2023'];
+          const years = ["2021", "2022", "2023"];
           return (
             <View key={index} style={styles.tooltipRow}>
               <View
-                style={[styles.tooltipDot, { backgroundColor: accentColors[index] }]}
+                style={[
+                  styles.tooltipDot,
+                  { backgroundColor: accentColors[index] },
+                ]}
               />
               <AppText fontSize={FONT_SIZE_XXS} color={colors.primaryText}>
                 {years[index]}: {item.value}
@@ -150,16 +160,19 @@ const TrendAnalysisCard: FC = () => {
     width: BASE_CHART_WIDTH * zoom,
     height: CHART_HEIGHT,
     spacing: BASE_SPACING * zoom,
-    initialSpacing: CHART_INITIAL_SPACING,
-    endSpacing: CHART_END_SPACING,
+    initialSpacing: CHART_INITIAL_SPACING * zoom,
+    endSpacing: CHART_END_SPACING * zoom,
     maxValue: CHART_MAX_VALUE,
     noOfSections: CHART_SECTIONS,
     yAxisTextStyle: { color: colors.textSecondary, fontSize: FONT_SIZE_XXS },
-    xAxisLabelTextStyle: { color: colors.textSecondary, fontSize: FONT_SIZE_MICRO },
+    xAxisLabelTextStyle: {
+      color: colors.textSecondary,
+      fontSize: FONT_SIZE_MICRO,
+    },
     xAxisColor: colors.textSecondary,
     yAxisColor: TRANSPARENT,
     rulesColor: colors.chartRuleColor,
-    rulesType: 'solid' as const,
+    rulesType: "solid" as const,
     hideDataPoints: false,
     dataPointsRadius: DATA_POINT_RADIUS,
     curved: true,
@@ -175,7 +188,10 @@ const TrendAnalysisCard: FC = () => {
       frontColor: ACCENT_GREEN,
       label: item.label,
       spacing: BAR_GROUP_SPACING,
-      labelTextStyle: { color: colors.textSecondary, fontSize: FONT_SIZE_MICRO },
+      labelTextStyle: {
+        color: colors.textSecondary,
+        fontSize: FONT_SIZE_MICRO,
+      },
     },
     {
       value: redData[i].value,
@@ -197,13 +213,12 @@ const TrendAnalysisCard: FC = () => {
     </View>
   );
 
-  const zoomIn = (
-    setter: React.Dispatch<React.SetStateAction<number>>,
-  ) => () => setter(prev => Math.min(prev + ZOOM_STEP, MAX_ZOOM));
+  const zoomIn = (setter: React.Dispatch<React.SetStateAction<number>>) => () =>
+    setter(prev => Math.min(prev + ZOOM_STEP, MAX_ZOOM));
 
-  const zoomOut = (
-    setter: React.Dispatch<React.SetStateAction<number>>,
-  ) => () => setter(prev => Math.max(prev - ZOOM_STEP, MIN_ZOOM));
+  const zoomOut =
+    (setter: React.Dispatch<React.SetStateAction<number>>) => () =>
+      setter(prev => Math.max(prev - ZOOM_STEP, MIN_ZOOM));
 
   return (
     <View style={styles.container}>
@@ -216,21 +231,22 @@ const TrendAnalysisCard: FC = () => {
           <TouchableOpacity
             style={styles.dateRangeContainer}
             onPress={() => setShowDatePicker(true)}>
-            <Icon name="calendar-outline" size={ICON_SIZE_XS} color={colors.dateFilterText} />
+            <CalendarIcon size={ICON_SIZE_XS} color={colors.dateFilterText} />
             <AppText fontSize={FONT_SIZE_XS} color={colors.dateFilterText}>
               {dateRange}
             </AppText>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.refreshButton}>
-            <Icon name="sync" size={ICON_SIZE_MD} color={ACCENT_GREEN} />
+            <RefreshIcon size={ICON_SIZE_MD} color={ACCENT_GREEN} />
           </TouchableOpacity>
         </View>
       </View>
 
       <View style={styles.body}>
         {/* Area Chart */}
-        <View style={styles.chartSection}>
+        <View
+          style={styles.chartSection}>
           <ZoomControls
             zoom={areaZoom}
             onZoomIn={zoomIn(setAreaZoom)}
@@ -266,7 +282,8 @@ const TrendAnalysisCard: FC = () => {
         </View>
 
         {/* Line Chart */}
-        <View style={styles.chartSection}>
+        <View
+          style={styles.chartSection}>
           <ZoomControls
             zoom={lineZoom}
             onZoomIn={zoomIn(setLineZoom)}
@@ -297,12 +314,15 @@ const TrendAnalysisCard: FC = () => {
           />
           <BarChart
             data={barData}
-            width={BASE_CHART_WIDTH * barZoom}
+            width={BASE_CHART_WIDTH}
             height={CHART_HEIGHT}
             barWidth={BASE_BAR_WIDTH * barZoom}
             noOfSections={CHART_SECTIONS}
             maxValue={CHART_MAX_VALUE}
-            yAxisTextStyle={{ color: colors.textSecondary, fontSize: FONT_SIZE_XXS }}
+            yAxisTextStyle={{
+              color: colors.textSecondary,
+              fontSize: FONT_SIZE_XXS,
+            }}
             xAxisColor={colors.textSecondary}
             yAxisColor={TRANSPARENT}
             rulesColor={colors.chartRuleColor}
@@ -331,24 +351,24 @@ const createStyles = (colors: ThemeColors) =>
       borderWidth: 1,
       borderColor: colors.inputDarkBorder,
       borderRadius: normalizeWidth(16),
-      overflow: 'hidden',
+      overflow: "hidden",
     },
     header: {
       backgroundColor: colors.inputDarkBg,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
       paddingHorizontal: normalizeWidth(16),
       paddingVertical: normalizeHeight(16),
     },
     actions: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: normalizeWidth(10),
     },
     dateRangeContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       backgroundColor: colors.dateFilterBg,
       borderWidth: 1,
       borderColor: colors.dateFilterBg,
@@ -360,8 +380,8 @@ const createStyles = (colors: ThemeColors) =>
     refreshButton: {
       width: normalizeWidth(38),
       height: normalizeWidth(38),
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
       borderWidth: 1.5,
       borderColor: ACCENT_GREEN,
       borderRadius: 100,
@@ -372,20 +392,20 @@ const createStyles = (colors: ThemeColors) =>
       gap: normalizeHeight(24),
     },
     chartSection: {
-      alignItems: 'center',
+      alignItems: "center",
       gap: normalizeHeight(12),
     },
     zoomControls: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      alignSelf: 'flex-end',
+      flexDirection: "row",
+      alignItems: "center",
+      alignSelf: "flex-end",
       gap: normalizeWidth(8),
     },
     zoomButton: {
       width: normalizeWidth(28),
       height: normalizeWidth(28),
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
       backgroundColor: colors.inputDarkBorder,
       borderRadius: normalizeWidth(6),
     },
@@ -393,9 +413,9 @@ const createStyles = (colors: ThemeColors) =>
       opacity: 0.4,
     },
     legendRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
       gap: normalizeWidth(8),
     },
     legendBadge: {
@@ -413,8 +433,8 @@ const createStyles = (colors: ThemeColors) =>
       borderColor: colors.overlayLightBorder,
     },
     tooltipRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: normalizeWidth(6),
     },
     tooltipDot: {

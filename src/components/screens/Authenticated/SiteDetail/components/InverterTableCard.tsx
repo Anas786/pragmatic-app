@@ -1,36 +1,29 @@
-import React, { FC, useMemo, useState } from 'react';
-import {
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { AppText } from 'src/components/common';
+import React, { FC, useMemo, useState } from "react";
+import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { AppText } from "src/components/common";
 import {
   ACCENT_BLUE,
   ACCENT_GREEN,
   FONT_SIZE_SM,
   FONT_SIZE_XS,
-  FONT_SIZE_XXS,
   FONT_SIZE_LG,
   ICON_SIZE_MD,
   ICON_SIZE_XS,
   normalizeHeight,
   normalizeWidth,
-  TAB_ACTIVE_BG,
   ThemeColors,
   WHITE,
-} from 'src/utils';
-import { useThemeStore } from 'src/hooks';
-import { formatDate } from 'src/utils/format';
+} from "src/utils";
+import { useThemeStore } from "src/hooks";
+import { formatDate } from "src/utils/format";
 import {
   InverterEntryData,
   InverterFilterOption,
   inverterFilters,
   mockInverterData,
-} from 'src/data/mock';
-import DateRangePickerModal from './DateRangePickerModal';
+} from "src/data/mock";
+import DateRangePickerModal from "./DateRangePickerModal";
+import { CalendarIcon, RefreshIcon } from "src/assets/icons";
 
 const PROGRESS_BAR_HEIGHT = normalizeHeight(6);
 const PROGRESS_BAR_RADIUS = 1000;
@@ -48,9 +41,12 @@ const InverterTableCard: FC = () => {
   const [endDate, setEndDate] = useState(new Date(2025, 11, 17));
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [activeFilter, setActiveFilter] =
-    useState<InverterFilterOption>('Custom');
+    useState<InverterFilterOption>("Custom");
 
-  const dateRange = `${formatDate(startDate, 'DD/MM/YY')} - ${formatDate(endDate, 'DD/MM/YY')}`;
+  const dateRange = `${formatDate(startDate, "DD/MM/YY")} - ${formatDate(
+    endDate,
+    "DD/MM/YY",
+  )}`;
 
   const handleDateApply = (start: Date, end: Date) => {
     setStartDate(start);
@@ -148,14 +144,14 @@ const InverterTableCard: FC = () => {
           <TouchableOpacity
             style={styles.dateRangeContainer}
             onPress={() => setShowDatePicker(true)}>
-            <Icon name="calendar-outline" size={ICON_SIZE_XS} color={colors.dateFilterText} />
+            <CalendarIcon size={ICON_SIZE_XS} color={colors.dateFilterText} />
             <AppText fontSize={FONT_SIZE_XS} color={colors.dateFilterText}>
               {dateRange}
             </AppText>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.refreshButton}>
-            <Icon name="sync" size={ICON_SIZE_MD} color={ACCENT_GREEN} />
+            <RefreshIcon size={ICON_SIZE_MD} color={ACCENT_GREEN} />
           </TouchableOpacity>
         </View>
       </View>
@@ -210,24 +206,24 @@ const createStyles = (colors: ThemeColors) =>
       borderWidth: 1,
       borderColor: colors.inputDarkBorder,
       borderRadius: normalizeWidth(16),
-      overflow: 'hidden',
+      overflow: "hidden",
     },
     header: {
       backgroundColor: colors.inputDarkBg,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
       paddingHorizontal: normalizeWidth(16),
       paddingVertical: normalizeHeight(16),
     },
     actions: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: normalizeWidth(10),
     },
     dateRangeContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       backgroundColor: colors.dateFilterBg,
       borderWidth: 1,
       borderColor: colors.dateFilterBg,
@@ -239,8 +235,8 @@ const createStyles = (colors: ThemeColors) =>
     refreshButton: {
       width: normalizeWidth(38),
       height: normalizeWidth(38),
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
       borderWidth: 1.5,
       borderColor: ACCENT_GREEN,
       borderRadius: 100,
@@ -251,7 +247,7 @@ const createStyles = (colors: ThemeColors) =>
       gap: normalizeHeight(16),
     },
     filterRow: {
-      flexDirection: 'row',
+      flexDirection: "row",
       gap: normalizeWidth(8),
       paddingVertical: normalizeHeight(4),
     },
@@ -278,12 +274,12 @@ const createStyles = (colors: ThemeColors) =>
       gap: normalizeHeight(16),
     },
     metricsRow: {
-      flexDirection: 'row',
+      flexDirection: "row",
       gap: normalizeWidth(10),
     },
     metricCard: {
       flex: 1,
-      alignItems: 'center',
+      alignItems: "center",
       backgroundColor: colors.metricCardBg,
       borderWidth: 1,
       borderColor: colors.inputDarkBorder,
@@ -296,18 +292,18 @@ const createStyles = (colors: ThemeColors) =>
       gap: normalizeHeight(6),
     },
     progressLabelRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
     },
     progressTrack: {
       height: PROGRESS_BAR_HEIGHT,
       backgroundColor: colors.progressBg,
       borderRadius: PROGRESS_BAR_RADIUS,
-      overflow: 'hidden',
+      overflow: "hidden",
     },
     progressFill: {
-      height: '100%',
+      height: "100%",
       borderRadius: PROGRESS_BAR_RADIUS,
     },
   });
