@@ -4,6 +4,10 @@ export interface IconProps {
   focused?: boolean;
 }
 
+export interface GifProps{
+  size?: number;
+}
+
 export interface APIResponse<T = null> {
   status: 'error' | 'success';
   message?: string;

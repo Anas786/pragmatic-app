@@ -1,3 +1,6 @@
+import { FC } from 'react';
+import { AlertIcon, AlertIconCircle, BellIcon, MessageAlertIcon } from 'src/assets/icons';
+import { IconProps } from 'src/types';
 import { ACCENT_BLUE, ACCENT_GREEN, ACCENT_ORANGE, ACCENT_RED } from 'src/utils/theme';
 
 export interface AlarmCardData {
@@ -6,7 +9,7 @@ export interface AlarmCardData {
   time: string;
   status: 'Solved' | 'Unsolved';
   statusTime: string;
-  iconName: string;
+  iconName: FC<IconProps>;
   iconColor: string;
   accentColor: string;
   priorityColor: string;
@@ -20,7 +23,7 @@ export const mockAlarmsData: AlarmCardData[] = [
     time: '10:15 AM',
     status: 'Solved',
     statusTime: 'At 12:15 PM',
-    iconName: 'alert',
+    iconName: AlertIcon,
     iconColor: ACCENT_RED,
     accentColor: ACCENT_RED,
     priorityColor: ACCENT_RED,
@@ -32,7 +35,7 @@ export const mockAlarmsData: AlarmCardData[] = [
     time: '11:15 AM',
     status: 'Unsolved',
     statusTime: 'ETA 2:15 PM',
-    iconName: 'alert-circle',
+    iconName: AlertIconCircle,
     iconColor: ACCENT_ORANGE,
     accentColor: ACCENT_ORANGE,
     priorityColor: ACCENT_ORANGE,
@@ -44,7 +47,7 @@ export const mockAlarmsData: AlarmCardData[] = [
     time: '11:15 AM',
     status: 'Solved',
     statusTime: 'At 12:15 PM',
-    iconName: 'bell-outline',
+    iconName: BellIcon,
     iconColor: ACCENT_GREEN,
     accentColor: ACCENT_GREEN,
     priorityColor: ACCENT_GREEN,
@@ -56,7 +59,7 @@ export const mockAlarmsData: AlarmCardData[] = [
     time: '11:39 AM',
     status: 'Unsolved',
     statusTime: 'ETA 1:05 PM',
-    iconName: 'message-alert-outline',
+    iconName: MessageAlertIcon,
     iconColor: ACCENT_BLUE,
     accentColor: ACCENT_BLUE,
     priorityColor: ACCENT_BLUE,

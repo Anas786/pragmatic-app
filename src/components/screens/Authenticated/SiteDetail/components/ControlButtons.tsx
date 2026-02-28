@@ -1,13 +1,13 @@
-import React, { FC, useMemo } from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import React, { FC, useMemo } from "react";
+import { StyleSheet, TouchableOpacity, View } from "react-native";
 import {
   ICON_SIZE_MD,
   normalizeHeight,
   normalizeWidth,
   ThemeColors,
-} from 'src/utils';
-import { useThemeStore } from 'src/hooks';
+} from "src/utils";
+import { useThemeStore } from "src/hooks";
+import { LockIcon, LockIconOpen, Minus, NodeExpandIcon, Plus } from "src/assets/icons";
 
 interface ControlButtonsProps {
   onZoomIn: () => void;
@@ -15,6 +15,7 @@ interface ControlButtonsProps {
   onToggleLock: () => void;
   onFullscreen: () => void;
   isLocked: boolean;
+  currentZoom: number;
 }
 
 const ControlButtons: FC<ControlButtonsProps> = ({
@@ -23,27 +24,36 @@ const ControlButtons: FC<ControlButtonsProps> = ({
   onToggleLock,
   onFullscreen,
   isLocked,
+  currentZoom
 }) => {
   const { colors } = useThemeStore();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const isZoomInDisabled = isLocked || currentZoom >= 3 - 0.001;
+  const isZoomOutDisabled = isLocked || currentZoom <= 0.5 + 0.001;
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.button} onPress={onZoomIn}>
-        <Icon name="plus" size={ICON_SIZE_MD} color={colors.primaryText} />
+      <TouchableOpacity disabled={isZoomInDisabled} style={styles.button} onPress={onZoomIn}>
+        <Plus size={ICON_SIZE_MD} color={isZoomInDisabled ? colors.textSecondary : colors.primaryText} />
       </TouchableOpacity>
-      <TouchableOpacity style={styles.button} onPress={onZoomOut}>
-        <Icon name="minus" size={ICON_SIZE_MD} color={colors.primaryText} />
+      <TouchableOpacity disabled={isZoomOutDisabled} style={styles.button} onPress={onZoomOut}>
+        <Minus size={ICON_SIZE_MD} color={isZoomOutDisabled ? colors.textSecondary : colors.primaryText} />
       </TouchableOpacity>
       <TouchableOpacity style={styles.button} onPress={onFullscreen}>
-        <Icon name="arrow-expand-all" size={ICON_SIZE_MD} color={colors.primaryText} />
+        <NodeExpandIcon size={ICON_SIZE_MD} color={colors.primaryText} />
       </TouchableOpacity>
       <TouchableOpacity style={styles.button} onPress={onToggleLock}>
-        <Icon
-          name={isLocked ? 'lock' : 'lock-open-variant'}
-          size={ICON_SIZE_MD}
-          color={isLocked ? colors.primaryText : colors.textSecondary}
-        />
+        {isLocked ? (
+          <LockIcon
+            size={ICON_SIZE_MD}
+            color={isLocked ? colors.textSecondary : colors.primaryText}
+          />
+        ) : (
+          <LockIconOpen
+            size={ICON_SIZE_MD}
+            color={isLocked ? colors.textSecondary : colors.primaryText}
+          />
+        )}
       </TouchableOpacity>
     </View>
   );
@@ -52,7 +62,7 @@ const ControlButtons: FC<ControlButtonsProps> = ({
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     container: {
-      position: 'absolute',
+      position: "absolute",
       bottom: normalizeHeight(16),
       left: normalizeWidth(16),
       backgroundColor: colors.controlButtonBg,
@@ -65,8 +75,8 @@ const createStyles = (colors: ThemeColors) =>
     button: {
       width: normalizeWidth(36),
       height: normalizeWidth(36),
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
       borderRadius: normalizeWidth(8),
     },
   });

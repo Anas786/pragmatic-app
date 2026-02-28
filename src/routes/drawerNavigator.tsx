@@ -5,13 +5,11 @@ import {
   DrawerContentComponentProps,
   DrawerContentScrollView,
 } from '@react-navigation/drawer';
-import { useNavigation } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppText, Avatar } from 'src/components/common';
 import { useLogout } from 'src/hooks/useLogout';
 import { useUserStore } from 'src/hooks/useUserStore';
 import { useThemeStore } from 'src/hooks/useThemeStore';
-import { DrawerParamList } from 'src/types';
+import { DrawerParamList, IconProps } from 'src/types';
 import {
   AboutUs,
   ContactUs,
@@ -31,28 +29,29 @@ import {
   normalizeWidth,
   ThemeColors,
 } from 'src/utils';
+import { InfoIcon, LogoutIcon, PhoneIcon, RightIcon, TermsIcon } from 'src/assets/icons';
 
 const Drawer = createDrawerNavigator<DrawerParamList>();
 
 // --- Custom Drawer Content ---
 
 interface NavItemProps {
-  icon: string;
+  IconComponent: FC<IconProps>;
   label: string;
   onPress: () => void;
   colors: ThemeColors;
 }
 
-const NavItem: FC<NavItemProps> = ({ icon, label, onPress, colors }) => {
+const NavItem: FC<NavItemProps> = ({ IconComponent, label, onPress, colors }) => {
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
     <TouchableOpacity style={styles.navItem} onPress={onPress} activeOpacity={0.6}>
-      <Icon name={icon} size={ICON_SIZE_LG} color={colors.textSecondary} />
+      <IconComponent size={ICON_SIZE_LG} color={colors.textSecondary} />
       <AppText fontSize={FONT_SIZE_SM} medium color={colors.primaryText} style={styles.navLabel}>
         {label}
       </AppText>
-      <Icon name="chevron-right" size={ICON_SIZE_LG} color={colors.textSecondary} />
+      <RightIcon size={ICON_SIZE_LG} color={colors.textSecondary}/>
     </TouchableOpacity>
   );
 };
@@ -103,19 +102,19 @@ const CustomDrawerContent: FC<DrawerContentComponentProps> = props => {
       {/* Navigation Items */}
       <View style={styles.navSection}>
         <NavItem
-          icon="information-outline"
+          IconComponent={InfoIcon}
           label="About Us"
           onPress={() => navigateTo('AboutUs')}
           colors={colors}
         />
         <NavItem
-          icon="email-outline"
+          IconComponent={PhoneIcon}
           label="Contact Us"
           onPress={() => navigateTo('ContactUs')}
           colors={colors}
         />
         <NavItem
-          icon="file-document-outline"
+          IconComponent={TermsIcon}
           label="Terms & Conditions"
           onPress={() => navigateTo('TermsAndConditions')}
           colors={colors}
@@ -131,7 +130,7 @@ const CustomDrawerContent: FC<DrawerContentComponentProps> = props => {
         style={styles.logoutBtn}
         onPress={logout}
         activeOpacity={0.6}>
-        <Icon name="logout" size={ICON_SIZE_LG} color={ACCENT_RED} />
+        <LogoutIcon size={ICON_SIZE_LG} color={ACCENT_RED}/>
         <AppText fontSize={FONT_SIZE_SM} bold color={ACCENT_RED}>
           Logout
         </AppText>
@@ -151,7 +150,8 @@ export const DrawerNavigator = (): ReactElement => {
       screenOptions={{
         headerShown: false,
         drawerStyle: styles.drawer,
-        drawerType: 'front',
+        drawerType: 'slide',
+        swipeEnabled: false,
         overlayColor: 'rgba(0,0,0,0.6)',
       }}
       drawerContent={props => <CustomDrawerContent {...props} />}>

@@ -1,8 +1,7 @@
-import React, { FC, useMemo, useState } from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
-import { PieChart } from 'react-native-gifted-charts';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { AppText } from 'src/components/common';
+import React, { FC, useMemo, useState } from "react";
+import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { PieChart } from "react-native-gifted-charts";
+import { AppText } from "src/components/common";
 import {
   ACCENT_GREEN,
   FONT_SIZE_SM,
@@ -15,11 +14,12 @@ import {
   ThemeColors,
   TRANSPARENT,
   WHITE,
-} from 'src/utils';
-import { useThemeStore } from 'src/hooks';
-import { formatDate } from 'src/utils/format';
-import { performanceReportData } from 'src/data/mock';
-import DateRangePickerModal from './DateRangePickerModal';
+} from "src/utils";
+import { useThemeStore } from "src/hooks";
+import { formatDate } from "src/utils/format";
+import { performanceReportData } from "src/data/mock";
+import DateRangePickerModal from "./DateRangePickerModal";
+import { CalendarIcon } from "src/assets/icons";
 
 const PIE_RADIUS = normalizeWidth(100);
 const FOCUSED_PIE_EXTRA_RADIUS = normalizeWidth(10);
@@ -45,7 +45,10 @@ const PerformanceReportCard: FC = () => {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  const dateRange = `${formatDate(startDate, 'DD/MM/YY')} - ${formatDate(endDate, 'DD/MM/YY')}`;
+  const dateRange = `${formatDate(startDate, "DD/MM/YY")} - ${formatDate(
+    endDate,
+    "DD/MM/YY",
+  )}`;
 
   const handleDateApply = (start: Date, end: Date) => {
     setStartDate(start);
@@ -67,7 +70,11 @@ const PerformanceReportCard: FC = () => {
         <View
           key={index}
           style={[styles.legendPill, { backgroundColor: item.color }]}>
-          <AppText fontSize={FONT_SIZE_XXS} bold color={WHITE} numberOfLines={1}>
+          <AppText
+            fontSize={FONT_SIZE_XXS}
+            bold
+            color={WHITE}
+            numberOfLines={1}>
             {item.label}
           </AppText>
         </View>
@@ -85,7 +92,7 @@ const PerformanceReportCard: FC = () => {
         <TouchableOpacity
           style={styles.dateRangeContainer}
           onPress={() => setShowDatePicker(true)}>
-          <Icon name="calendar-outline" size={ICON_SIZE_XS} color={colors.dateFilterText} />
+          <CalendarIcon size={ICON_SIZE_XS} color={colors.dateFilterText} />
           <AppText fontSize={FONT_SIZE_XS} color={colors.dateFilterText}>
             {dateRange}
           </AppText>
@@ -97,10 +104,7 @@ const PerformanceReportCard: FC = () => {
           {/* Selected info card */}
           <View style={styles.infoCard}>
             <View
-              style={[
-                styles.accentBar,
-                { backgroundColor: selected.color },
-              ]}
+              style={[styles.accentBar, { backgroundColor: selected.color }]}
             />
             <View style={styles.infoContent}>
               <AppText
@@ -110,7 +114,10 @@ const PerformanceReportCard: FC = () => {
                 {selected.label}
               </AppText>
               <View style={styles.infoValueRow}>
-                <AppText fontSize={FONT_SIZE_XL} bold color={colors.primaryText}>
+                <AppText
+                  fontSize={FONT_SIZE_XL}
+                  bold
+                  color={colors.primaryText}>
                   {selected.displayValue}
                 </AppText>
                 <View style={styles.percentBadge}>
@@ -154,19 +161,19 @@ const createStyles = (colors: ThemeColors) =>
       borderWidth: 1,
       borderColor: colors.inputDarkBorder,
       borderRadius: normalizeWidth(16),
-      overflow: 'hidden',
+      overflow: "hidden",
     },
     header: {
       backgroundColor: colors.inputDarkBg,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
       paddingHorizontal: normalizeWidth(16),
       paddingVertical: normalizeHeight(16),
     },
     dateRangeContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       backgroundColor: colors.dateFilterBg,
       borderWidth: 1,
       borderColor: colors.dateFilterBg,
@@ -181,13 +188,13 @@ const createStyles = (colors: ThemeColors) =>
       gap: normalizeHeight(20),
     },
     chartLayout: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
     },
     infoCard: {
       flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       backgroundColor: colors.cardBg,
       borderWidth: 1,
       borderColor: colors.textSecondary,
@@ -206,8 +213,8 @@ const createStyles = (colors: ThemeColors) =>
       gap: INFO_BOX_GAP,
     },
     infoValueRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: normalizeWidth(8),
     },
     percentBadge: {
@@ -217,13 +224,13 @@ const createStyles = (colors: ThemeColors) =>
       borderRadius: PERCENT_BADGE_RADIUS,
     },
     pieContainer: {
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
     },
     legendContainer: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      justifyContent: 'center',
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent: "center",
       gap: LEGEND_GAP,
     },
     legendPill: {

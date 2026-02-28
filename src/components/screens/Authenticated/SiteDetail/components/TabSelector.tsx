@@ -1,6 +1,5 @@
 import React, { FC, useMemo } from 'react';
 import { ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppText } from 'src/components/common';
 import {
   FONT_SIZE_XS,
@@ -11,6 +10,8 @@ import {
   WHITE,
 } from 'src/utils';
 import { useThemeStore } from 'src/hooks';
+import { IconProps } from 'src/types';
+import { AlarmsTabIcon, CardsTabIcon, SummaryTabIcon, TrendTabIcon } from 'src/assets/icons';
 
 export type TabOption = 'Summary' | 'Cards' | 'Alarms' | 'Trend';
 
@@ -21,14 +22,24 @@ interface TabSelectorProps {
 
 interface TabConfig {
   name: TabOption;
-  iconName: string;
+  iconName: FC<IconProps>;
 }
 
+interface TabIconProps {
+  IconComponent: FC<{ size?: number; color?: string }>;
+  size: number;
+  color: string;
+}
+
+const TabIcons: FC<TabIconProps> = ({ IconComponent, size, color }) => {
+  return <IconComponent size={size} color={color} />;
+};
+
 const tabs: TabConfig[] = [
-  { name: 'Summary', iconName: 'dots-hexagon' },
-  { name: 'Cards', iconName: 'card-text-outline' },
-  { name: 'Alarms', iconName: 'bell-outline' },
-  { name: 'Trend', iconName: 'chart-box-outline' },
+  { name: 'Summary', iconName: SummaryTabIcon },
+  { name: 'Cards', iconName: CardsTabIcon },
+  { name: 'Alarms', iconName: AlarmsTabIcon },
+  { name: 'Trend', iconName: TrendTabIcon },
 ];
 
 const TabSelector: FC<TabSelectorProps> = ({ selected, onSelect }) => {
@@ -50,8 +61,8 @@ const TabSelector: FC<TabSelectorProps> = ({ selected, onSelect }) => {
               isActive ? styles.activeTab : styles.inactiveTab,
             ]}
             onPress={() => onSelect(tab.name)}>
-            <Icon
-              name={tab.iconName}
+            <TabIcons
+              IconComponent={tab.iconName}
               size={ICON_SIZE_SM}
               color={isActive ? WHITE : colors.textSecondary}
             />

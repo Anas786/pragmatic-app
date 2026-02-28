@@ -1,6 +1,5 @@
 import React, { FC, useMemo, useState } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppText } from 'src/components/common';
 import {
   ACCENT_GREEN,
@@ -20,6 +19,7 @@ import PerformanceReportCard from './PerformanceReportCard';
 import InverterTableCard from './InverterTableCard';
 import DateRangePickerModal from './DateRangePickerModal';
 import { mockTrendsData } from 'src/data/mock';
+import { CalendarIcon, RefreshIcon } from 'src/assets/icons';
 
 const TrendView: FC = () => {
   const { colors } = useThemeStore();
@@ -51,7 +51,7 @@ const TrendView: FC = () => {
           <TouchableOpacity
             style={styles.dateRangeContainer}
             onPress={() => setShowDatePicker(true)}>
-            <Icon name="calendar-outline" size={ICON_SIZE_XS} color={colors.dateFilterText} />
+            <CalendarIcon size={ICON_SIZE_XS} color={colors.dateFilterText} />
             <AppText fontSize={FONT_SIZE_XS} color={colors.dateFilterText}>
               {dateRange}
             </AppText>
@@ -60,7 +60,7 @@ const TrendView: FC = () => {
           <TouchableOpacity
             style={styles.refreshButton}
             onPress={handleRefresh}>
-            <Icon name="sync" size={ICON_SIZE_MD} color={ACCENT_GREEN} />
+            <RefreshIcon size={ICON_SIZE_MD} color={ACCENT_GREEN} />
           </TouchableOpacity>
         </View>
       </View>

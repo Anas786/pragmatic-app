@@ -1,6 +1,5 @@
 import React, { FC, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppText } from 'src/components/common';
 import {
   FONT_SIZE_SM,
@@ -12,12 +11,22 @@ import {
   ThemeColors,
 } from 'src/utils';
 import { useThemeStore } from 'src/hooks';
-import { MetricItem } from 'src/data/mock/summary';
+import { SummaryMetricItem } from 'src/data/mock/summary';
 
 interface MetricCardProps {
   title: string;
-  items: MetricItem[];
+  items: SummaryMetricItem[];
 }
+
+interface SummaryCardIconProps {
+  IconComponent: FC<{ size?: number; color?: string }>;
+  size: number;
+  color: string;
+}
+
+const SummaryCardICon: FC<SummaryCardIconProps> = ({ IconComponent, size, color }) => {
+  return <IconComponent size={size} color={color} />;
+};
 
 const MetricCard: FC<MetricCardProps> = ({ title, items }) => {
   const { colors } = useThemeStore();
@@ -53,7 +62,7 @@ const MetricCard: FC<MetricCardProps> = ({ title, items }) => {
                 )}
               </View>
             </View>
-            <Icon name={item.iconName} size={ICON_SIZE_XL} color={item.iconColor} />
+            <SummaryCardICon IconComponent={item.iconName} size={ICON_SIZE_XL} color={item.iconColor} />
           </View>
         ))}
       </View>

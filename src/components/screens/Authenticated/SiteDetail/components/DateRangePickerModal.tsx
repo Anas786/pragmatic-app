@@ -4,7 +4,6 @@ import Modal from 'react-native-modal';
 import DateTimePicker, {
   DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppText } from 'src/components/common';
 import {
   ACCENT_GREEN,
@@ -19,6 +18,7 @@ import {
 } from 'src/utils';
 import { useThemeStore } from 'src/hooks';
 import { formatDate } from 'src/utils/format';
+import { CalendarIcon, Close } from 'src/assets/icons';
 
 interface DateRangePickerModalProps {
   visible: boolean;
@@ -92,7 +92,7 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
             Select Date Range
           </AppText>
           <TouchableOpacity onPress={handleCancel}>
-            <Icon name="close" size={ICON_SIZE_XS} color={colors.textSecondary} />
+            <Close size={ICON_SIZE_XS} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
 
@@ -114,8 +114,7 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
                 {formatDate(tempStart, DATE_DISPLAY_FORMAT)}
               </AppText>
             </View>
-            <Icon
-              name="calendar-outline"
+            <CalendarIcon
               size={ICON_SIZE_XS}
               color={ACCENT_GREEN}
             />
@@ -149,8 +148,7 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
                 {formatDate(tempEnd, DATE_DISPLAY_FORMAT)}
               </AppText>
             </View>
-            <Icon
-              name="calendar-outline"
+            <CalendarIcon
               size={ICON_SIZE_XS}
               color={ACCENT_GREEN}
             />

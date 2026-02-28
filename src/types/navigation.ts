@@ -25,5 +25,6 @@ export type DashboardStackParamList = {
     siteName: string;
     siteSubtitle: string;
     efficiency: number;
+    siteimage: any;
   };
 };

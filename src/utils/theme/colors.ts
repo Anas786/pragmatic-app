@@ -7,7 +7,9 @@ export type ThemeColors = {
   dropdownBg: string;
   tabInactiveBg: string;
   progressBg: string;
+  progressFilled: string,
   darkBgSecondary: string;
+  rememberMeFilled: string;
 
   // Borders
   inputDarkBorder: string;
@@ -60,11 +62,13 @@ export const darkColors: ThemeColors = {
   dropdownBg: '#1F1F1F',
   tabInactiveBg: '#1B1A1B',
   progressBg: '#262626',
+  progressFilled: '#3AD04B',
   darkBgSecondary: '#2A2A2A',
+  rememberMeFilled: '#00a908',
 
   inputDarkBorder: '#303030',
 
-  primaryText: '#fff',
+  primaryText: '#ffffff',
   textSecondary: '#6e6e6e',
 
   overlayDark: 'rgba(0, 0, 0, 0.85)',
@@ -99,7 +103,9 @@ export const lightColors: ThemeColors = {
   dropdownBg: '#FFFFFF',
   tabInactiveBg: '#F0F0F0',
   progressBg: '#E4E4E7',
+  progressFilled: '#3AD04B',
   darkBgSecondary: '#EBEBEB',
+  rememberMeFilled: '#08820E',
 
   inputDarkBorder: '#CCCCCC',
 

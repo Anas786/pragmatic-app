@@ -1,6 +1,5 @@
 import React, { FC, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppText } from 'src/components/common';
 import {
   FONT_SIZE_SM,
@@ -14,6 +13,17 @@ import {
 } from 'src/utils';
 import { useThemeStore } from 'src/hooks';
 import { AlarmCardData, mockAlarmsData } from 'src/data/mock';
+
+interface AlarmIconProps {
+  IconComponent: FC<{ size?: number; color?: string }>;
+  size: number;
+  color: string;
+}
+
+const AlarmIcon: FC<AlarmIconProps> = ({ IconComponent, size, color }) => {
+  return <IconComponent size={size} color={color} />;
+};
+
 
 const AlarmsView: FC = () => {
   const { colors } = useThemeStore();
@@ -36,7 +46,7 @@ const AlarmsView: FC = () => {
         <View style={[styles.accentBar, { backgroundColor: accentColor }]} />
 
         <View style={styles.iconContainer}>
-          <Icon name={iconName} size={ICON_SIZE_LG} color={iconColor} />
+          <AlarmIcon IconComponent={iconName} size={ICON_SIZE_LG} color={iconColor} />
         </View>
 
         <View style={styles.cardContent}>

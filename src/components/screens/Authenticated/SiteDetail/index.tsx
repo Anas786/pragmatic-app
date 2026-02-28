@@ -5,26 +5,26 @@ import {
   StyleSheet,
   TouchableOpacity,
   View,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { AppText } from 'src/components/common';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {
   FONT_SIZE_MD,
   FONT_SIZE_XS,
   FONT_SIZE_XXS,
-  ICON_SIZE_MD,
+  ICON_SIZE_LG,
   normalizeHeight,
   normalizeWidth,
   ThemeColors,
 } from 'src/utils';
 import { useThemeStore } from 'src/hooks';
 import { DashboardStackParamList } from 'src/types';
-import CustomIcon from 'src/components/common/CustomIcon';
 import DropdownSelector from './components/DropdownSelector';
 import ViewsContent from './components/ViewsContent';
 import EmptyState from './components/EmptyState';
+import { Back, MoonIcon, SunIcon } from 'src/assets/icons';
 
 type SiteDetailRouteProp = RouteProp<DashboardStackParamList, 'SiteDetail'>;
 
@@ -33,12 +33,12 @@ type DropdownOption = 'Views' | 'Live Parameter' | 'Alarm';
 const SiteDetail: FC = () => {
   const navigation = useNavigation();
   const route = useRoute<SiteDetailRouteProp>();
-  const { siteName, siteSubtitle } = route.params;
+  const { siteName, siteSubtitle, siteimage } = route.params;
   const { isDark, colors, toggleTheme } = useThemeStore();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const [selectedDropdown, setSelectedDropdown] =
-    useState<DropdownOption>('Views');
+    useState<DropdownOption | string>('Views');
 
   const renderContent = () => {
     switch (selectedDropdown) {
@@ -61,14 +61,26 @@ const SiteDetail: FC = () => {
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}>
-          <CustomIcon name="back" size={24} color={colors.primaryText} />
+          <Back size={ICON_SIZE_LG} color={colors.primaryText} />
         </TouchableOpacity>
 
         <View style={styles.siteInfo}>
           <View style={styles.siteAvatar}>
-            <AppText fontSize={FONT_SIZE_MD} bold color={colors.textSecondary}>
-              {siteName.substring(0, 2).toUpperCase()}
-            </AppText>
+          {siteimage ? (
+                  <Image
+                    source={siteimage}
+                    style={styles.brandlogo}
+                  />
+            ) : (
+              <>
+                <AppText
+                  fontSize={FONT_SIZE_MD}
+                  bold
+                  color={colors.textSecondary}>
+                  {siteName.substring(0, 2).toUpperCase()}
+                </AppText>
+              </>
+            )}
           </View>
           <View style={styles.siteTextContainer}>
             <AppText fontSize={FONT_SIZE_XS} medium color={colors.primaryText}>
@@ -83,7 +95,11 @@ const SiteDetail: FC = () => {
         <TouchableOpacity
           style={styles.themeButton}
           onPress={toggleTheme}>
-          <Icon name={isDark ? 'weather-night' : 'white-balance-sunny'} size={ICON_SIZE_MD} color={colors.primaryText} />
+          {isDark ? (
+            <SunIcon size={ICON_SIZE_LG} color={colors.primaryText} />
+          ) : (
+            <MoonIcon size={ICON_SIZE_LG} color={colors.primaryText} />
+          )}
         </TouchableOpacity>
       </View>
 
@@ -137,6 +153,11 @@ const createStyles = (colors: ThemeColors) =>
       borderColor: colors.inputDarkBorder,
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    brandlogo:{
+      width: normalizeWidth(36),
+      height: normalizeHeight(36),
+      borderRadius: 100,
     },
     siteTextContainer: {
       flex: 1,

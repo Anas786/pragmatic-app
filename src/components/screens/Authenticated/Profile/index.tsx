@@ -8,7 +8,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppText, Avatar } from 'src/components/common';
 import { useUserStore } from 'src/hooks/useUserStore';
 import { useThemeStore } from 'src/hooks/useThemeStore';
@@ -23,6 +22,8 @@ import {
   ThemeColors,
 } from 'src/utils';
 import dayjs from 'dayjs';
+import { Back, EmailPlainIcon, InfoIcon, PhoneIcon, ProfileCompanyIcon, UserProfileIcon } from 'src/assets/icons';
+import { IconProps } from 'src/types';
 
 const Profile: FC = () => {
   const navigation = useNavigation();
@@ -31,13 +32,13 @@ const Profile: FC = () => {
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const InfoRow: FC<{
-    icon: string;
+    IconComponent: FC<IconProps>;
     label: string;
     value: string;
-  }> = ({ icon, label, value }) => (
+  }> = ({ IconComponent, label, value }) => (
     <View style={styles.infoRow}>
       <View style={styles.infoIconWrap}>
-        <Icon name={icon} size={ICON_SIZE_LG} color={colors.textSecondary} />
+        <IconComponent size={ICON_SIZE_LG} color={colors.textSecondary} />
       </View>
       <View style={styles.infoText}>
         <AppText fontSize={FONT_SIZE_XXS} color={colors.textSecondary}>
@@ -58,7 +59,7 @@ const Profile: FC = () => {
         <TouchableOpacity
           style={styles.backBtn}
           onPress={() => navigation.goBack()}>
-          <Icon name="arrow-left" size={ICON_SIZE_LG} color={colors.primaryText} />
+          <Back size={ICON_SIZE_LG} color={colors.primaryText}/>
         </TouchableOpacity>
         <AppText fontSize={FONT_SIZE_MD} bold color={colors.primaryText}>
           Profile
@@ -89,16 +90,16 @@ const Profile: FC = () => {
         </View>
 
         <View style={styles.infoCard}>
-          <InfoRow icon="account-outline" label="Full Name" value={user?.name || '-'} />
+          <InfoRow IconComponent={UserProfileIcon} label="Full Name" value={user?.name || '-'} />
           <View style={styles.divider} />
-          <InfoRow icon="email-outline" label="Email" value={user?.email || '-'} />
+          <InfoRow IconComponent={EmailPlainIcon} label="Email" value={user?.email || '-'} />
           <View style={styles.divider} />
-          <InfoRow icon="phone-outline" label="Phone" value={user?.phone || '-'} />
+          <InfoRow IconComponent={PhoneIcon} label="Phone" value={user?.phone || '-'} />
           <View style={styles.divider} />
-          <InfoRow icon="office-building-outline" label="Company" value={user?.company || '-'} />
+          <InfoRow IconComponent={ProfileCompanyIcon} label="Company" value={user?.company || '-'} />
           <View style={styles.divider} />
           <InfoRow
-            icon="calendar-outline"
+            IconComponent={InfoIcon}
             label="Last Login"
             value={user?.login_date ? dayjs(user.login_date).format('DD MMM YYYY, hh:mm A') : '-'}
           />

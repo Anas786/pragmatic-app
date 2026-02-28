@@ -1,4 +1,11 @@
-import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  FC,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Animated as RNAnimated,
   Dimensions,
@@ -8,16 +15,20 @@ import {
   StyleSheet,
   TouchableOpacity,
   View,
-} from 'react-native';
+} from "react-native";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
-} from 'react-native-reanimated';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Svg, { Circle, Path } from 'react-native-svg';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { AppText } from 'src/components/common';
+  useAnimatedReaction,
+} from "react-native-reanimated";
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+} from "react-native-gesture-handler";
+import Svg, { Circle, Path } from "react-native-svg";
+import { AppText } from "src/components/common";
 import {
   ACCENT_GREEN,
   ACCENT_RED,
@@ -28,13 +39,24 @@ import {
   normalizeHeight,
   normalizeWidth,
   ThemeColors,
-} from 'src/utils';
-import { useThemeStore } from 'src/hooks';
-import { sldCenter, sldSources, SLDSourceNode } from 'src/data/mock';
-import ControlButtons from './ControlButtons';
+} from "src/utils";
+import { useThemeStore } from "src/hooks";
+import { sldCenter, sldSources, SLDSourceNode } from "src/data/mock";
+import ControlButtons from "./ControlButtons";
+import { FactoryGif } from "src/assets/gif";
+import { Close } from "src/assets/icons";
+import { scheduleOnRN } from "react-native-worklets";
 
 const RNAnimatedPath = RNAnimated.createAnimatedComponent(Path);
-const { width: SW, height: SH } = Dimensions.get('window');
+const { width: SW, height: SH } = Dimensions.get("window");
+
+interface NodeIconProps {
+  IconComponent: FC<{ size?: number }>;
+  size: number;
+}
+const NodeIcons: FC<NodeIconProps> = ({ IconComponent, size }) => {
+  return <IconComponent size={size} />;
+};
 
 // Layout constants
 const PAD = normalizeWidth(8);
@@ -56,7 +78,7 @@ const getPositions = (vw: number, vh: number) => ({
 
 const getLinePath = (idx: number, vw: number, vh: number) => {
   const pos = getPositions(vw, vh);
-  const keys = ['dg', 'grid', 'solar', 'bess'] as const;
+  const keys = ["dg", "grid", "solar", "bess"] as const;
   const p = pos[keys[idx]];
   const isTop = idx < 2;
   const isLeft = idx % 2 === 0;
@@ -125,25 +147,26 @@ const SolidLine: FC<{
   </>
 );
 
-const SourceCard: FC<{ source: SLDSourceNode; x: number; y: number; colors: ThemeColors }> = ({
-  source,
-  x,
-  y,
-  colors,
-}) => {
+const SourceCard: FC<{
+  source: SLDSourceNode;
+  x: number;
+  y: number;
+  colors: ThemeColors;
+}> = ({ source, x, y, colors }) => {
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
-    <View style={[styles.sourceCard, { left: x, top: y, width: CW, height: CH }]}>
-      <AppText fontSize={FONT_SIZE_SM} bold color={colors.primaryText} numberOfLines={1}>
+    <View
+      style={[styles.sourceCard, { left: x, top: y, width: CW, height: CH }]}>
+      <AppText
+        fontSize={FONT_SIZE_SM}
+        bold
+        color={colors.primaryText}
+        numberOfLines={1}>
         {source.title}
       </AppText>
       <View style={styles.cardContent}>
-        <Icon
-          name={source.iconName}
-          size={normalizeWidth(34)}
-          color={source.iconColor}
-        />
+        <NodeIcons IconComponent={source.iconName} size={normalizeWidth(34)} />
         <View style={styles.metricsCol}>
           {source.metrics.map((m, i) => (
             <View key={i} style={styles.metricRow}>
@@ -174,7 +197,11 @@ const SourceCard: FC<{ source: SLDSourceNode; x: number; y: number; colors: Them
   );
 };
 
-const CenterNode: FC<{ vw: number; vh: number; colors: ThemeColors }> = ({ vw, vh, colors }) => {
+const CenterNode: FC<{ vw: number; vh: number; colors: ThemeColors }> = ({
+  vw,
+  vh,
+  colors,
+}) => {
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
@@ -189,12 +216,12 @@ const CenterNode: FC<{ vw: number; vh: number; colors: ThemeColors }> = ({ vw, v
           borderRadius: CD / 2,
         },
       ]}>
-      <Icon name={sldCenter.iconName} size={normalizeWidth(24)} color={ACCENT_RED} />
+      <FactoryGif size={normalizeWidth(24)} />
       <AppText fontSize={FONT_SIZE_XS} bold color={colors.primaryText}>
         {sldCenter.title}
       </AppText>
       <AppText fontSize={FONT_SIZE_MICRO} color={colors.textSecondary}>
-        Load ={sldCenter.loadValue}
+        Load = {sldCenter.loadValue}
       </AppText>
     </View>
   );
@@ -209,15 +236,12 @@ const DiagramCanvas: FC<{
   colors: ThemeColors;
 }> = ({ vw, vh, dashAnim, colors }) => {
   const positions = getPositions(vw, vh);
-  const keys = ['dg', 'grid', 'solar', 'bess'] as const;
+  const keys = ["dg", "grid", "solar", "bess"] as const;
   const dots = makeGridDots(vw, vh);
 
   return (
     <>
-      <Svg
-        style={StyleSheet.absoluteFill}
-        width={vw}
-        height={vh}>
+      <Svg style={StyleSheet.absoluteFill} width={vw} height={vh}>
         {dots.map((dot, i) => (
           <Circle
             key={i}
@@ -230,7 +254,7 @@ const DiagramCanvas: FC<{
         ))}
         {sldSources.map((source, idx) => {
           const line = getLinePath(idx, vw, vh);
-          if (source.lineStyle === 'animated') {
+          if (source.lineStyle === "animated") {
             return (
               <FlowLine
                 key={source.id}
@@ -254,7 +278,13 @@ const DiagramCanvas: FC<{
       {sldSources.map((source, idx) => {
         const pos = positions[keys[idx]];
         return (
-          <SourceCard key={source.id} source={source} x={pos.x} y={pos.y} colors={colors} />
+          <SourceCard
+            key={source.id}
+            source={source}
+            x={pos.x}
+            y={pos.y}
+            colors={colors}
+          />
         );
       })}
 
@@ -268,8 +298,9 @@ const DiagramCanvas: FC<{
 const SLDDiagram: FC = () => {
   const { colors } = useThemeStore();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const [isLocked, setIsLocked] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isLocked, setIsLocked] = useState<boolean>(false);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [currentZoom, setCurrentZoom] = useState<any>(1);
 
   // Reanimated shared values for gestures
   const translateX = useSharedValue(0);
@@ -278,6 +309,12 @@ const SLDDiagram: FC = () => {
   const savedTX = useSharedValue(0);
   const savedTY = useSharedValue(0);
   const savedScale = useSharedValue(1);
+  useAnimatedReaction(
+    () => scale.value,
+    value => {
+      scheduleOnRN(setCurrentZoom, value);
+    },
+  );
 
   // RN Animated for SVG dash animation
   const dashAnim = useRef(new RNAnimated.Value(0)).current;
@@ -316,7 +353,7 @@ const SLDDiagram: FC = () => {
       savedScale.value = scale.value;
     });
 
-  const gesture = Gesture.Simultaneous(panGesture, pinchGesture);
+  const gesture = Gesture.Simultaneous(pinchGesture, panGesture);
 
   const canvasStyle = useAnimatedStyle(() => ({
     transform: [
@@ -331,12 +368,14 @@ const SLDDiagram: FC = () => {
     const ns = Math.min(savedScale.value + 0.2, 3);
     savedScale.value = ns;
     scale.value = withTiming(ns, { duration: 200 });
+    console.log(savedScale.value);
   }, [scale, savedScale]);
 
   const handleZoomOut = useCallback(() => {
     const ns = Math.max(savedScale.value - 0.2, 0.5);
     savedScale.value = ns;
     scale.value = withTiming(ns, { duration: 200 });
+    console.log(savedScale.value);
   }, [scale, savedScale]);
 
   const handleFit = useCallback(() => {
@@ -364,53 +403,63 @@ const SLDDiagram: FC = () => {
 
   // Normal view
   const renderDiagram = (vw: number, vh: number) => (
-    <View style={[styles.viewport, { width: vw, height: vh }]}>
-      <GestureDetector gesture={gesture}>
+    <GestureDetector gesture={gesture}>
+      <View style={[styles.viewport, { width: vw, height: vh }]}>
         <Animated.View style={[{ width: vw, height: vh }, canvasStyle]}>
           <DiagramCanvas vw={vw} vh={vh} dashAnim={dashAnim} colors={colors} />
         </Animated.View>
-      </GestureDetector>
-      <ControlButtons
-        onZoomIn={handleZoomIn}
-        onZoomOut={handleZoomOut}
-        onToggleLock={handleToggleLock}
-        onFullscreen={handleFullscreen}
-        isLocked={isLocked}
-      />
-    </View>
+        <ControlButtons
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          onToggleLock={handleToggleLock}
+          onFullscreen={handleFullscreen}
+          isLocked={isLocked}
+          currentZoom={currentZoom}
+        />
+      </View>
+    </GestureDetector>
   );
 
   return (
     <View style={styles.container}>
       {renderDiagram(VW, VH)}
-
       <Modal
         visible={isFullscreen}
         animationType="slide"
         statusBarTranslucent
         onRequestClose={handleCloseFullscreen}>
         <StatusBar hidden />
-        <View style={styles.fullscreenWrap}>
-          <View style={[styles.viewport, { width: SW, height: SH, borderRadius: 0 }]}>
-            <GestureDetector gesture={gesture}>
-              <Animated.View style={[{ width: SW, height: SH }, canvasStyle]}>
-                <DiagramCanvas vw={SW} vh={SH} dashAnim={dashAnim} colors={colors} />
-              </Animated.View>
-            </GestureDetector>
-            <ControlButtons
-              onZoomIn={handleZoomIn}
-              onZoomOut={handleZoomOut}
-              onToggleLock={handleToggleLock}
-              onFullscreen={handleCloseFullscreen}
-              isLocked={isLocked}
-            />
-            <TouchableOpacity
-              style={styles.closeBtn}
-              onPress={handleCloseFullscreen}>
-              <Icon name="close" size={normalizeWidth(22)} color={colors.primaryText} />
-            </TouchableOpacity>
+        <GestureHandlerRootView style={{ width: SW, height: SH }}>
+          <View style={styles.fullscreenWrap}>
+            <View style={[styles.viewport, { flex: 1 }]}>
+              <GestureDetector gesture={gesture}>
+                <Animated.View style={[{ width: SW, height: SH }, canvasStyle]}>
+                  <Svg width="100%" height="100%">
+                    <DiagramCanvas
+                      vw={SW}
+                      vh={SH}
+                      dashAnim={dashAnim}
+                      colors={colors}
+                    />
+                  </Svg>
+                </Animated.View>
+              </GestureDetector>
+              <ControlButtons
+                onZoomIn={handleZoomIn}
+                onZoomOut={handleZoomOut}
+                onToggleLock={handleToggleLock}
+                onFullscreen={handleCloseFullscreen}
+                isLocked={isLocked}
+                currentZoom={currentZoom}
+              />
+              <TouchableOpacity
+                style={styles.closeBtn}
+                onPress={handleCloseFullscreen}>
+                <Close size={normalizeWidth(22)} color={colors.primaryText} />
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        </GestureHandlerRootView>
       </Modal>
     </View>
   );
@@ -419,17 +468,17 @@ const SLDDiagram: FC = () => {
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     container: {
-      position: 'relative',
+      position: "relative",
     },
     viewport: {
-      overflow: 'hidden',
+      overflow: "hidden",
       backgroundColor: colors.metricCardBg,
       borderWidth: 1,
       borderColor: colors.inputDarkBorder,
       borderRadius: normalizeWidth(16),
     },
     sourceCard: {
-      position: 'absolute',
+      position: "absolute",
       backgroundColor: colors.cardBg,
       borderWidth: 1,
       borderColor: colors.inputDarkBorder,
@@ -438,8 +487,8 @@ const createStyles = (colors: ThemeColors) =>
       gap: normalizeHeight(6),
     },
     cardContent: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: normalizeWidth(8),
     },
     metricsCol: {
@@ -447,8 +496,8 @@ const createStyles = (colors: ThemeColors) =>
       gap: normalizeHeight(2),
     },
     metricRow: {
-      flexDirection: 'row',
-      alignItems: 'baseline',
+      flexDirection: "row",
+      alignItems: "baseline",
       gap: normalizeWidth(4),
     },
     metricLabel: {
@@ -456,15 +505,15 @@ const createStyles = (colors: ThemeColors) =>
     },
     metricValue: {
       flex: 1,
-      textAlign: 'right',
+      textAlign: "right",
     },
     centerNode: {
-      position: 'absolute',
+      position: "absolute",
       backgroundColor: colors.cardBg,
       borderWidth: 2,
       borderColor: ACCENT_RED,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
       gap: normalizeHeight(2),
     },
     fullscreenWrap: {
@@ -472,7 +521,7 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: colors.fullscreenBg,
     },
     closeBtn: {
-      position: 'absolute',
+      position: "absolute",
       top: normalizeHeight(16),
       right: normalizeWidth(16),
       width: normalizeWidth(40),
@@ -481,8 +530,8 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: colors.controlButtonBg,
       borderWidth: 1,
       borderColor: colors.inputDarkBorder,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
     },
   });
 
