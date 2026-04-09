@@ -261,9 +261,9 @@ const TrendAnalysisCard: FC = () => {
             color1={ACCENT_GREEN}
             color2={ACCENT_RED}
             color3={ACCENT_BLUE}
-            dataPointsColor1={colors.primaryText}
-            dataPointsColor2={colors.primaryText}
-            dataPointsColor3={colors.primaryText}
+            dataPointsColor1={colors.chartpointercolor}
+            dataPointsColor2={colors.chartpointercolor}
+            dataPointsColor3={colors.chartpointercolor}
             startFillColor1={ACCENT_GREEN}
             endFillColor1={TRANSPARENT}
             startOpacity={AREA_START_OPACITY}

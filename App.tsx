@@ -16,6 +16,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Routes } from 'src/routes';
 import { BACKGROUND } from 'src/utils';
 import FlashMessage from 'react-native-flash-message';
+import { useThemeStore } from 'src/hooks';
 
 const MyTheme = {
   ...DefaultTheme,
@@ -39,12 +40,10 @@ function App(): React.JSX.Element {
       setIsReady(true);
     } catch (error) {
       console.error('Error initializing app:', error);
-      // Continue with default settings if initialization fails
       setIsReady(true);
     }
   };
 
-  // Don't render until initialization is complete
   if (!isReady) {
     return <></>;
   }

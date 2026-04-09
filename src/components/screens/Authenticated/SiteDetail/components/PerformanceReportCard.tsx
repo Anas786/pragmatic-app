@@ -207,6 +207,7 @@ const createStyles = (colors: ThemeColors) =>
       width: ACCENT_BAR_WIDTH,
       height: ACCENT_BAR_HEIGHT,
       borderRadius: ACCENT_BAR_RADIUS,
+      
     },
     infoContent: {
       flex: 1,

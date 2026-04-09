@@ -1,4 +1,4 @@
-import React, { FC, useMemo, useState } from "react";
+import React, { FC, useMemo, useRef, useState } from "react";
 import {
   Image,
   ScrollView,
@@ -34,6 +34,7 @@ import {
   SunIcon,
   UpArrow,
 } from "src/assets/icons";
+import { useExitOnBack } from "src/components/common/ExitOnBack";
 
 interface MetricIconProps {
   IconComponent: FC<{ size?: number; color?: string }>;
@@ -60,6 +61,7 @@ const SiteCard: FC<SiteCardProps> = ({
   const { colors } = useThemeStore();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const displayedMetrics = isExpanded ? metrics : metrics.slice(0, 3);
+  useExitOnBack();
 
   return (
     <TouchableOpacity
@@ -70,10 +72,7 @@ const SiteCard: FC<SiteCardProps> = ({
         <View style={styles.siteAvatarContainer}>
           <View style={styles.siteAvatar}>
             {image ? (
-                  <Image
-                    source={image}
-                    style={styles.brandlogo}
-                  />
+              <Image source={image} style={styles.brandlogo} />
             ) : (
               <>
                 <AppText
@@ -342,7 +341,7 @@ const createStyles = (colors: ThemeColors) =>
       alignItems: "center",
       justifyContent: "center",
     },
-    brandlogo:{
+    brandlogo: {
       width: normalizeWidth(36),
       height: normalizeHeight(36),
       borderRadius: 100,
