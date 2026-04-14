@@ -27,6 +27,15 @@ export const useThemeStore = create<ThemeStore>()(
       name: 'theme-storage',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({ isDark: state.isDark }),
+      merge: (persisted, current) => {
+        const persistedState = persisted as Partial<ThemeStore> | undefined;
+        const isDark = persistedState?.isDark ?? current.isDark;
+        return {
+          ...current,
+          isDark,
+          colors: isDark ? darkColors : lightColors,
+        };
+      },
     }
   )
 );

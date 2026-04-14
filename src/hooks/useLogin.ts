@@ -24,11 +24,9 @@ export const useLogin = () => {
   const [loading, setLoading] = useState(false);
 
   const onSubmit = async () => {
-    console.log('Login submitted');
     setLoading(true);
     try {
       // await login(data);
-      console.log('Login successful');
 
       // Set mock user data
       setUser({

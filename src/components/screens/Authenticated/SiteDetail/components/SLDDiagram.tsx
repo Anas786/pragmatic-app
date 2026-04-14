@@ -13,7 +13,6 @@ import {
   Modal,
   StatusBar,
   StyleSheet,
-  TouchableOpacity,
   View,
 } from "react-native";
 import Animated, {
@@ -21,6 +20,7 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
   useAnimatedReaction,
+  runOnJS,
 } from "react-native-reanimated";
 import {
   Gesture,
@@ -44,11 +44,9 @@ import { useThemeStore } from "src/hooks";
 import { sldCenter, sldSources, SLDSourceNode } from "src/data/mock";
 import ControlButtons from "./ControlButtons";
 import { FactoryGif } from "src/assets/gif";
-import { Close } from "src/assets/icons";
-import { scheduleOnRN } from "react-native-worklets";
 
 const RNAnimatedPath = RNAnimated.createAnimatedComponent(Path);
-const { width: SW, height: SH } = Dimensions.get("window");
+const { width: SW } = Dimensions.get("window");
 
 interface NodeIconProps {
   IconComponent: FC<{ size?: number }>;
@@ -312,7 +310,7 @@ const SLDDiagram: FC = () => {
   useAnimatedReaction(
     () => scale.value,
     value => {
-      scheduleOnRN(setCurrentZoom, value);
+      runOnJS(setCurrentZoom)(value);
     },
   );
 
@@ -332,28 +330,33 @@ const SLDDiagram: FC = () => {
     return () => anim.stop();
   }, [dashAnim]);
 
-  // Gestures
-  const panGesture = Gesture.Pan()
-    .enabled(!isLocked)
-    .onUpdate(e => {
-      translateX.value = savedTX.value + e.translationX;
-      translateY.value = savedTY.value + e.translationY;
-    })
-    .onEnd(() => {
-      savedTX.value = translateX.value;
-      savedTY.value = translateY.value;
-    });
+  // Gesture factory — each GestureDetector needs its own gesture instance
+  const makeGesture = useCallback(() => {
+    const pan = Gesture.Pan()
+      .enabled(!isLocked)
+      .onUpdate(e => {
+        translateX.value = savedTX.value + e.translationX;
+        translateY.value = savedTY.value + e.translationY;
+      })
+      .onEnd(() => {
+        savedTX.value = translateX.value;
+        savedTY.value = translateY.value;
+      });
 
-  const pinchGesture = Gesture.Pinch()
-    .enabled(!isLocked)
-    .onUpdate(e => {
-      scale.value = Math.min(Math.max(savedScale.value * e.scale, 0.5), 3);
-    })
-    .onEnd(() => {
-      savedScale.value = scale.value;
-    });
+    const pinch = Gesture.Pinch()
+      .enabled(!isLocked)
+      .onUpdate(e => {
+        scale.value = Math.min(Math.max(savedScale.value * e.scale, 0.5), 3);
+      })
+      .onEnd(() => {
+        savedScale.value = scale.value;
+      });
 
-  const gesture = Gesture.Simultaneous(pinchGesture, panGesture);
+    return Gesture.Simultaneous(pinch, pan);
+  }, [isLocked, translateX, translateY, savedTX, savedTY, scale, savedScale]);
+
+  const normalGesture = useMemo(() => makeGesture(), [makeGesture]);
+  const fullscreenGesture = useMemo(() => makeGesture(), [makeGesture]);
 
   const canvasStyle = useAnimatedStyle(() => ({
     transform: [
@@ -368,14 +371,12 @@ const SLDDiagram: FC = () => {
     const ns = Math.min(savedScale.value + 0.2, 3);
     savedScale.value = ns;
     scale.value = withTiming(ns, { duration: 200 });
-    console.log(savedScale.value);
   }, [scale, savedScale]);
 
   const handleZoomOut = useCallback(() => {
     const ns = Math.max(savedScale.value - 0.2, 0.5);
     savedScale.value = ns;
     scale.value = withTiming(ns, { duration: 200 });
-    console.log(savedScale.value);
   }, [scale, savedScale]);
 
   const handleFit = useCallback(() => {
@@ -403,7 +404,7 @@ const SLDDiagram: FC = () => {
 
   // Normal view
   const renderDiagram = (vw: number, vh: number) => (
-    <GestureDetector gesture={gesture}>
+    <GestureDetector gesture={normalGesture}>
       <View style={[styles.viewport, { width: vw, height: vh }]}>
         <Animated.View style={[{ width: vw, height: vh }, canvasStyle]}>
           <DiagramCanvas vw={vw} vh={vh} dashAnim={dashAnim} colors={colors} />
@@ -429,19 +430,17 @@ const SLDDiagram: FC = () => {
         statusBarTranslucent
         onRequestClose={handleCloseFullscreen}>
         <StatusBar hidden />
-        <GestureHandlerRootView style={{ width: SW, height: SH }}>
+        <GestureHandlerRootView style={{ flex: 1 }}>
           <View style={styles.fullscreenWrap}>
-            <View style={[styles.viewport, { flex: 1 }]}>
-              <GestureDetector gesture={gesture}>
-                <Animated.View style={[{ width: SW, height: SH }, canvasStyle]}>
-                  <Svg width="100%" height="100%">
-                    <DiagramCanvas
-                      vw={SW}
-                      vh={SH}
-                      dashAnim={dashAnim}
-                      colors={colors}
-                    />
-                  </Svg>
+            <View style={[styles.viewport, styles.fullscreenViewport]}>
+              <GestureDetector gesture={fullscreenGesture}>
+                <Animated.View style={[styles.fullscreenCanvas, canvasStyle]}>
+                  <DiagramCanvas
+                    vw={VW}
+                    vh={VH}
+                    dashAnim={dashAnim}
+                    colors={colors}
+                  />
                 </Animated.View>
               </GestureDetector>
               <ControlButtons
@@ -452,11 +451,6 @@ const SLDDiagram: FC = () => {
                 isLocked={isLocked}
                 currentZoom={currentZoom}
               />
-              <TouchableOpacity
-                style={styles.closeBtn}
-                onPress={handleCloseFullscreen}>
-                <Close size={normalizeWidth(22)} color={colors.primaryText} />
-              </TouchableOpacity>
             </View>
           </View>
         </GestureHandlerRootView>
@@ -515,6 +509,17 @@ const createStyles = (colors: ThemeColors) =>
       alignItems: "center",
       justifyContent: "center",
       gap: normalizeHeight(2),
+    },
+    fullscreenViewport: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 0,
+      borderWidth: 0,
+    },
+    fullscreenCanvas: {
+      width: VW,
+      height: VH,
     },
     fullscreenWrap: {
       flex: 1,

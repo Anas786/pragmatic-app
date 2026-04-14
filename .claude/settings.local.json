@@ -12,7 +12,9 @@
       "Bash(fi)",
       "Bash(done)",
       "Bash(do if hexdump -C \"$file\")",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(sips:*)",
+      "Bash(npx react-native-bootsplash:*)"
     ]
   }
 }
