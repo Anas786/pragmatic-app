@@ -19,39 +19,52 @@ import {
   normalizeWidth,
   ThemeColors,
 } from 'src/utils';
-import { useThemeStore } from 'src/hooks';
+import { useSiteConfig, useSiteData, useThemeStore } from 'src/hooks';
 import { DashboardStackParamList } from 'src/types';
-import DropdownSelector from './components/DropdownSelector';
 import ViewsContent from './components/ViewsContent';
-import EmptyState from './components/EmptyState';
+import SiteDetailSkeleton from './components/SiteDetailSkeleton';
 import { Back, MoonIcon, SunIcon } from 'src/assets/icons';
 
 type SiteDetailRouteProp = RouteProp<DashboardStackParamList, 'SiteDetail'>;
 
-type DropdownOption = 'Views' | 'Live Parameter' | 'Alarm';
-
 const SiteDetail: FC = () => {
   const navigation = useNavigation();
   const route = useRoute<SiteDetailRouteProp>();
-  const { siteName, siteSubtitle, siteimage } = route.params;
+  const { siteId, siteName, siteSubtitle, siteimage } = route.params;
   const { isDark, colors, toggleTheme } = useThemeStore();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  const [selectedDropdown, setSelectedDropdown] =
-    useState<DropdownOption | string>('Views');
+  // Subscribe to both per-site cached responses. Dashboard prefetched them
+  // both on tap so they typically resolve instantly. All tabs read from
+  // these same cache entries — single network call per endpoint, many
+  // subscribers across Summary / Cards / Alarms / Trend.
+  //
+  // Both fetches run in parallel:
+  //  - When the user taps a card on Dashboard, useSwitchActiveSite kicks
+  //    off two `prefetchQuery` calls back-to-back without awaiting → both
+  //    HTTP requests are dispatched on the same JS tick.
+  //  - Even without prefetching (deep link, etc.), useSiteData and
+  //    useSiteConfig run on the same render of SiteDetail so React Query
+  //    schedules both queryFns simultaneously.
+  const liveData = useSiteData(siteId);
+  const siteConfig = useSiteConfig(siteId);
 
-  const renderContent = () => {
-    switch (selectedDropdown) {
-      case 'Views':
-        return <ViewsContent />;
-      case 'Live Parameter':
-        return <EmptyState title="Live Parameter" />;
-      case 'Alarm':
-        return <EmptyState title="Alarm" />;
-      default:
-        return null;
-    }
-  };
+  // Show the skeleton only on the *initial* load (no cached data yet).
+  // Background refetches (e.g. silently re-running after staleTime
+  // expires) leave the existing UI in place.
+  const isInitialLoading = liveData.isLoading || siteConfig.isLoading;
+
+  const [logoFailed, setLogoFailed] = useState(false);
+
+  // Logo can arrive as either a remote URL string (from buildSiteLogoUrl)
+  // or — for legacy callers / mock data — a bundled `require()` asset.
+  // Normalize to an Image source object for both shapes.
+  const logoSource =
+    !logoFailed && siteimage
+      ? typeof siteimage === 'string'
+        ? { uri: siteimage }
+        : siteimage
+      : null;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -66,21 +79,20 @@ const SiteDetail: FC = () => {
 
         <View style={styles.siteInfo}>
           <View style={styles.siteAvatar}>
-          {siteimage ? (
-                  <Image
-                    source={siteimage}
-                    style={styles.brandlogo}
-                  />
-            ) : (
-              <>
-                <AppText
-                  fontSize={FONT_SIZE_MD}
-                  bold
-                  color={colors.textSecondary}>
-                  {siteName.substring(0, 2).toUpperCase()}
-                </AppText>
-              </>
-            )}
+          {logoSource ? (
+            <Image
+              source={logoSource}
+              style={styles.brandlogo}
+              onError={() => setLogoFailed(true)}
+            />
+          ) : (
+            <AppText
+              fontSize={FONT_SIZE_MD}
+              bold
+              color={colors.textSecondary}>
+              {siteName.substring(0, 2).toUpperCase()}
+            </AppText>
+          )}
           </View>
           <View style={styles.siteTextContainer}>
             <AppText fontSize={FONT_SIZE_XS} medium color={colors.primaryText}>
@@ -107,12 +119,7 @@ const SiteDetail: FC = () => {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
-        <DropdownSelector
-          selected={selectedDropdown}
-          onSelect={setSelectedDropdown}
-        />
-
-        {renderContent()}
+        {isInitialLoading ? <SiteDetailSkeleton /> : <ViewsContent />}
       </ScrollView>
     </SafeAreaView>
   );

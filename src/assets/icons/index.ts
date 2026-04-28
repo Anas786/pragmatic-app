@@ -50,3 +50,5 @@ export { default as MessageAlertIcon } from "./MessageAlertIcon";
 export { default as RefreshIcon } from "./RefreshIcon";
 export { default as CalendarIcon } from "./CalendarIcon";
 export { default as LockIconOpen } from "./LockIconOpen";
+export { default as EyeIcon } from "./EyeIcon";
+export { default as EyeOffIcon } from "./EyeOffIcon";

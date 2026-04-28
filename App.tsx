@@ -1,6 +1,16 @@
+import 'react-native-get-random-values';
+import 'react-native-url-polyfill/auto';
+import '@aws-amplify/react-native';
+
+// Reactotron MUST connect before configureAmplify() so log lines emitted from
+// the Amplify configure step land in the Reactotron timeline.
 if (__DEV__) {
   require('./ReactotronConfig.ts');
 }
+
+import { configureAmplify } from 'src/config';
+
+configureAmplify();
 /**
  * Sample React Native App
  * https://github.com/facebook/react-native
@@ -18,7 +28,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import RNBootSplash from 'react-native-bootsplash';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Routes } from 'src/routes';
-import { useThemeStore } from 'src/hooks';
+import { useBootstrap, useThemeStore } from 'src/hooks';
 import FlashMessage from 'react-native-flash-message';
 
 const queryClient = new QueryClient();
@@ -26,6 +36,12 @@ const queryClient = new QueryClient();
 function App(): React.JSX.Element {
   const [isReady, setIsReady] = useState(false);
   const { isDark, colors } = useThemeStore();
+
+  // Cold-start bootstrap: fetch /public/config/params-mapping (and any
+  // other public config the app needs) on every app open. The hook is
+  // TTL-gated and AsyncStorage-backed, so it's a no-op when the cache
+  // is fresh and falls back to cached data when offline.
+  useBootstrap();
 
   const navTheme = {
     ...(isDark ? DarkTheme : DefaultTheme),
