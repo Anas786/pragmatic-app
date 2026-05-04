@@ -30,6 +30,7 @@
     "dayjs": "^1.11.13",
     "i18next": "^25.3.1",
     "lodash": "^4.17.21",
+    "lottie-react-native": "^7.3.6",
     "react": "18.3.1",
     "react-hook-form": "^7.54.2",
     "react-native": "0.77.3",

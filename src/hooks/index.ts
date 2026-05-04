@@ -9,3 +9,6 @@ export * from './useBootstrap';
 export * from './useSiteData';
 export * from './useSiteConfig';
 export * from './useSwitchActiveSite';
+export * from './useInverterReport';
+export * from './useEnergyReport';
+export * from './useReportMapping';

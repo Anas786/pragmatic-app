@@ -1,6 +1,8 @@
 /**
- * Site as returned by GET /private/user/site-list.
- * Contract from openapi.yaml#/paths/private/user/site-list/get.
+ * Site as returned by GET /private/user/site-list (paginated v2).
+ * Contract from openapi.yaml#/paths/private/user/site-list/get plus the
+ * paginated extensions (`state`, `dataLastUpdate`) that ship in the
+ * "responseType": "paginated" payload.
  */
 export interface ISite {
   id: string;
@@ -11,6 +13,28 @@ export interface ISite {
   size: number | string;
   /** True when the site has a controller installed. */
   controller: boolean;
+  /** Realtime status string, e.g. "Online" / "Offline". Optional for backwards compat. */
+  state?: string;
+  /** Epoch milliseconds (as a string) of the last data update. */
+  dataLastUpdate?: string;
+}
+
+/**
+ * Paginated envelope returned by /private/user/site-list. The legacy
+ * bare-array response is treated as a one-page slice via
+ * {@link normalizeSiteListResponse} on the networking side.
+ */
+export interface ISiteListPageMeta {
+  source?: 'cache' | 'origin' | string;
+  responseType?: 'paginated' | 'original' | string;
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface ISiteListResponse {
+  metadata: ISiteListPageMeta;
+  data: ISite[];
 }
 
 /**

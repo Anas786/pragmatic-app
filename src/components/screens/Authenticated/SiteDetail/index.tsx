@@ -19,7 +19,12 @@ import {
   normalizeWidth,
   ThemeColors,
 } from 'src/utils';
-import { useSiteConfig, useSiteData, useThemeStore } from 'src/hooks';
+import {
+  useReportMapping,
+  useSiteConfig,
+  useSiteData,
+  useThemeStore,
+} from 'src/hooks';
 import { DashboardStackParamList } from 'src/types';
 import ViewsContent from './components/ViewsContent';
 import SiteDetailSkeleton from './components/SiteDetailSkeleton';
@@ -34,20 +39,18 @@ const SiteDetail: FC = () => {
   const { isDark, colors, toggleTheme } = useThemeStore();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  // Subscribe to both per-site cached responses. Dashboard prefetched them
-  // both on tap so they typically resolve instantly. All tabs read from
-  // these same cache entries — single network call per endpoint, many
-  // subscribers across Summary / Cards / Alarms / Trend.
-  //
-  // Both fetches run in parallel:
-  //  - When the user taps a card on Dashboard, useSwitchActiveSite kicks
-  //    off two `prefetchQuery` calls back-to-back without awaiting → both
-  //    HTTP requests are dispatched on the same JS tick.
-  //  - Even without prefetching (deep link, etc.), useSiteData and
-  //    useSiteConfig run on the same render of SiteDetail so React Query
-  //    schedules both queryFns simultaneously.
+  // Subscribe to all three caches that drive this screen. Dashboard's
+  // `useSwitchActiveSite` already prefetched them in parallel on tap so
+  // these are typically synchronous reads from React Query's in-memory
+  // store. On a deep-link / hard-reload they fire here.
   const liveData = useSiteData(siteId);
   const siteConfig = useSiteConfig(siteId);
+  // Report-mapping is global (not per-site) but the product spec wants
+  // it re-evaluated whenever the active site changes. The eviction +
+  // prefetch happens inside `useSwitchActiveSite`; this subscription
+  // ensures the cache is also primed when SiteDetail is opened directly
+  // (e.g. via a deep link that bypasses Dashboard).
+  useReportMapping();
 
   // Show the skeleton only on the *initial* load (no cached data yet).
   // Background refetches (e.g. silently re-running after staleTime

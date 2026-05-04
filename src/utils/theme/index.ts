@@ -63,6 +63,19 @@ export const GRADIENT_RED = '#FF0000';
 export const GRADIENT_YELLOW = '#E8F80C';
 export const GRADIENT_GREEN = '#08820E';
 
+// Energy-source palette used by Performance Report (pie chart segments,
+// legend pills, info-card accent bar). Matches the brand convention:
+//   solar   → green        (renewable)
+//   wind    → purple
+//   grid    → cyan         (utility import)
+//   genset  → orange       (fossil backup)
+//   battery → dark slate   (storage)
+export const ENERGY_SOURCE_SOLAR = '#22c55e';
+export const ENERGY_SOURCE_WIND = '#8e33ff';
+export const ENERGY_SOURCE_GRID = '#00b8d9';
+export const ENERGY_SOURCE_GENSET = '#ff5630';
+export const ENERGY_SOURCE_BATTERY = '#354D5C';
+
 // Overlay & transparency colors
 export const OVERLAY_DARK = 'rgba(0, 0, 0, 0.85)';
 export const OVERLAY_LIGHT_BORDER = 'rgba(255, 255, 255, 0.15)';

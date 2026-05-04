@@ -6,11 +6,11 @@ import {
   ACCENT_BLUE,
   ACCENT_GREEN,
   ACCENT_RED,
+  daysAgo,
+  DEFAULT_CUSTOM_RANGE_DAYS,
   FONT_SIZE_MICRO,
-  FONT_SIZE_SM,
-  FONT_SIZE_XS,
   FONT_SIZE_XXS,
-  ICON_SIZE_MD,
+  formatDateFilterLabel,
   ICON_SIZE_XS,
   normalizeHeight,
   normalizeWidth,
@@ -19,10 +19,10 @@ import {
   WHITE,
 } from "src/utils";
 import { useThemeStore } from "src/hooks";
-import { formatDate } from "src/utils/format";
 import { trendAnalysisSeries } from "src/data/mock";
 import DateRangePickerModal from "./DateRangePickerModal";
-import { CalendarIcon, Minus, Plus, RefreshIcon } from "src/assets/icons";
+import DateFilterHeader from "./DateFilterHeader";
+import { Minus, Plus } from "src/assets/icons";
 
 const BASE_CHART_WIDTH = normalizeWidth(310);
 const BASE_SPACING = BASE_CHART_WIDTH / 7;
@@ -50,18 +50,20 @@ const BAR_SET_SPACING = normalizeWidth(18);
 const TrendAnalysisCard: FC = () => {
   const { colors } = useThemeStore();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const [startDate, setStartDate] = useState(new Date(2025, 11, 16));
-  const [endDate, setEndDate] = useState(new Date(2025, 11, 17));
+  // Default Custom-filter range: last 15 days through today.
+  const [startDate, setStartDate] = useState(() =>
+    daysAgo(DEFAULT_CUSTOM_RANGE_DAYS),
+  );
+  const [endDate, setEndDate] = useState(() => new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
-
-  const dateRange = `${formatDate(startDate, "DD/MM/YY")} - ${formatDate(
-    endDate,
-    "DD/MM/YY",
-  )}`;
 
   const handleDateApply = (start: Date, end: Date) => {
     setStartDate(start);
     setEndDate(end);
+  };
+
+  const handleRefresh = () => {
+    console.log('Refresh trend analysis');
   };
 
   const [areaZoom, setAreaZoom] = useState(1);
@@ -222,26 +224,12 @@ const TrendAnalysisCard: FC = () => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <AppText fontSize={FONT_SIZE_SM} bold color={colors.primaryText}>
-          Trend Analysis
-        </AppText>
-
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={styles.dateRangeContainer}
-            onPress={() => setShowDatePicker(true)}>
-            <CalendarIcon size={ICON_SIZE_XS} color={colors.dateFilterText} />
-            <AppText fontSize={FONT_SIZE_XS} color={colors.dateFilterText}>
-              {dateRange}
-            </AppText>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.refreshButton}>
-            <RefreshIcon size={ICON_SIZE_MD} color={ACCENT_GREEN} />
-          </TouchableOpacity>
-        </View>
-      </View>
+      <DateFilterHeader
+        title="Trend Analysis"
+        dateLabel={formatDateFilterLabel('Custom', startDate, endDate)}
+        onDatePress={() => setShowDatePicker(true)}
+        onRefresh={handleRefresh}
+      />
 
       <View style={styles.body}>
         {/* Area Chart */}
@@ -352,39 +340,6 @@ const createStyles = (colors: ThemeColors) =>
       borderColor: colors.inputDarkBorder,
       borderRadius: normalizeWidth(16),
       overflow: "hidden",
-    },
-    header: {
-      backgroundColor: colors.inputDarkBg,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      paddingHorizontal: normalizeWidth(16),
-      paddingVertical: normalizeHeight(16),
-    },
-    actions: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: normalizeWidth(10),
-    },
-    dateRangeContainer: {
-      flexDirection: "row",
-      alignItems: "center",
-      backgroundColor: colors.dateFilterBg,
-      borderWidth: 1,
-      borderColor: colors.dateFilterBg,
-      borderRadius: 100,
-      paddingHorizontal: normalizeWidth(14),
-      paddingVertical: normalizeHeight(8),
-      gap: normalizeWidth(8),
-    },
-    refreshButton: {
-      width: normalizeWidth(38),
-      height: normalizeWidth(38),
-      alignItems: "center",
-      justifyContent: "center",
-      borderWidth: 1.5,
-      borderColor: ACCENT_GREEN,
-      borderRadius: 100,
     },
     body: {
       backgroundColor: colors.cardBg,

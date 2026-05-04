@@ -8,4 +8,4 @@ export * from "./jwt";
 export * from "./logger";
 export * from "./site";
 export * from "./cards";
-export * from "./icon-registry";
+export * from "./reports";

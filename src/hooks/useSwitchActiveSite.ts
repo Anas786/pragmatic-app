@@ -1,5 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { getSiteAllData, getSiteConfig } from 'src/networking';
+import {
+  getReportMapping,
+  getSiteAllData,
+  getSiteConfig,
+} from 'src/networking';
+import { REPORT_MAPPING_QUERY_KEY } from './useReportMapping';
 import { siteConfigQueryKey } from './useSiteConfig';
 import { siteDataQueryKey } from './useSiteData';
 
@@ -35,20 +40,26 @@ export const useSwitchActiveSite = () => {
   return (siteId: string) => {
     if (!siteId) return;
 
-    if (lastSiteId && lastSiteId !== siteId) {
+    const isDifferentSite = lastSiteId !== null && lastSiteId !== siteId;
+
+    if (isDifferentSite) {
       // Wipe the previous site's cache so it can't leak into the new
       // screen even briefly while the new fetches are in flight.
-      queryClient.removeQueries({ queryKey: siteDataQueryKey(lastSiteId) });
+      queryClient.removeQueries({ queryKey: siteDataQueryKey(lastSiteId!) });
       queryClient.removeQueries({
-        queryKey: siteConfigQueryKey(lastSiteId),
+        queryKey: siteConfigQueryKey(lastSiteId!),
       });
+      // Per spec: evict the (global) report-mapping cache too so the
+      // Reports tab on the new site reads a freshly-fetched mapping
+      // rather than whatever was cached for the previous site.
+      queryClient.removeQueries({ queryKey: REPORT_MAPPING_QUERY_KEY });
     }
 
     lastSiteId = siteId;
 
-    // Fire both protected-site requests in parallel. After the cache
-    // eviction above (when applicable) these will mint fresh responses
-    // for the new siteId.
+    // Fire all three requests in parallel. The two protected per-site
+    // endpoints + the public report-mapping are independent, so there's
+    // no point sequencing them.
     queryClient.prefetchQuery({
       queryKey: siteDataQueryKey(siteId),
       queryFn: () => getSiteAllData(siteId),
@@ -58,6 +69,13 @@ export const useSwitchActiveSite = () => {
       queryKey: siteConfigQueryKey(siteId),
       queryFn: () => getSiteConfig(siteId),
       staleTime: 1000 * 60 * 30,
+    });
+    queryClient.prefetchQuery({
+      queryKey: REPORT_MAPPING_QUERY_KEY,
+      queryFn: getReportMapping,
+      // staleTime: 0 because we're in the "site changed" lane — we want
+      // a fresh fetch even if the cache slot is technically warm.
+      staleTime: isDifferentSite ? 0 : 1000 * 60 * 60,
     });
   };
 };

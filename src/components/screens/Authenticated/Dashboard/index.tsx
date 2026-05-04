@@ -1,4 +1,12 @@
-import React, { FC, memo, useCallback, useMemo, useRef, useState } from "react";
+import React, {
+  FC,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -219,6 +227,30 @@ interface SiteRow {
 }
 
 /**
+ * Backend ships `dataLastUpdate` as an epoch-ms string (e.g.
+ * `"1777920604000"`). Format it into the same shape as the existing
+ * mock timestamp ("DD/MM/YYYY, hh:mm A") so the row layout stays
+ * consistent. Returns `null` for missing / unparseable values so the
+ * caller can fall back to the mock placeholder until real data arrives.
+ */
+const formatLastUpdate = (raw: string | undefined | null): string | null => {
+  if (!raw) return null;
+  const ms = Number(raw);
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return null;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const day = pad(d.getDate());
+  const month = pad(d.getMonth() + 1);
+  const year = d.getFullYear();
+  let hours = d.getHours();
+  const minutes = pad(d.getMinutes());
+  const ampm = hours >= 12 ? "PM" : "AM";
+  hours = hours % 12 || 12;
+  return `${day}/${month}/${year}, ${pad(hours)}:${minutes} ${ampm}`;
+};
+
+/**
  * Pixel offset after which the "scroll to top" floating button becomes
  * visible. Roughly the height of two-and-a-half site cards on a normal
  * phone, so the button only appears once there's actually somewhere to
@@ -235,7 +267,36 @@ const Dashboard: FC = () => {
   const listRef = useRef<FlatList<SiteRow>>(null);
   const fabOpacity = useRef(new Animated.Value(0)).current;
   const [fabVisible, setFabVisible] = useState(false);
+
+  // Two states for the search box:
+  //   - `query`         : controlled input, updated on every keystroke
+  //                       (instant UI feedback)
+  //   - `debouncedQuery`: trailing-debounced version that drives the
+  //                       API call. 350 ms is enough to avoid firing a
+  //                       request per keystroke without feeling laggy.
+  //
+  // Search only triggers once the user has typed at least 4 characters.
+  // Below that we keep `debouncedQuery` empty so the hook reverts to the
+  // unfiltered list — no wasted requests on 1–3 char inputs.
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+
+  const SEARCH_MIN_LEN = 4;
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (trimmed.length < SEARCH_MIN_LEN) {
+      // Drop any pending debounced search and revert to the full list
+      // immediately. Avoids a stale "pak" request landing after the
+      // user has backspaced down to "pa".
+      setDebouncedQuery(prev => (prev === "" ? prev : ""));
+      return;
+    }
+    const handle = setTimeout(() => {
+      setDebouncedQuery(trimmed);
+    }, 350);
+    return () => clearTimeout(handle);
+  }, [query]);
 
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -259,13 +320,20 @@ const Dashboard: FC = () => {
     listRef.current?.scrollToOffset({ offset: 0, animated: true });
   }, []);
 
+  // Search is server-side now — `q` is part of the React Query cache
+  // key so each search caches its own paginated stream. Empty string ⇒
+  // no `q` param sent, full list returned.
   const {
-    data: sites = [],
+    sites,
+    total,
     isLoading,
     isFetching,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
     refetch,
     error,
-  } = useSiteList();
+  } = useSiteList({ q: debouncedQuery });
 
   /**
    * Pre-build the full row dataset (real site + mock placeholder fields)
@@ -273,6 +341,10 @@ const Dashboard: FC = () => {
    *  - keeps `metrics` array references stable across re-renders so the
    *    memoized SiteCard skips re-rendering when the list re-renders,
    *  - moves the work off the render path of every visible card.
+   *
+   * Real fields used: id, name, size, controller, logo_ext, state,
+   * dataLastUpdate. Live-telemetry metrics still cycle through the mock
+   * dataset until that endpoint lands.
    */
   const rows: SiteRow[] = useMemo(
     () =>
@@ -282,30 +354,16 @@ const Dashboard: FC = () => {
           site,
           metrics: [PV_SIZE_METRIC(site.size), ...mock.metrics],
           efficiency: mock.efficiency,
-          timestamp: mock.timestamp,
+          timestamp: formatLastUpdate(site.dataLastUpdate) ?? mock.timestamp,
         };
       }),
     [sites],
   );
 
-  /**
-   * Local search — filter the prebuilt rows by `site.name` whenever the
-   * query changes. Case-insensitive substring match. Even at 350 rows this
-   * runs in well under a millisecond, so we don't bother debouncing.
-   *
-   * Memoized off `rows` + `query` so the array reference is stable across
-   * unrelated re-renders, which keeps the FlatList from re-evaluating its
-   * memoized cells.
-   */
-  const filteredRows: SiteRow[] = useMemo(() => {
-    const trimmed = query.trim().toLowerCase();
-    if (!trimmed) return rows;
-    return rows.filter(({ site }) =>
-      site.name.toLowerCase().includes(trimmed),
-    );
-  }, [rows, query]);
-
-  const clearSearch = useCallback(() => setQuery(""), []);
+  const clearSearch = useCallback(() => {
+    setQuery("");
+    setDebouncedQuery("");
+  }, []);
 
   const switchActiveSite = useSwitchActiveSite();
 
@@ -352,6 +410,61 @@ const Dashboard: FC = () => {
     () => <View style={styles.separator} />,
     [styles.separator],
   );
+
+  /**
+   * Infinite-scroll trigger. FlatList fires `onEndReached` once per
+   * approach to the end-of-list threshold; the hook itself dedupes
+   * concurrent calls via React Query's `isFetchingNextPage`. Pagination
+   * is enabled during search too — the server returns a paginated
+   * stream of `q`-matching sites.
+   */
+  const handleEndReached = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  const ListFooter = useCallback(() => {
+    if (isFetchingNextPage) {
+      return (
+        <View style={styles.footerLoader}>
+          <ActivityIndicator size="small" color={colors.primaryText} />
+          <AppText
+            fontSize={FONT_SIZE_XXS}
+            color={colors.textSecondary}
+            style={styles.footerLoaderText}>
+            Loading more sites...
+          </AppText>
+        </View>
+      );
+    }
+    // Once we've loaded everything for the current (filtered or
+    // unfiltered) result set, surface a soft confirmation.
+    if (!hasNextPage && sites.length > 0 && !isLoading) {
+      return (
+        <View style={styles.footerLoader}>
+          <AppText
+            fontSize={FONT_SIZE_XXS}
+            color={colors.textSecondary}
+            center>
+            {debouncedQuery
+              ? `${total} site${total === 1 ? '' : 's'} match "${debouncedQuery}"`
+              : `All ${total} sites loaded`}
+          </AppText>
+        </View>
+      );
+    }
+    return null;
+  }, [
+    isFetchingNextPage,
+    hasNextPage,
+    sites.length,
+    isLoading,
+    debouncedQuery,
+    total,
+    colors,
+    styles,
+  ]);
 
   /**
    * Search bar — sticky header. FlatList pins index 0 of children
@@ -431,8 +544,8 @@ const Dashboard: FC = () => {
         </View>
       );
     }
-    // The list has data but the active search filtered everything out.
-    if (rows.length > 0 && filteredRows.length === 0) {
+    // Server returned zero rows for the active search query.
+    if (debouncedQuery.length > 0) {
       return (
         <View style={styles.statusContainer}>
           <AppText
@@ -440,7 +553,7 @@ const Dashboard: FC = () => {
             medium
             color={colors.primaryText}
             center>
-            No sites match "{query.trim()}"
+            No sites match "{debouncedQuery}"
           </AppText>
           <TouchableOpacity onPress={clearSearch} style={styles.retryBtn}>
             <AppText fontSize={FONT_SIZE_XS} medium color={PROGRESS_FILLED}>
@@ -460,9 +573,7 @@ const Dashboard: FC = () => {
   }, [
     isLoading,
     error,
-    rows.length,
-    filteredRows.length,
-    query,
+    debouncedQuery,
     clearSearch,
     colors,
     styles,
@@ -516,12 +627,13 @@ const Dashboard: FC = () => {
 
       <FlatList
         ref={listRef}
-        data={filteredRows}
+        data={rows}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
         ItemSeparatorComponent={ItemSeparator}
         ListHeaderComponent={ListHeader}
         ListEmptyComponent={ListEmpty}
+        ListFooterComponent={ListFooter}
         stickyHeaderIndices={[0]}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
@@ -531,15 +643,20 @@ const Dashboard: FC = () => {
         keyboardDismissMode="on-drag"
         refreshControl={
           <RefreshControl
-            refreshing={!isLoading && isFetching}
+            refreshing={!isLoading && isFetching && !isFetchingNextPage}
             onRefresh={refetch}
             tintColor={colors.primaryText}
           />
         }
         onScroll={handleScroll}
         scrollEventThrottle={16}
-        // ---- virtualization tuning for ~350 cards ----
-        initialNumToRender={6}
+        // Pagination: fetch the next page when the list is half a viewport
+        // away from the end. 0.5 is conservative enough that on slow
+        // networks the spinner appears before the user hits a dead-end.
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.5}
+        // ---- virtualization tuning ----
+        initialNumToRender={8}
         maxToRenderPerBatch={6}
         windowSize={7}
         removeClippedSubviews
@@ -739,6 +856,14 @@ const createStyles = (colors: ThemeColors) =>
       paddingVertical: normalizeHeight(40),
       alignItems: "center",
       gap: normalizeHeight(8),
+    },
+    footerLoader: {
+      paddingVertical: normalizeHeight(20),
+      alignItems: "center",
+      gap: normalizeHeight(6),
+    },
+    footerLoaderText: {
+      marginTop: normalizeHeight(4),
     },
     statusText: {
       marginTop: normalizeHeight(4),

@@ -17,7 +17,6 @@ export { default as TermsIcon } from "./TermsIcon";
 export { default as HelpIcon } from "./HelpIcon";
 export { default as LogoutIcon } from "./LogoutIcon";
 export { default as EmailCircleIcon } from "./EmailCircleIcon";
-export { default as PhoneCircleIcon } from "./PhoneCircleIcon";
 export { default as Trash } from "./Trash";
 export { default as Magnify } from "./Magnify";
 export { default as Filter } from "./Filter";

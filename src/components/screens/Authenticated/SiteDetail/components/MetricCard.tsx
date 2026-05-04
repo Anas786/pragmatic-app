@@ -1,33 +1,40 @@
-import React, { FC, useMemo } from 'react';
+import React, { FC, ReactNode, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { AppText } from 'src/components/common';
 import {
   FONT_SIZE_SM,
-  FONT_SIZE_XS,
-  FONT_SIZE_XXS,
-  ICON_SIZE_XL,
   normalizeHeight,
   normalizeWidth,
   ThemeColors,
 } from 'src/utils';
 import { useThemeStore } from 'src/hooks';
-import { SummaryMetricItem } from 'src/data/mock/summary';
+import DataCard from './DataCard';
+
+export interface MetricCardItem {
+  label: string;
+  /** Already-formatted display value, e.g. "26,463.61" or "—". */
+  value: string;
+  unit?: string;
+  accentColor: string;
+  /**
+   * Pre-rendered icon node (typically an `<Image>` element for a GIF, but
+   * any ReactNode works). Caller controls sizing/styling so each icon
+   * type — GIF, SVG, custom — composes the same way.
+   */
+  icon?: ReactNode;
+}
 
 interface MetricCardProps {
   title: string;
-  items: SummaryMetricItem[];
+  items: MetricCardItem[];
 }
 
-interface SummaryCardIconProps {
-  IconComponent: FC<{ size?: number; color?: string }>;
-  size: number;
-  color: string;
-}
-
-const SummaryCardICon: FC<SummaryCardIconProps> = ({ IconComponent, size, color }) => {
-  return <IconComponent size={size} color={color} />;
-};
-
+/**
+ * Sectioned panel of {@link DataCard} rows, used by SummaryView for
+ * "Yield" and "Environmental Benefits" groupings. The component itself
+ * is just layout — value formatting + live-data resolution happens in
+ * the caller.
+ */
 const MetricCard: FC<MetricCardProps> = ({ title, items }) => {
   const { colors } = useThemeStore();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -41,30 +48,18 @@ const MetricCard: FC<MetricCardProps> = ({ title, items }) => {
       </View>
 
       <View style={styles.body}>
-        {items.map((item, index) => (
-          <View key={index} style={styles.metricRow}>
-            <View
-              style={[styles.accentBar, { backgroundColor: item.accentColor }]}
+        <View style={styles.list}>
+          {items.map((item, index) => (
+            <DataCard
+              key={`${item.label}:${index}`}
+              label={item.label}
+              value={item.value}
+              unit={item.unit}
+              accentColor={item.accentColor}
+              icon={item.icon}
             />
-            <View style={styles.metricContent}>
-              <AppText fontSize={FONT_SIZE_XXS} color={colors.textSecondary}>
-                {item.label}
-              </AppText>
-              <View style={styles.valueRow}>
-                <AppText fontSize={FONT_SIZE_SM} medium color={colors.primaryText}>
-                  {item.value}
-                </AppText>
-                {item.unit && (
-                  <AppText fontSize={FONT_SIZE_XS} color={colors.textSecondary}>
-                    {' '}
-                    {item.unit}
-                  </AppText>
-                )}
-              </View>
-            </View>
-            <SummaryCardICon IconComponent={item.iconName} size={ICON_SIZE_XL} color={item.iconColor} />
-          </View>
-        ))}
+          ))}
+        </View>
       </View>
     </View>
   );
@@ -86,31 +81,9 @@ const createStyles = (colors: ThemeColors) =>
     body: {
       backgroundColor: colors.cardBg,
       padding: normalizeWidth(12),
-      gap: normalizeHeight(12),
     },
-    metricRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: colors.metricCardBg,
-      borderWidth: 1,
-      borderColor: colors.inputDarkBorder,
-      borderRadius: 12,
-      paddingVertical: normalizeHeight(14),
-      paddingHorizontal: normalizeWidth(14),
-      gap: normalizeWidth(12),
-    },
-    accentBar: {
-      width: normalizeWidth(3),
-      height: normalizeHeight(36),
-      borderRadius: 2,
-    },
-    metricContent: {
-      flex: 1,
-      gap: normalizeHeight(4),
-    },
-    valueRow: {
-      flexDirection: 'row',
-      alignItems: 'baseline',
+    list: {
+      gap: normalizeHeight(10),
     },
   });
 
