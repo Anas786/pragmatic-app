@@ -33,7 +33,6 @@ import {
   FONT_SIZE_SM,
   FONT_SIZE_XS,
   FONT_SIZE_XXS,
-  GRADIENT_YELLOW,
   ICON_SIZE_LG,
   ICON_SIZE_MD,
   normalizeHeight,
@@ -41,15 +40,15 @@ import {
   PROGRESS_FILLED,
   ThemeColors,
 } from "src/utils";
+import { resolveLottieIcon } from "src/assets/gif";
 import {
   useSiteList,
   useSwitchActiveSite,
   useThemeStore,
 } from "src/hooks";
-import { DashboardStackParamList, ISite } from "src/types";
-import { mockSitesData, MetricItem } from "src/data/mock";
+import { DashboardStackParamList, ISite, ISiteCard } from "src/types";
+import { mockSitesData } from "src/data/mock";
 import {
-  ChartIcon,
   Close,
   DownArrow,
   Magnify,
@@ -58,22 +57,26 @@ import {
   UpArrow,
 } from "src/assets/icons";
 
-interface MetricIconProps {
-  IconComponent: FC<{ size?: number; color?: string }>;
-  size: number;
-  color: string;
-}
-const MetricIcon: FC<MetricIconProps> = ({ IconComponent, size, color }) => {
-  return <IconComponent size={size} color={color} />;
-};
-
 interface SiteCardProps {
   site: ISite;
-  metrics: MetricItem[];
+  cards: ISiteCard[];
   efficiency: number;
   timestamp: string;
   onPress: () => void;
 }
+
+/**
+ * Backend ships card values either as a finite number or the literal
+ * string `"NA"` when the source has no telemetry. Numbers display at
+ * 2 decimal places; everything else passes through verbatim so the user
+ * can tell the difference between "0.00" and "no data".
+ */
+const formatCardValue = (value: ISiteCard["value"]): string => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value.toFixed(2);
+  }
+  return String(value);
+};
 
 const formatSize = (size: ISite["size"]): string => {
   const numeric = typeof size === "string" ? parseFloat(size) : size;
@@ -88,12 +91,12 @@ const formatSize = (size: ISite["size"]): string => {
  * the only inputs that matter.
  */
 const SiteCard: FC<SiteCardProps> = memo(
-  ({ site, metrics, efficiency, timestamp, onPress }) => {
+  ({ site, cards, efficiency, timestamp, onPress }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const [logoFailed, setLogoFailed] = useState(false);
     const { colors } = useThemeStore();
     const styles = useMemo(() => createStyles(colors), [colors]);
-    const displayedMetrics = isExpanded ? metrics : metrics.slice(0, 3);
+    const displayedCards = isExpanded ? cards : cards.slice(0, 3);
 
     const logoUrl = !logoFailed ? buildSiteLogoUrl(site) : null;
 
@@ -135,31 +138,51 @@ const SiteCard: FC<SiteCardProps> = memo(
         </View>
 
         <View style={styles.metricsContainer}>
-          {displayedMetrics.map((metric, index) => (
-            <View key={`${site.id}-${index}`} style={styles.metricCard}>
-              <View style={styles.metricHeader}>
-                <MetricIcon
-                  IconComponent={metric.IconComponent}
-                  size={ICON_SIZE_MD}
-                  color={metric.color}
-                />
-                <AppText fontSize={FONT_SIZE_XXS} color={colors.primaryText}>
-                  {metric.label}
-                </AppText>
+          {displayedCards.map((card, index) => {
+            const lottie = resolveLottieIcon(card.icon);
+            return (
+              <View key={`${site.id}-${index}`} style={styles.metricCard}>
+                <View style={styles.metricHeader}>
+                  {lottie ? (
+                    <Image
+                      source={lottie.path}
+                      style={styles.metricIcon}
+                      resizeMode="contain"
+                      accessibilityLabel={lottie.name}
+                    />
+                  ) : (
+                    <View
+                      style={[
+                        styles.metricColorDot,
+                        { backgroundColor: card.color },
+                      ]}
+                    />
+                  )}
+                  <AppText
+                    fontSize={FONT_SIZE_XXS}
+                    color={colors.primaryText}
+                    numberOfLines={1}
+                    style={styles.metricLabel}>
+                    {card.name}
+                  </AppText>
+                </View>
+                <View style={styles.metricValue}>
+                  <AppText
+                    fontSize={FONT_SIZE_XS}
+                    semi_bold
+                    color={colors.primaryText}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.7}>
+                    {formatCardValue(card.value)}
+                  </AppText>
+                  <AppText fontSize={FONT_SIZE_XXS} color={colors.textSecondary}>
+                    {card.unit}
+                  </AppText>
+                </View>
               </View>
-              <View style={styles.metricValue}>
-                <AppText
-                  fontSize={FONT_SIZE_XS}
-                  semi_bold
-                  color={colors.primaryText}>
-                  {metric.value}
-                </AppText>
-                <AppText fontSize={FONT_SIZE_XXS} color={colors.textSecondary}>
-                  {metric.unit}
-                </AppText>
-              </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
 
         <View style={styles.efficiencyContainer}>
@@ -178,7 +201,7 @@ const SiteCard: FC<SiteCardProps> = memo(
           </View>
         </View>
 
-        {metrics.length > 3 && (
+        {cards.length > 3 && (
           <TouchableOpacity
             style={styles.expandButton}
             onPress={e => {
@@ -200,28 +223,15 @@ const SiteCard: FC<SiteCardProps> = memo(
   },
   (prev, next) =>
     prev.site === next.site &&
-    prev.metrics === next.metrics &&
+    prev.cards === next.cards &&
     prev.efficiency === next.efficiency &&
     prev.timestamp === next.timestamp &&
     prev.onPress === next.onPress,
 );
 
-/**
- * For fields the API doesn't expose yet (efficiency, timestamp, live metrics)
- * we cycle through the mock dataset so each real site gets a deterministic
- * placeholder until the live-telemetry endpoints are wired.
- */
-const PV_SIZE_METRIC = (size: ISite["size"]): MetricItem => ({
-  label: "PV Size",
-  value: formatSize(size),
-  unit: "kW",
-  IconComponent: ChartIcon,
-  color: GRADIENT_YELLOW,
-});
-
 interface SiteRow {
   site: ISite;
-  metrics: MetricItem[];
+  cards: ISiteCard[];
   efficiency: number;
   timestamp: string;
 }
@@ -352,7 +362,7 @@ const Dashboard: FC = () => {
         const mock = mockSitesData[index % mockSitesData.length];
         return {
           site,
-          metrics: [PV_SIZE_METRIC(site.size), ...mock.metrics],
+          cards: site.cards ?? [],
           efficiency: mock.efficiency,
           timestamp: formatLastUpdate(site.dataLastUpdate) ?? mock.timestamp,
         };
@@ -395,7 +405,7 @@ const Dashboard: FC = () => {
     ({ item }) => (
       <SiteCard
         site={item.site}
-        metrics={item.metrics}
+        cards={item.cards}
         efficiency={item.efficiency}
         timestamp={item.timestamp}
         onPress={() => handleCardPress(item)}
@@ -816,6 +826,18 @@ const createStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       alignItems: "center",
       gap: normalizeWidth(4),
+    },
+    metricIcon: {
+      width: normalizeWidth(20),
+      height: normalizeWidth(20),
+    },
+    metricColorDot: {
+      width: normalizeWidth(10),
+      height: normalizeWidth(10),
+      borderRadius: normalizeWidth(5),
+    },
+    metricLabel: {
+      flex: 1,
     },
     metricValue: {
       flexDirection: "row",

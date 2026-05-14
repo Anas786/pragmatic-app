@@ -1,8 +1,27 @@
 /**
+ * Per-site summary card shipped inline in the paginated site-list response.
+ * Backend returns one card per energy source (Solar / Genset / Grid /
+ * Battery / Wind). `value` is either a number or the literal string `"NA"`
+ * when telemetry is unavailable.
+ */
+export interface ISiteCard {
+  /** Hex string, e.g. "#00ff00". Used as the icon/value accent. */
+  color: string;
+  /** Backend icon key — resolved via {@link resolveLottieIcon}. */
+  icon: string;
+  /** Human-readable label, e.g. "Solar Energy Today". */
+  name: string;
+  /** Unit suffix, e.g. "kWh". */
+  unit: string;
+  /** Numeric reading, or `"NA"` when the source has no data. */
+  value: number | string;
+}
+
+/**
  * Site as returned by GET /private/user/site-list (paginated v2).
  * Contract from openapi.yaml#/paths/private/user/site-list/get plus the
- * paginated extensions (`state`, `dataLastUpdate`) that ship in the
- * "responseType": "paginated" payload.
+ * paginated extensions (`state`, `dataLastUpdate`, `cards`) that ship in
+ * the "responseType": "paginated" payload.
  */
 export interface ISite {
   id: string;
@@ -17,6 +36,8 @@ export interface ISite {
   state?: string;
   /** Epoch milliseconds (as a string) of the last data update. */
   dataLastUpdate?: string;
+  /** Per-source summary cards. Empty/missing when the backend has no data for the site. */
+  cards?: ISiteCard[];
 }
 
 /**

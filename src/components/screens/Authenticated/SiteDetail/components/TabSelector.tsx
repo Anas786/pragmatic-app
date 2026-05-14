@@ -13,6 +13,7 @@ import { useThemeStore } from 'src/hooks';
 import { IconProps } from 'src/types';
 import {
   AlarmsTabIcon,
+  BoltIcon,
   CardsTabIcon,
   ChartIcon,
   GridIcon,
@@ -23,6 +24,7 @@ import {
 export type TabOption =
   | 'Summary'
   | 'Cards'
+  | 'Live'
   | 'Alarms'
   | 'Trend'
   | 'Reports'
@@ -51,6 +53,10 @@ const TabIcons: FC<TabIconProps> = ({ IconComponent, size, color }) => {
 const tabs: TabConfig[] = [
   { name: 'Summary', iconName: SummaryTabIcon },
   { name: 'Cards', iconName: CardsTabIcon },
+  // Live parameters — flat list of every real-time telemetry reading the
+  // backend ships in `live.data.live`. BoltIcon is a stand-in until a
+  // dedicated LiveTabIcon ships.
+  { name: 'Live', iconName: BoltIcon },
   { name: 'Alarms', iconName: AlarmsTabIcon },
   { name: 'Trend', iconName: TrendTabIcon },
   // Reports holds analytics cards (Performance Report, energy

@@ -4,6 +4,7 @@ import { normalizeHeight } from 'src/utils';
 import TabSelector, { TabOption } from './TabSelector';
 import SummaryView from './SummaryView';
 import CardsView from './CardsView';
+import LiveParameterView from './LiveParameterView';
 import AlarmsView from './AlarmsView';
 import TrendView from './TrendView';
 import ReportsView from './ReportsView';
@@ -18,6 +19,8 @@ const ViewsContent: FC = () => {
         return <SummaryView />;
       case 'Cards':
         return <CardsView />;
+      case 'Live':
+        return <LiveParameterView />;
       case 'Alarms':
         return <AlarmsView />;
       case 'Trend':
