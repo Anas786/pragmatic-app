@@ -1,26 +1,49 @@
 import React, { FC, useEffect, useMemo } from 'react';
 import { Image, StatusBar, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { CommonActions, useNavigation } from '@react-navigation/native';
 import { AppText } from 'src/components/common';
 import { Logo } from 'src/assets';
 import { useThemeStore } from 'src/hooks/useThemeStore';
+import { useAuth } from 'src/hooks';
 import { normalizeWidth, normalizeHeight, FONT_SIZE_MD, ThemeColors } from 'src/utils';
-import { OnboardingStackParamList } from 'src/types';
+
+const MIN_SPLASH_MS = 1200;
 
 const Splash: FC = () => {
-  const navigation = useNavigation<NativeStackNavigationProp<OnboardingStackParamList>>();
+  const navigation = useNavigation<any>();
   const { colors } = useThemeStore();
+  const { status } = useAuth();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   useEffect(() => {
+    if (status === 'loading') return;
+
     const timer = setTimeout(() => {
-      navigation.replace('Login');
-    }, 3000);
+      if (status === 'authenticated') {
+        navigation.dispatch(
+          CommonActions.reset({
+            index: 0,
+            routes: [{ name: 'Drawer' }],
+          }),
+        );
+      } else {
+        navigation.dispatch(
+          CommonActions.reset({
+            index: 0,
+            routes: [
+              {
+                name: 'Onboarding',
+                state: { routes: [{ name: 'Login' }] },
+              },
+            ],
+          }),
+        );
+      }
+    }, MIN_SPLASH_MS);
 
     return () => clearTimeout(timer);
-  }, [navigation]);
+  }, [navigation, status]);
 
   return (
     <SafeAreaView style={styles.container}>

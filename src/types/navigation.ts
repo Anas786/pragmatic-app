@@ -25,6 +25,11 @@ export type DashboardStackParamList = {
     siteName: string;
     siteSubtitle: string;
     efficiency: number;
-    siteimage: any;
+    /**
+     * Public CDN URL for the site logo (built via `buildSiteLogoUrl`),
+     * or null when the site has no logo. SiteDetail falls back to the
+     * site's two-letter initials in that case.
+     */
+    siteimage: string | null;
   };
 };

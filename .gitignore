@@ -77,3 +77,4 @@ yarn-error.log
 #committed files
 package.json
 package-lock.json
+.env

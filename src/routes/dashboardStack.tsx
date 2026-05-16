@@ -7,7 +7,7 @@ const Stack = createNativeStackNavigator<DashboardStackParamList>();
 
 export const DashboardStack = (): ReactElement => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
-    <Stack.Screen component={Dashboard} name="Dashboard" options={{gestureEnabled: false}}/>
+    <Stack.Screen component={Dashboard} name="Dashboard" />
     <Stack.Screen component={SiteDetail} name="SiteDetail" />
   </Stack.Navigator>
 );

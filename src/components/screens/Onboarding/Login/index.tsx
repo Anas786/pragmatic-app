@@ -1,6 +1,7 @@
 import React, { FC, useMemo, useState } from "react";
 import { Controller } from "react-hook-form";
 import {
+  ActivityIndicator,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -24,14 +25,27 @@ import {
   FONT_SIZE_MD,
   ICON_SIZE_MD,
   ThemeColors,
-  ICON_SIZE_XS,
 } from "src/utils";
 import { Logo } from "src/assets";
-import { EmailPlainIcon, PasswordIcon, Tick } from "src/assets/icons";
+import {
+  EmailPlainIcon,
+  EyeIcon,
+  EyeOffIcon,
+  PasswordIcon,
+} from "src/assets/icons";
 
 const Login: FC = () => {
-  const { control, onSubmit, loading } = useLogin();
-  const [rememberMe, setRememberMe] = useState(false);
+  const {
+    control,
+    onSubmit,
+    loading,
+    requiresNewPassword,
+    newPasswordControl,
+    onSubmitNewPassword,
+    newPasswordErrors,
+  } = useLogin();
+  const [showPassword, setShowPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const { colors } = useThemeStore();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -47,7 +61,23 @@ const Login: FC = () => {
     </View>
   );
 
-  const CheckIcon = () => <Tick size={ICON_SIZE_XS} />;
+  const PasswordVisibilityToggle: FC<{
+    visible: boolean;
+    onToggle: () => void;
+  }> = ({ visible, onToggle }) => (
+    <TouchableOpacity
+      onPress={onToggle}
+      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      accessibilityRole="button"
+      accessibilityLabel={visible ? "Hide password" : "Show password"}
+      style={styles.iconContainer}>
+      {visible ? (
+        <EyeOffIcon size={ICON_SIZE_MD} color={colors.textSecondary} />
+      ) : (
+        <EyeIcon size={ICON_SIZE_MD} color={colors.textSecondary} />
+      )}
+    </TouchableOpacity>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -87,73 +117,130 @@ const Login: FC = () => {
             </View>
 
             <View style={styles.formContainer}>
-              <View style={styles.inputsContainer}>
-                <Controller
-                  control={control}
-                  name="email"
-                  render={({ field: { onChange, onBlur, value } }) => (
-                    <View style={styles.inputWrapper}>
-                      <EmailIcon />
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Email or Phone"
-                        placeholderTextColor={colors.textSecondary}
-                        value={value}
-                        onChangeText={onChange}
-                        onBlur={onBlur}
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                      />
-                    </View>
-                  )}
-                />
+              {!requiresNewPassword ? (
+                <>
+                  <View style={styles.inputsContainer}>
+                    <Controller
+                      control={control}
+                      name="email"
+                      render={({ field: { onChange, onBlur, value } }) => (
+                        <View style={styles.inputWrapper}>
+                          <EmailIcon />
+                          <TextInput
+                            style={styles.input}
+                            placeholder="Email or Phone"
+                            placeholderTextColor={colors.textSecondary}
+                            value={value}
+                            onChangeText={onChange}
+                            onBlur={onBlur}
+                            keyboardType="email-address"
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                            editable={!loading}
+                          />
+                        </View>
+                      )}
+                    />
 
-                <Controller
-                  control={control}
-                  name="password"
-                  render={({ field: { onChange, onBlur, value } }) => (
-                    <View style={styles.inputWrapper}>
-                      <LockIcon />
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Password"
-                        placeholderTextColor={colors.textSecondary}
-                        value={value}
-                        onChangeText={onChange}
-                        onBlur={onBlur}
-                        secureTextEntry
-                      />
-                    </View>
-                  )}
-                />
-
-                <TouchableOpacity
-                  style={styles.rememberMeContainer}
-                  onPress={() => setRememberMe(prev => !prev)}>
-                  <View
-                    style={[
-                      styles.checkbox,
-                      rememberMe && styles.checkboxFilled,
-                    ]}>
-                    {rememberMe && <CheckIcon />}
+                    <Controller
+                      control={control}
+                      name="password"
+                      render={({ field: { onChange, onBlur, value } }) => (
+                        <View style={styles.inputWrapper}>
+                          <LockIcon />
+                          <TextInput
+                            style={styles.input}
+                            placeholder="Password"
+                            placeholderTextColor={colors.textSecondary}
+                            value={value}
+                            onChangeText={onChange}
+                            onBlur={onBlur}
+                            secureTextEntry={!showPassword}
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                            editable={!loading}
+                          />
+                          <PasswordVisibilityToggle
+                            visible={showPassword}
+                            onToggle={() => setShowPassword(prev => !prev)}
+                          />
+                        </View>
+                      )}
+                    />
                   </View>
+
+                  <TouchableOpacity
+                    style={styles.loginButton}
+                    onPress={onSubmit}
+                    disabled={loading}>
+                    {loading ? (
+                      <ActivityIndicator color={WHITE} />
+                    ) : (
+                      <AppText color={WHITE} fontSize={FONT_SIZE_MD} semi_bold>
+                        Login
+                      </AppText>
+                    )}
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
                   <AppText
                     color={colors.primaryText}
                     fontSize={FONT_SIZE_XS}
-                    medium>
-                    Remember Me
+                    center
+                    style={styles.subtitle}>
+                    Your account requires a new password. Please set one to
+                    continue.
                   </AppText>
-                </TouchableOpacity>
-              </View>
+                  <View style={styles.inputsContainer}>
+                    <Controller
+                      control={newPasswordControl}
+                      name="newPassword"
+                      render={({ field: { onChange, onBlur, value } }) => (
+                        <View style={styles.inputWrapper}>
+                          <LockIcon />
+                          <TextInput
+                            style={styles.input}
+                            placeholder="New password"
+                            placeholderTextColor={colors.textSecondary}
+                            value={value}
+                            onChangeText={onChange}
+                            onBlur={onBlur}
+                            secureTextEntry={!showNewPassword}
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                            editable={!loading}
+                          />
+                          <PasswordVisibilityToggle
+                            visible={showNewPassword}
+                            onToggle={() => setShowNewPassword(prev => !prev)}
+                          />
+                        </View>
+                      )}
+                    />
+                    {newPasswordErrors.newPassword?.message ? (
+                      <AppText
+                        color={colors.termsLink}
+                        fontSize={FONT_SIZE_XS}>
+                        {newPasswordErrors.newPassword.message}
+                      </AppText>
+                    ) : null}
+                  </View>
 
-              <TouchableOpacity
-                style={styles.loginButton}
-                onPress={onSubmit}
-                disabled={loading}>
-                <AppText color={WHITE} fontSize={FONT_SIZE_MD} semi_bold>
-                  Login
-                </AppText>
-              </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.loginButton}
+                    onPress={onSubmitNewPassword}
+                    disabled={loading}>
+                    {loading ? (
+                      <ActivityIndicator color={WHITE} />
+                    ) : (
+                      <AppText color={WHITE} fontSize={FONT_SIZE_MD} semi_bold>
+                        Set password &amp; continue
+                      </AppText>
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           </View>
 
@@ -255,23 +342,6 @@ const createStyles = (colors: ThemeColors) =>
       fontSize: FONT_SIZE_XS,
       fontFamily: "Poppins-Regular",
       paddingVertical: 0,
-    },
-    rememberMeContainer: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: normalizeWidth(8),
-    },
-    checkbox: {
-      width: normalizeWidth(18),
-      height: normalizeWidth(18),
-      borderWidth: 2,
-      borderColor: colors.loginButtonBg,
-      borderRadius: 4,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    checkboxFilled: {
-      backgroundColor: colors.rememberMeFilled,
     },
     loginButton: {
       backgroundColor: colors.loginButtonBg,

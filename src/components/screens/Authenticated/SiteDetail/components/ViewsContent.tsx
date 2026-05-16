@@ -6,6 +6,8 @@ import SummaryView from './SummaryView';
 import CardsView from './CardsView';
 import AlarmsView from './AlarmsView';
 import TrendView from './TrendView';
+import ReportsView from './ReportsView';
+import TablesView from './TablesView';
 
 const ViewsContent: FC = () => {
   const [selectedTab, setSelectedTab] = useState<TabOption>('Summary');
@@ -20,6 +22,10 @@ const ViewsContent: FC = () => {
         return <AlarmsView />;
       case 'Trend':
         return <TrendView />;
+      case 'Reports':
+        return <ReportsView />;
+      case 'Tables':
+        return <TablesView />;
       default:
         return null;
     }

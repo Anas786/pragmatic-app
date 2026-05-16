@@ -1,61 +1,52 @@
 import React, { FC, useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
+import { useRoute, RouteProp } from '@react-navigation/native';
 import { AppText } from 'src/components/common';
 import {
+  ACCENT_BLUE,
+  extractCardConfigs,
   FONT_SIZE_SM,
   FONT_SIZE_XS,
-  FONT_SIZE_XXS,
-  ICON_SIZE_LG,
+  formatCardValue,
   normalizeHeight,
   normalizeWidth,
+  resolveCardValue,
   ThemeColors,
 } from 'src/utils';
-import { useThemeStore } from 'src/hooks';
-import { mockCardsData, PowerCardData } from 'src/data/mock';
+import { resolveLottieIcon } from 'src/assets/gif';
+import { useSiteConfig, useSiteData, useThemeStore } from 'src/hooks';
+import { DashboardStackParamList } from 'src/types';
+import DataCard from './DataCard';
 
-interface CardsIconProps {
-  IconComponent: FC<{ size?: number; color?: string }>;
-  size: number;
-  color: string;
-}
-
-const CardsIcon: FC<CardsIconProps> = ({ IconComponent, size, color }) => {
-  return <IconComponent size={size} color={color} />;
-};
+type SiteDetailRouteProp = RouteProp<DashboardStackParamList, 'SiteDetail'>;
 
 const CardsView: FC = () => {
   const { colors } = useThemeStore();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const route = useRoute<SiteDetailRouteProp>();
+  const { siteId } = route.params;
 
-  const PowerCard: FC<PowerCardData> = ({
-    label,
-    value,
-    unit,
-    iconName,
-    iconColor,
-    accentColor,
-  }) => {
-    return (
-      <View style={styles.card}>
-        <View style={[styles.accentBar, { backgroundColor: accentColor }]} />
-        <View style={styles.cardContent}>
-          <AppText fontSize={FONT_SIZE_XXS} color={colors.textSecondary}>
-            {label}
-          </AppText>
-          <View style={styles.valueRow}>
-            <AppText fontSize={FONT_SIZE_XS} semi_bold color={colors.primaryText}>
-              {value}
-            </AppText>
-            <AppText fontSize={FONT_SIZE_XXS} color={colors.primaryText}>
-              {' '}
-              {unit}
-            </AppText>
-          </View>
-        </View>
-        <CardsIcon IconComponent={iconName} size={ICON_SIZE_LG} color={iconColor} />
-      </View>
-    );
-  };
+  // Both queries are cached after Dashboard's prefetch + the top-level
+  // subscriptions in SiteDetail, so these are typically synchronous reads
+  // from React Query's in-memory store.
+  const { data: siteConfig } = useSiteConfig(siteId);
+  const { data: liveData } = useSiteData(siteId);
+
+  const cards = useMemo(() => {
+    const configs = extractCardConfigs(siteConfig);
+    return configs.map(card => {
+      const rawValue = resolveCardValue(card, liveData);
+      const lottie = resolveLottieIcon(card.icon);
+      return {
+        card,
+        // Force 2 decimal places everywhere — keep display consistent
+        // across Cards / Summary tabs even if the backend ships a
+        // different `decimalPlaces` for individual cards.
+        formatted: formatCardValue(rawValue, 2),
+        lottie,
+      };
+    });
+  }, [siteConfig, liveData]);
 
   return (
     <View style={styles.container}>
@@ -65,13 +56,36 @@ const CardsView: FC = () => {
         </AppText>
       </View>
       <View style={styles.body}>
-        <View style={styles.grid}>
-          {mockCardsData.map((card, index) => (
-            <View key={index} style={styles.cardWrapper}>
-              <PowerCard {...card} />
-            </View>
-          ))}
-        </View>
+        {cards.length === 0 ? (
+          <AppText
+            fontSize={FONT_SIZE_XS}
+            color={colors.textSecondary}
+            center>
+            No cards configured for this site.
+          </AppText>
+        ) : (
+          <View style={styles.list}>
+            {cards.map(({ card, formatted, lottie }, index) => (
+              <DataCard
+                key={`${card.dataStore}:${card.objKey}:${index}`}
+                label={card.name}
+                value={formatted}
+                unit={card.unit}
+                accentColor={card.colour ?? ACCENT_BLUE}
+                icon={
+                  lottie ? (
+                    <Image
+                      source={lottie.path}
+                      style={styles.iconImage}
+                      resizeMode="contain"
+                      accessibilityLabel={lottie.name}
+                    />
+                  ) : null
+                }
+              />
+            ))}
+          </View>
+        )}
       </View>
     </View>
   );
@@ -94,37 +108,12 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: colors.cardBg,
       padding: normalizeWidth(12),
     },
-    grid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: normalizeWidth(10),
+    list: {
+      gap: normalizeHeight(10),
     },
-    cardWrapper: {
-      width: '48%',
-    },
-    card: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: colors.metricCardBg,
-      borderWidth: 1,
-      borderColor: colors.inputDarkBorder,
-      borderRadius: 12,
-      paddingVertical: normalizeHeight(14),
-      paddingHorizontal: normalizeWidth(12),
-      gap: normalizeWidth(8),
-    },
-    accentBar: {
-      width: normalizeWidth(3),
-      height: normalizeHeight(36),
-      borderRadius: 2,
-    },
-    cardContent: {
-      flex: 1,
-      gap: normalizeHeight(4),
-    },
-    valueRow: {
-      flexDirection: 'row',
-      alignItems: 'baseline',
+    iconImage: {
+      width: normalizeWidth(32),
+      height: normalizeWidth(32),
     },
   });
 

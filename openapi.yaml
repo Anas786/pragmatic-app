@@ -1,0 +1,1712 @@
+openapi: 3.0.4
+info:
+  title: IoT Core Services - Public, Protected & Private APIs
+  description: |
+    This API provides public, protected, and private endpoints for IoT Core Services platform.
+
+    ## Overview
+    The API exposes configuration management endpoints for:
+    - Public endpoints: UI parameter mappings, hierarchies, report configurations, and alarm settings
+    - Protected endpoints: Site-specific settings and administrative parameters
+    - Private endpoints: Highly sensitive client configurations with strict access controls
+
+    All data is served from high-performance Redis cache for optimal response times.
+
+    ## Authentication
+    - Public endpoints (/public/*): No authentication required
+    - Protected endpoints (/protected/*): Require Cognito JWT authentication
+    - Private endpoints (/private/*): Require Cognito JWT authentication with elevated privileges
+
+    ## Rate Limiting
+    - Default rate limit: 300 requests per second
+    - Burst limit: 100 requests
+
+    ## Response Caching
+    Responses include cache control headers to optimize client-side caching.
+  version: 1.0.0
+  contact:
+    name: HAK
+    email: support@iotcoreservices.com
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://p7bbq0dfn0.execute-api.us-east-2.amazonaws.com/Prod
+    description: Production API Gateway endpoint
+  - url: http://localhost:3000
+    description: Local development server
+
+paths:
+  /public/config/params-mapping:
+    get:
+      summary: Get UI parameter mappings
+      description: |
+        Retrieves the parameter mapping configuration used by the UI to display
+        and process IoT device parameters. This includes display names, units,
+        data types, and validation rules for each parameter.
+      operationId: getParameterConfigData
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Parameter mapping configuration
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                description: Cache control header with max-age=10800 and no-store
+        "404":
+          description: Parameters mapping not available
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: parameters mapping not available!
+      tags:
+        - Configuration
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PublicConfigServiceFunction.Arn}/invocations"
+        passthroughBehavior: when_no_match
+        contentHandling: CONVERT_TO_TEXT
+
+  /public/config/params-hierarchy:
+    get:
+      summary: Get parameter hierarchy structure
+      description: |
+        Retrieves the hierarchical structure of parameters, defining relationships
+        between parent and child parameters. This is used to build tree structures
+        and nested parameter views in the UI.
+      operationId: getParameterHierarchyData
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Parameter hierarchy configuration
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                description: Cache control header with max-age=10800
+        "404":
+          description: Parameters hierarchy not available
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: parameters hierarchy not available!
+      tags:
+        - Configuration
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PublicConfigServiceFunction.Arn}/invocations"
+        passthroughBehavior: when_no_match
+        contentHandling: CONVERT_TO_TEXT
+
+  /public/config/report-mapping:
+    get:
+      summary: Get report configuration mappings
+      description: |
+        Retrieves the report mapping configuration that defines how raw IoT data
+        is transformed and aggregated for reporting purposes. Returns a dictionary
+        indexed by ingestName for efficient lookup.
+      operationId: getReportConfigData
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+                  properties:
+                    ingestName:
+                      type: string
+                description: Report mapping configuration indexed by ingestName
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                description: Cache control header with max-age=10800
+        "404":
+          description: Report mapping not available
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: report mapping not available!
+      tags:
+        - Configuration
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PublicConfigServiceFunction.Arn}/invocations"
+        passthroughBehavior: when_no_match
+        contentHandling: CONVERT_TO_TEXT
+
+  /public/config/alarms:
+    get:
+      summary: Get alarm configurations
+      description: |
+        Retrieves all alarm configuration settings including thresholds, conditions,
+        notification preferences, and escalation policies for IoT device monitoring.
+      operationId: getAlarmConfigData
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Alarm configuration data
+        "404":
+          description: Alarm configuration not available
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: alarm configuration not available!
+      tags:
+        - Configuration
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PublicConfigServiceFunction.Arn}/invocations"
+        passthroughBehavior: when_no_match
+        contentHandling: CONVERT_TO_TEXT
+
+  /protected/config/site/{id}:
+    get:
+      summary: Get site configuration data
+      description: |
+        Retrieves site-specific configuration data.
+        Requires Bearer authentication and site access authorization.
+      operationId: getSiteConfigData
+      security:
+        - CognitoAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Site ID
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Site configuration data
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                description: Cache control header with max-age and s-maxage
+        "404":
+          description: Site not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      tags:
+        - Protected Configuration
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ProtectedConfigServiceFunction.Arn}/invocations"
+        passthroughBehavior: when_no_match
+        contentHandling: CONVERT_TO_TEXT
+
+  /protected/config/report-parameters/{id}:
+    get:
+      summary: Get report parameters for a site
+      description: |
+        Retrieves available report parameters for a specific site.
+        Requires Bearer authentication with admin role and site access authorization.
+      operationId: getReportParameters
+      security:
+        - CognitoAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Site ID
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                description: Report parameters list
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                description: Cache control header with max-age and s-maxage
+        "404":
+          description: Report parameters not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      tags:
+        - Protected Configuration
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ProtectedConfigServiceFunction.Arn}/invocations"
+        passthroughBehavior: when_no_match
+        contentHandling: CONVERT_TO_TEXT
+
+  /protected/config/live-parameters/{id}:
+    get:
+      summary: Get live parameters for a site
+      description: |
+        Retrieves real-time parameters available for a specific site.
+        Requires Bearer authentication with admin role and site access authorization.
+      operationId: getLiveParameters
+      security:
+        - CognitoAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Site ID
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                description: Live parameters list
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                description: Cache control header with max-age and s-maxage
+        "404":
+          description: Live parameters not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      tags:
+        - Protected Configuration
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ProtectedConfigServiceFunction.Arn}/invocations"
+        passthroughBehavior: when_no_match
+        contentHandling: CONVERT_TO_TEXT
+
+  /protected/config/form/{id}:
+    get:
+      summary: Get form configuration
+      description: |
+        Retrieves form schema configuration by ID.
+        Requires Bearer authentication.
+      operationId: getFormConfigData
+      security:
+        - CognitoAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Form ID
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Form configuration data
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                description: Cache control header with max-age and s-maxage
+        "404":
+          description: Form configuration not available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      tags:
+        - Protected Configuration
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ProtectedConfigServiceFunction.Arn}/invocations"
+        passthroughBehavior: when_no_match
+        contentHandling: CONVERT_TO_TEXT
+
+  /protected/data/all/{id}:
+    get:
+      summary: Get all live data for a site
+      description: |
+        Retrieves comprehensive real-time data for a specific site including:
+        - Live telemetry parameters
+        - Processed data values
+        - Active alarms
+        Requires Bearer authentication and site access authorization.
+      operationId: getSiteLiveDataAll
+      security:
+        - CognitoAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Site ID
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  live:
+                    type: object
+                    description: Real-time telemetry data
+                    nullable: true
+                  processed:
+                    type: object
+                    description: Processed parameter values
+                    nullable: true
+                  alarms:
+                    type: array
+                    items:
+                      type: object
+                    description: Active alarms for the site
+                    nullable: true
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                description: Cache control header with max-age and s-maxage
+        "404":
+          description: Site not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      tags:
+        - Protected Live Data
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ProtectedLiveServiceFunction.Arn}/invocations"
+        passthroughBehavior: when_no_match
+        contentHandling: CONVERT_TO_TEXT
+
+  /protected/data/v2/common:
+    get:
+      summary: Get common materialised data
+      description: |
+        Retrieves hourly averaged materialised view data for multiple sites from ClickHouse.
+        This endpoint fetches pre-aggregated data for parameters p40 (power) and p16 (irradiance)
+        across multiple sites in a single query for optimal performance.
+
+        The siteIds parameter accepts URL-encoded comma-separated UUIDs. The response groups
+        time-series data by site ID, with each site containing an array of hourly data points.
+
+        Data is cached for 5 minutes (300 seconds) to reduce database load.
+        Requires Bearer authentication and site access authorization.
+      operationId: getMaterialisedData
+      security:
+        - CognitoAuthorizer: []
+      x-amazon-apigateway-request-validator: params-only
+      parameters:
+        - name: siteIds
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 36
+          description: |
+            URL-encoded comma-separated list of site UUIDs.
+            Example: `74900c1e-ae1a-4f80-b999-2d1641d21fa2%2Cb12a4707-5808-4c09-91cf-2fd8f6c2e981`
+            Note: %2C is the URL-encoded comma separator
+          example: "74900c1e-ae1a-4f80-b999-2d1641d21fa2%2Cb12a4707-5808-4c09-91cf-2fd8f6c2e981"
+      responses:
+        "200":
+          description: Successful response with time-series data grouped by site
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  metadata:
+                    type: object
+                    properties:
+                      source:
+                        type: string
+                        description: Data source
+                        example: "clickhouse"
+                      responseType:
+                        type: string
+                        description: Response type indicating if data is from cache or original query
+                        example: "original"
+                  data:
+                    type: object
+                    description: Dictionary with site IDs as keys and time-series arrays as values
+                    additionalProperties:
+                      type: array
+                      description: Array of hourly data points for a specific site
+                      items:
+                        type: object
+                        properties:
+                          time:
+                            type: integer
+                            description: Unix timestamp in milliseconds for the hour
+                            example: 1757876400000
+                          p40:
+                            type: number
+                            nullable: true
+                            description: Power value (kW) averaged for the hour
+                            example: 239.60000610351562
+                          p16:
+                            type: number
+                            nullable: true
+                            description: Irradiance value averaged for the hour
+                            example: 632.0
+                        required:
+                          - time
+                example:
+                  metadata:
+                    source: "clickhouse"
+                    responseType: "original"
+                  data:
+                    "2d16a774-f3ce-4988-a861-c8745779a972":
+                      - time: 1757876400000
+                        p40: 0.0
+                        p16: 0.0
+                      - time: 1757880000000
+                        p40: 0.0
+                        p16: 0.0
+                      - time: 1757908800000
+                        p40: 239.60000610351562
+                        p16: 0.0
+                    "97f32d42-2200-4794-8a4a-779c157c05fb":
+                      - time: 1757876400000
+                        p40: 0.0
+                        p16: 0.0
+                      - time: 1757908800000
+                        p40: 1097.1199951171875
+                        p16: 632.0
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                description: Cache control header with max-age=900 and s-maxage=300
+        "401":
+          description: Unauthorized - No sites available for the user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      tags:
+        - Protected Data V2
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ProtectedDataV2ServiceFunction.Arn}/invocations"
+        passthroughBehavior: when_no_match
+        contentHandling: CONVERT_TO_TEXT
+
+  /protected/data/v2/trends/{id}:
+    get:
+      summary: Get trend data
+      description: |
+        Retrieves pre-configured trend data for a specific site using indexed queries.
+        Data is cached for performance optimization with TTL based on the time range.
+        Supports flexible time ranges using epoch timestamps or SQL expressions.
+
+        Example curl:
+        ```bash
+        curl --location 'https://api.example.com/protected/data/v2/trends/ce3901ce-936b-4611-8222-cf7e4b2822e8?start=now()%20-%20INTERVAL%2024%20HOUR&end=now()&idx=0' \
+        --header 'Accept: application/json' \
+        --header 'Authorization: Bearer {token}'
+        ```
+      operationId: getTrendData
+      security:
+        - CognitoAuthorizer: []
+      x-amazon-apigateway-request-validator: params-only
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: "ce3901ce-936b-4611-8222-cf7e4b2822e8"
+          description: Site UUID for which to retrieve trend data
+        - name: idx
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100
+          description: Index of the predefined trend query configuration (0-based)
+          example: 0
+        - name: start
+          in: query
+          required: true
+          schema:
+            type: string
+          description: |
+            Start time for the trend data query. Can be:
+            - Epoch timestamp in milliseconds (e.g., "1757876400000")
+            - SQL expression (e.g., "now() - INTERVAL 24 HOUR")
+          example: "now() - INTERVAL 24 HOUR"
+        - name: end
+          in: query
+          required: true
+          schema:
+            type: string
+          description: |
+            End time for the trend data query. Can be:
+            - Epoch timestamp in milliseconds (e.g., "1757962800000")
+            - SQL expression (e.g., "now()")
+          example: "now()"
+        - name: tz
+          in: query
+          required: false
+          schema:
+            type: string
+            default: "Asia/Karachi"
+          description: IANA timezone identifier for time conversion
+          example: "Asia/Karachi"
+      responses:
+        "200":
+          description: Successful response with trend data
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - metadata
+                  - data
+                properties:
+                  metadata:
+                    type: object
+                    required:
+                      - siteId
+                      - idx
+                      - start
+                      - end
+                      - responseType
+                    properties:
+                      siteId:
+                        type: string
+                        format: uuid
+                        example: "ce3901ce-936b-4611-8222-cf7e4b2822e8"
+                      idx:
+                        type: integer
+                        example: 0
+                      start:
+                        type: string
+                        example: "now() - INTERVAL 24 HOUR"
+                      end:
+                        type: string
+                        example: "now()"
+                      responseType:
+                        type: string
+                        enum: ["cached", "original"]
+                        description: Indicates whether data was served from cache or freshly queried
+                        example: "cached"
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - time
+                      properties:
+                        time:
+                          type: integer
+                          format: int64
+                          description: Unix timestamp in milliseconds
+                          example: 1757886300000
+                      additionalProperties:
+                        type: number
+                        format: float
+                        nullable: true
+                        description: Aggregated value for each parameter
+                example:
+                  metadata:
+                    siteId: "ce3901ce-936b-4611-8222-cf7e4b2822e8"
+                    idx: 0
+                    start: "now() - INTERVAL 24 HOUR"
+                    end: "now()"
+                    responseType: "cached"
+                  data:
+                    - time: 1757886300000
+                      p1003: 30.244444529215496
+                      p1006: 0.0
+                      p16: 0.0
+                      p4: 29.100000381469727
+                    - time: 1757887200000
+                      p1003: 30.10666707356771
+                      p1006: 0.0
+                      p16: 0.0
+                      p4: 28.85999984741211
+        "400":
+          description: Invalid query index
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      tags:
+        - Protected Data V2
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ProtectedDataV2ServiceFunction.Arn}/invocations"
+        passthroughBehavior: when_no_match
+        contentHandling: CONVERT_TO_TEXT
+
+  /protected/data/v2/report/{id}:
+    get:
+      summary: Get report data
+      description: |
+        Retrieves report data for a specific site with various time filtering options.
+        Requires Bearer authentication and site access authorization.
+      operationId: getReportData
+      security:
+        - CognitoAuthorizer: []
+      x-amazon-apigateway-request-validator: params-only
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Site ID
+        - name: type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: ["energy_queries", "inverter_queries"]
+          description: |
+            Type of report query to execute:
+            - energy_queries: Energy production and consumption reports
+            - inverter_queries: Inverter-specific performance reports
+        - name: start
+          in: query
+          required: false
+          schema:
+            type: string
+          description: |
+            Start time for custom date range query.
+            Provide as epoch timestamp in milliseconds.
+            Used together with 'end' parameter for custom ranges.
+        - name: end
+          in: query
+          required: false
+          schema:
+            type: string
+          description: |
+            End time for custom date range query.
+            Provide as epoch timestamp in milliseconds.
+            Used together with 'start' parameter for custom ranges.
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 12
+          description: |
+            Month for monthly/daily report queries (1-12).
+            Used with 'year' parameter for monthly reports.
+            Used with both 'year' and specific logic for daily reports.
+        - name: year
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 2000
+            maximum: 2100
+          description: |
+            Year for yearly/monthly/daily report queries.
+            - Used alone: Returns yearly report
+            - Used with 'month': Returns monthly or daily report based on query type
+        - name: tz
+          in: query
+          required: false
+          schema:
+            type: string
+            default: "Asia/Karachi"
+          description: IANA timezone identifier for time conversion
+          example: "Asia/Karachi"
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  metadata:
+                    type: object
+                    properties:
+                      responseType:
+                        type: string
+                  data:
+                    type: array
+                    items:
+                      type: object
+        "400":
+          description: Unhandled error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      tags:
+        - Protected Data V2
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ProtectedDataV2ServiceFunction.Arn}/invocations"
+        passthroughBehavior: when_no_match
+        contentHandling: CONVERT_TO_TEXT
+
+  /private/config/client:
+    get:
+      summary: Get client configuration data
+      description: |
+        Retrieves comprehensive client-specific configuration data from cache.
+        This endpoint provides access to critical client settings including:
+        - Client identification and group membership
+        - User and site limits
+        - Customer counts and quotas
+        - Calendar configurations for various data types (alarms, reports, trends, etc.)
+        - Parameter limitations for data manipulation and raw data access
+        - Multisite polling configurations
+
+        The configuration data controls client-level access limits, data retention periods,
+        and operational parameters across the entire IoT platform.
+
+        Requires authentication via Cognito Bearer JWT token with elevated privileges.
+        Access is strictly controlled and audited for security compliance.
+      operationId: getClientConfigData
+      security:
+        - CognitoAuthorizer: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    description: Client ID
+                    example: "1"
+                  name:
+                    type: string
+                    description: Client name
+                    example: "Pragmatics"
+                  group:
+                    type: boolean
+                    description: Whether client is part of a group
+                    example: false
+                  customerCount:
+                    type: number
+                    description: Number of active customers
+                    example: 125.0
+                  customerCounter:
+                    type: number
+                    description: Total customer counter
+                    example: 160.0
+                  sitesCount:
+                    type: number
+                    description: Number of sites managed
+                    example: 278.0
+                  maxUsers:
+                    type: number
+                    description: Maximum allowed users
+                    example: 400.0
+                  usersTotal:
+                    type: number
+                    description: Total current users
+                    example: 363.0
+                  calendar:
+                    type: object
+                    description: Calendar and time window configurations
+                    properties:
+                      alarms:
+                        type: object
+                        properties:
+                          maxDays:
+                            type: number
+                            description: Maximum days for alarm data
+                            example: 0.0
+                          window:
+                            type: number
+                            description: Alarm window in days
+                            example: 30.0
+                      device:
+                        type: object
+                        properties:
+                          maxDays:
+                            type: number
+                            description: Maximum days for device data
+                            example: 30.0
+                      export:
+                        type: object
+                        properties:
+                          maxDays:
+                            type: number
+                            description: Maximum days for data export
+                            example: 5.0
+                      liveParameter:
+                        type: object
+                        properties:
+                          window:
+                            type: number
+                            description: Live parameter window in hours
+                            example: 4.0
+                      manipulation:
+                        type: object
+                        properties:
+                          maxDays:
+                            type: number
+                            description: Maximum days for data manipulation
+                            example: 30.0
+                      raw:
+                        type: object
+                        properties:
+                          maxDays:
+                            type: number
+                            description: Maximum days for raw data
+                            example: 10.0
+                      report:
+                        type: object
+                        properties:
+                          maxDays:
+                            type: number
+                            description: Maximum days for report data
+                            example: 90.0
+                          window:
+                            type: number
+                            description: Report window in days
+                            example: 30.0
+                      trend:
+                        type: object
+                        properties:
+                          maxDays:
+                            type: number
+                            description: Maximum days for trend data
+                            example: 0.0
+                          window:
+                            type: number
+                            description: Trend window in days
+                            example: 15.0
+                  parameters:
+                    type: object
+                    description: Parameter limitations
+                    properties:
+                      manipulation:
+                        type: object
+                        properties:
+                          maxParams:
+                            type: number
+                            description: Maximum parameters for manipulation
+                            example: 10.0
+                      raw:
+                        type: object
+                        properties:
+                          maxParams:
+                            type: number
+                            description: Maximum raw parameters
+                            example: 10.0
+                  multisite:
+                    type: object
+                    description: Multisite configuration
+                    properties:
+                      siteState:
+                        type: object
+                        properties:
+                          poll:
+                            type: number
+                            description: Site state polling interval in seconds
+                            example: 900.0
+                description: Client configuration data with usage limits and settings
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                description: Cache control header with reduced cache times for security
+        "401":
+          description: Unauthorized - Invalid or missing authentication
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden - Insufficient privileges
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client configuration not available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      tags:
+        - Private Configuration
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PrivateConfigServiceFunction.Arn}/invocations"
+        passthroughBehavior: when_no_match
+        contentHandling: CONVERT_TO_TEXT
+
+  /private/user/site-list:
+    get:
+      summary: Get authenticated user's site list
+      description: |
+        Retrieves the list of sites accessible by the authenticated user.
+        The site list is cached and served from Redis for optimal performance.
+        Requires authentication via Cognito Bearer JWT token.
+      operationId: getUserSiteList
+      security:
+        - CognitoAuthorizer: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      format: uuid
+                      description: Unique identifier for the site
+                      example: "c01ef6c7-43c5-4d83-aa8e-22d8b21309c1"
+                    name:
+                      type: string
+                      description: Name of the site
+                      example: "AJ Textiles"
+                    logo_ext:
+                      type: string
+                      description: Path to the site logo file
+                      example: "1/58/.png"
+                    size:
+                      oneOf:
+                        - type: number
+                        - type: string
+                      description: Size of the site in kW
+                      example: 300.0
+                    controller:
+                      type: boolean
+                      description: Whether the site has a controller
+                      example: true
+                  required:
+                    - id
+                    - name
+                    - logo_ext
+                    - size
+                    - controller
+                description: Array of sites accessible by the user
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                description: Cache control header with s-maxage=900 and max-age=0
+        "404":
+          description: Site list not found for user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      tags:
+        - Private User Configuration
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PrivateUserConfigServiceFunction.Arn}/invocations"
+        passthroughBehavior: when_no_match
+        contentHandling: CONVERT_TO_TEXT
+
+  /private/user/site-list/{id}:
+    get:
+      summary: Get site list for a specific user
+      description: |
+        Retrieves the site list for a specific user by their ID.
+        Only accessible by users with appropriate permissions to view other users' data.
+        Requires authentication via Cognito Bearer JWT token with elevated privileges.
+      operationId: getUserSiteListById
+      security:
+        - CognitoAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: User ID
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      format: uuid
+                      description: Unique identifier for the site
+                      example: "c01ef6c7-43c5-4d83-aa8e-22d8b21309c1"
+                    name:
+                      type: string
+                      description: Name of the site
+                      example: "AJ Textiles"
+                    logo_ext:
+                      type: string
+                      description: Path to the site logo file
+                      example: "1/58/.png"
+                    size:
+                      oneOf:
+                        - type: number
+                        - type: string
+                      description: Size of the site in kW
+                      example: 300.0
+                    controller:
+                      type: boolean
+                      description: Whether the site has a controller
+                      example: true
+                  required:
+                    - id
+                    - name
+                    - logo_ext
+                    - size
+                    - controller
+                description: Array of sites accessible by the requested user
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                description: Cache control header with s-maxage=900 and max-age=0
+        "404":
+          description: User or site list not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      tags:
+        - Private User Configuration
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PrivateUserConfigServiceFunction.Arn}/invocations"
+        passthroughBehavior: when_no_match
+        contentHandling: CONVERT_TO_TEXT
+
+  /private/user/customer-list:
+    get:
+      summary: Get customer list for authenticated user
+      description: |
+        Retrieves the list of customers accessible by the authenticated user.
+        Access is role-based and only available for users with customer management permissions.
+        Requires authentication via Cognito Bearer JWT token with appropriate role.
+      operationId: getUserCustomerList
+      security:
+        - CognitoAuthorizer: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                  description: JSON string containing customer object
+                  example: '{"siteCounter":1,"clientId":"1","name":"AHL5MW","updateAt":1707250545,"id":"57"}'
+                description: Array of JSON-encoded customer strings. Each string contains a customer object with id, name, clientId, updateAt, and optional siteCounter
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                description: Cache control header with s-maxage=900 and max-age=0
+        "404":
+          description: No customer listing available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      tags:
+        - Private User Configuration
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PrivateUserConfigServiceFunction.Arn}/invocations"
+        passthroughBehavior: when_no_match
+        contentHandling: CONVERT_TO_TEXT
+
+  /private/user/user-list:
+    get:
+      summary: Get user list for authenticated user
+      description: |
+        Retrieves the list of users accessible by the authenticated user.
+        Access is role-based - Client Admins can see all users in their client,
+        Customer Admins can see users in their customer, etc.
+        Requires authentication via Cognito Bearer JWT token with appropriate role.
+      operationId: getUserList
+      security:
+        - CognitoAuthorizer: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                  description: JSON string containing user object with id, email, clientId, customerId, isClientAdmin, isCustomerAdmin, sites array, createdBy, updateAt, and optional isDemoUser fields
+                  example: '{"clientId":"1","createdBy":"client:1","isClientAdmin":false,"customerId":"52","updateAt":1710639958,"id":"1bc1379b-5e14-430e-9658-d06426323fd6","isCustomerAdmin":true,"email":"mansoorrana_2001@yahoo.com"}'
+                description: Array of JSON-encoded user strings. Each string contains a user object with details including id, email, clientId, customerId (optional), isClientAdmin, isCustomerAdmin, sites (optional array), createdBy, updateAt (optional), and isDemoUser (optional)
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                description: Cache control header with s-maxage=900 and max-age=0
+        "404":
+          description: No user listing available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      tags:
+        - Private User Configuration
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PrivateUserConfigServiceFunction.Arn}/invocations"
+        passthroughBehavior: when_no_match
+        contentHandling: CONVERT_TO_TEXT
+
+  /private/data/connectivity:
+    get:
+      summary: Get sites connectivity status
+      description: |
+        Retrieves real-time connectivity status and telemetry data for all authorized sites.
+        This endpoint provides comprehensive site state information including:
+        - Site connectivity status
+        - Last update timestamps
+        - Telemetry data values
+        - Site metadata
+
+        Access is role-based:
+        - Client Admins: Access to all sites within their client
+        - Customer Admins: Access to all sites within their customer
+        - Regular Users: Access only to their authorized sites
+
+        The data is retrieved from high-performance Redis cache with real-time updates.
+        Requires authentication via Cognito Bearer JWT token with appropriate role permissions.
+      operationId: getSitesConnectivity
+      security:
+        - CognitoAuthorizer: []
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  metadata:
+                    type: object
+                    properties:
+                      source:
+                        type: string
+                        description: Data source
+                        example: "cache"
+                      responseType:
+                        type: string
+                        description: Response type
+                        example: "original"
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        siteId:
+                          type: string
+                          description: Unique identifier for the site
+                          example: "59378f44-a09e-4207-a07d-777df3f720ee"
+                        state:
+                          type: string
+                          enum: ["Online", "Offline"]
+                          description: Current connectivity state of the site
+                          example: "Online"
+                        dataLastUpdate:
+                          type: string
+                          description: Timestamp of last data update in milliseconds
+                          example: "1757878680000"
+                        deviceEventType:
+                          type: string
+                          enum: ["connected", "disconnected"]
+                          description: Last device event type (optional)
+                          example: "disconnected"
+                        deviceLastUpdate:
+                          type: string
+                          description: Timestamp of last device event in milliseconds (optional)
+                          example: "1757859961409"
+                        deviceDisconnectReason:
+                          type: string
+                          enum:
+                            [
+                              "DUPLICATE_CLIENTID",
+                              "MQTT_KEEP_ALIVE_TIMEOUT",
+                              "CONNECTION_LOST",
+                              "WEBSOCKET_TTL_EXPIRATION",
+                            ]
+                          description: Reason for device disconnection (optional, only present when deviceEventType is disconnected)
+                          example: "DUPLICATE_CLIENTID"
+                      required:
+                        - siteId
+                        - state
+                        - dataLastUpdate
+                    description: Array of site connectivity states with telemetry and device status
+                description: Sites connectivity data with metadata
+        "401":
+          description: Unauthorized - Invalid or missing authentication
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden - Insufficient privileges or no site access
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      tags:
+        - Private Live Data
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PrivateLiveServiceFunction.Arn}/invocations"
+        passthroughBehavior: when_no_match
+        contentHandling: CONVERT_TO_TEXT
+
+  /private/data/v2/timeseries/{id}:
+    get:
+      summary: Get timeseries data
+      description: |
+        Retrieves timeseries data with aggregations for a specific site.
+        Supports flexible time ranges using epoch timestamps or SQL expressions.
+        Data can be retrieved as raw values or report data with customizable
+        aggregation intervals and methods.
+
+        Requires elevated privileges with admin role evaluation.
+
+        Example curl:
+        ```bash
+        curl --location 'https://api.example.com/private/data/v2/timeseries/ce3901ce-936b-4611-8222-cf7e4b2822e8?start=now%28%29+-+INTERVAL+24+HOUR&end=now%28%29&aggregations=%7B%22p1003%22%3A%22avg%22%2C%22p1006%22%3A%22avg%22%2C%22p16%22%3A%22avg%22%2C%22p4%22%3A%22avg%22%7D&interval=5&unit=MINUTE&data_type=raw' \
+        --header 'Accept: application/json' \
+        --header 'Authorization: Bearer {token}'
+        ```
+      operationId: getPrivateTimeseriesData
+      security:
+        - CognitoAuthorizer: []
+      x-amazon-apigateway-request-validator: params-only
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: "ce3901ce-936b-4611-8222-cf7e4b2822e8"
+          description: Site UUID for which to retrieve timeseries data
+        - name: aggregations
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 2
+          description: |
+            JSON object mapping parameter names to aggregation methods.
+            Supported aggregation methods: avg, min, max, sum, count.
+            Example: {"p1003":"avg","p1006":"avg","p16":"avg","p4":"avg"}
+          example: '{"p1003":"avg","p1006":"avg","p16":"avg","p4":"avg"}'
+        - name: interval
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: ["1", "5", "15", "30"]
+          description: |
+            Aggregation interval value. The actual time window is determined
+            by combining this with the unit parameter (e.g., 5 MINUTE, 1 HOUR)
+          example: "5"
+        - name: unit
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: ["MINUTE", "HOUR", "DAY", "WEEK"]
+          description: |
+            Time unit for the aggregation interval.
+            Combines with interval parameter to define the aggregation window.
+          example: "MINUTE"
+        - name: data_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: ["raw", "report"]
+          description: |
+            Type of data source to query:
+            - raw: Query raw telemetry data tables
+            - report: Query pre-processed report data tables
+          example: "raw"
+        - name: start
+          in: query
+          required: false
+          schema:
+            type: string
+          description: |
+            Start time for the data query. Can be:
+            - Epoch timestamp in milliseconds (e.g., "1757876400000")
+            - SQL expression (e.g., "now() - INTERVAL 24 HOUR")
+          default: "now() - INTERVAL 24 HOUR"
+          example: "now() - INTERVAL 24 HOUR"
+        - name: end
+          in: query
+          required: false
+          schema:
+            type: string
+          description: |
+            End time for the data query. Can be:
+            - Epoch timestamp in milliseconds (e.g., "1757962800000")
+            - SQL expression (e.g., "now()")
+          default: "now()"
+          example: "now()"
+      responses:
+        "200":
+          description: Successful response with timeseries data
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - metadata
+                  - data
+                properties:
+                  metadata:
+                    type: object
+                    required:
+                      - siteId
+                      - start
+                      - end
+                    properties:
+                      siteId:
+                        type: string
+                        format: uuid
+                        example: "ce3901ce-936b-4611-8222-cf7e4b2822e8"
+                      start:
+                        type: string
+                        example: "now() - INTERVAL 24 HOUR"
+                      end:
+                        type: string
+                        example: "now()"
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - time
+                      properties:
+                        time:
+                          type: integer
+                          format: int64
+                          description: Unix timestamp in milliseconds
+                          example: 1757885700000
+                      additionalProperties:
+                        type: number
+                        format: float
+                        nullable: true
+                        description: Aggregated value for each parameter
+                example:
+                  metadata:
+                    siteId: "ce3901ce-936b-4611-8222-cf7e4b2822e8"
+                    start: "now() - INTERVAL 24 HOUR"
+                    end: "now()"
+                  data:
+                    - time: 1757885700000
+                      p1003: 30.299999237060547
+                      p1006: 0.0
+                      p16: 0.0
+                      p4: 29.233333587646484
+                    - time: 1757886000000
+                      p1003: 30.22000045776367
+                      p1006: 0.0
+                      p16: 0.0
+                      p4: 29.100000381469727
+        "400":
+          description: Invalid aggregations provided
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized - Invalid or missing authentication
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden - Insufficient privileges or no admin role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      tags:
+        - Private Data V2
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PrivateDataV2ServiceFunction.Arn}/invocations"
+        passthroughBehavior: when_no_match
+        contentHandling: CONVERT_TO_TEXT
+
+  /private/data/v2/multisite/summary/{id}:
+    get:
+      summary: Get multisite summary
+      description: |
+        Retrieves summary data for multiple sites based on predefined query configuration.
+        Combines site information with live and processed parameter data.
+
+        Requires authentication via Cognito Bearer JWT token with elevated privileges.
+        Access is limited to authorized sites based on user permissions.
+      operationId: getPrivateSitesSummary
+      security:
+        - CognitoAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: |
+            Predefined query configuration ID stored in Redis.
+            This ID references a specific multisite summary configuration
+            that defines which parameters to retrieve from live and processed data.
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  metadata:
+                    type: object
+                    properties:
+                      source:
+                        type: string
+                        example: "cache"
+                      responseType:
+                        type: string
+                        example: "original"
+                      specific:
+                        type: string
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        size:
+                          type: number
+                        id:
+                          type: string
+        "400":
+          description: Invalid query id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized - Invalid or missing authentication
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden - Insufficient privileges
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      tags:
+        - Private Data V2
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PrivateDataV2ServiceFunction.Arn}/invocations"
+        passthroughBehavior: when_no_match
+        contentHandling: CONVERT_TO_TEXT
+
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message describing what went wrong
+        statusCode:
+          type: integer
+          description: HTTP status code
+      required:
+        - error
+        - statusCode
+
+  securitySchemes:
+    CognitoAuthorizer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Cognito JWT Bearer token authentication
+      x-amazon-apigateway-authtype: cognito_user_pools
+      x-amazon-apigateway-authorizer:
+        type: cognito_user_pools
+        providerARNs:
+          - Fn::Sub: "arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/{{resolve:ssm:/auth-cognito-services/cognito/user/pool/id:1}}"
+
+x-amazon-apigateway-request-validators:
+  params-only:
+    validateRequestParameters: true
+    validateRequestBody: false
+  params-and-body:
+    validateRequestParameters: true
+    validateRequestBody: true
+
+tags:
+  - name: Configuration
+    description: |
+      Configuration management endpoints providing access to cached settings
+      for UI parameters, report mappings, and alarm configurations. All data
+      is served from Redis cache for high performance and low latency.
+  - name: Protected Configuration
+    description: |
+      Protected configuration endpoints requiring authentication via Cognito.
+      These endpoints provide access to sensitive configuration data including
+      site configurations and administrative parameters.
+  - name: Private Configuration
+    description: |
+      Private configuration endpoints requiring authentication via Cognito with
+      elevated privileges. These endpoints provide access to highly sensitive
+      client configuration data including API keys, service endpoints, and
+      authentication settings. Access is strictly controlled and all requests
+      are audited for security compliance.
+  - name: Protected Live Data
+    description: |
+      Protected real-time data endpoints requiring authentication via Cognito.
+      These endpoints provide access to live telemetry data, processed values,
+      and active alarms for authorized sites.
+  - name: Protected Data V2
+    description: |
+      Protected data v2 endpoints requiring authentication via Cognito.
+      These endpoints provide advanced data querying capabilities including
+      timeseries data with aggregations, trend analysis, reporting, and
+      multisite summaries. All data is retrieved from ClickHouse for high-performance
+      analytical queries with support for various time ranges and aggregation methods.
+  - name: Private Live Data
+    description: |
+      Private real-time data endpoints requiring authentication via Cognito with
+      elevated privileges. These endpoints provide access to comprehensive site
+      connectivity status and telemetry data with role-based access control.
+      Client and Customer Admins have broader access compared to regular users.
+  - name: Private User Configuration
+    description: |
+      Private user configuration endpoints requiring authentication via Cognito.
+      These endpoints provide access to user-specific configuration data including
+      site lists, customer lists, and user lists. Access is role-based with
+      Client Admins and Customer Admins having broader access to user data
+      within their respective scopes.
+  - name: Private Data V2
+    description: |
+      Private data v2 endpoints requiring authentication via Cognito with
+      elevated privileges. These endpoints provide advanced data querying capabilities
+      including timeseries data with aggregations. Access requires admin role evaluation
+      and appropriate site authorization. All data is retrieved from ClickHouse for
+      high-performance analytical queries with support for various time ranges and
+      aggregation methods.

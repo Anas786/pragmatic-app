@@ -11,9 +11,22 @@ import {
 } from 'src/utils';
 import { useThemeStore } from 'src/hooks';
 import { IconProps } from 'src/types';
-import { AlarmsTabIcon, CardsTabIcon, SummaryTabIcon, TrendTabIcon } from 'src/assets/icons';
+import {
+  AlarmsTabIcon,
+  CardsTabIcon,
+  ChartIcon,
+  GridIcon,
+  SummaryTabIcon,
+  TrendTabIcon,
+} from 'src/assets/icons';
 
-export type TabOption = 'Summary' | 'Cards' | 'Alarms' | 'Trend';
+export type TabOption =
+  | 'Summary'
+  | 'Cards'
+  | 'Alarms'
+  | 'Trend'
+  | 'Reports'
+  | 'Tables';
 
 interface TabSelectorProps {
   selected: TabOption;
@@ -40,6 +53,14 @@ const tabs: TabConfig[] = [
   { name: 'Cards', iconName: CardsTabIcon },
   { name: 'Alarms', iconName: AlarmsTabIcon },
   { name: 'Trend', iconName: TrendTabIcon },
+  // Reports holds analytics cards (Performance Report, energy
+  // breakdown). Uses ChartIcon as a stand-in until a dedicated
+  // ReportsTabIcon ships.
+  { name: 'Reports', iconName: ChartIcon },
+  // Tables holds tabular per-device breakdowns (Inverter Table, etc.)
+  // — using GridIcon as a stand-in until a dedicated TablesTabIcon
+  // ships.
+  { name: 'Tables', iconName: GridIcon },
 ];
 
 const TabSelector: FC<TabSelectorProps> = ({ selected, onSelect }) => {

@@ -30,6 +30,27 @@ interface DateRangePickerModalProps {
 
 const DATE_DISPLAY_FORMAT = 'DD/MM/YY';
 
+/**
+ * Maximum span (in calendar months) the Custom date range can cover.
+ * Backend reports get heavy when the period grows, so we hard-cap the
+ * picker — the end-date control's `maximumDate` greys out anything
+ * past `start + MAX_RANGE_MONTHS`, and the change handlers clamp
+ * defensively in case a platform ignores the limit.
+ */
+const MAX_RANGE_MONTHS = 1;
+
+/**
+ * Add `months` calendar months to a date. Handles month-end edge cases
+ * the same way `Date.setMonth` does (e.g. 31 Jan + 1 month → 28 Feb /
+ * 2 Mar depending on the year — the JS runtime chooses, we don't
+ * second-guess it).
+ */
+const addMonths = (d: Date, months: number): Date => {
+  const x = new Date(d);
+  x.setMonth(x.getMonth() + months);
+  return x;
+};
+
 const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
   visible,
   onClose,
@@ -45,15 +66,25 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
     null,
   );
 
+  /** End-date upper bound derived from the working start date. */
+  const maxEndDate = useMemo(
+    () => addMonths(tempStart, MAX_RANGE_MONTHS),
+    [tempStart],
+  );
+
   const handleStartChange = (_event: DateTimePickerEvent, date?: Date) => {
     if (Platform.OS === 'android') {
       setActivePicker(null);
     }
-    if (date) {
-      setTempStart(date);
-      if (date > tempEnd) {
-        setTempEnd(date);
-      }
+    if (!date) return;
+    setTempStart(date);
+    const newMax = addMonths(date, MAX_RANGE_MONTHS);
+    if (tempEnd > newMax) {
+      // End was beyond the new max-range window — pull it back in.
+      setTempEnd(newMax);
+    } else if (date > tempEnd) {
+      // Start moved past end — sync end forward.
+      setTempEnd(date);
     }
   };
 
@@ -61,11 +92,11 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
     if (Platform.OS === 'android') {
       setActivePicker(null);
     }
-    if (date) {
-      if (date >= tempStart) {
-        setTempEnd(date);
-      }
-    }
+    if (!date) return;
+    if (date < tempStart) return;
+    // Defensive clamp — `maximumDate` should already block this on the
+    // native picker, but we guard the logic anyway.
+    setTempEnd(date > maxEndDate ? maxEndDate : date);
   };
 
   const handleApply = () => {
@@ -96,88 +127,105 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
           </TouchableOpacity>
         </View>
 
-        <View style={styles.body}>
-          {/* Start Date */}
-          <TouchableOpacity
-            style={[
-              styles.dateField,
-              activePicker === 'start' && styles.dateFieldActive,
-            ]}
-            onPress={() =>
-              setActivePicker(activePicker === 'start' ? null : 'start')
-            }>
-            <View style={styles.dateFieldContent}>
-              <AppText fontSize={FONT_SIZE_XXS} color={colors.textSecondary}>
-                Start Date
-              </AppText>
-              <AppText fontSize={FONT_SIZE_XS} color={colors.primaryText}>
-                {formatDate(tempStart, DATE_DISPLAY_FORMAT)}
-              </AppText>
-            </View>
-            <CalendarIcon
-              size={ICON_SIZE_XS}
-              color={ACCENT_GREEN}
-            />
-          </TouchableOpacity>
+        {/* Single contiguous body+footer container — avoids the hairline
+            seam that appeared on some devices when these were two
+            separate Views with the same background colour. */}
+        <View style={styles.content}>
+          <View style={styles.dateFields}>
+            {/* Start Date */}
+            <TouchableOpacity
+              style={[
+                styles.dateField,
+                activePicker === 'start' && styles.dateFieldActive,
+              ]}
+              onPress={() =>
+                setActivePicker(activePicker === 'start' ? null : 'start')
+              }>
+              <View style={styles.dateFieldContent}>
+                <AppText fontSize={FONT_SIZE_XXS} color={colors.textSecondary}>
+                  Start Date
+                </AppText>
+                <AppText fontSize={FONT_SIZE_XS} color={colors.primaryText}>
+                  {formatDate(tempStart, DATE_DISPLAY_FORMAT)}
+                </AppText>
+              </View>
+              <CalendarIcon size={ICON_SIZE_XS} color={ACCENT_GREEN} />
+            </TouchableOpacity>
 
-          {activePicker === 'start' && (
-            <DateTimePicker
-              value={tempStart}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={handleStartChange}
-              themeVariant={isDark ? 'dark' : 'light'}
-              textColor={colors.primaryText}
-            />
-          )}
+            {activePicker === 'start' && (
+              <DateTimePicker
+                value={tempStart}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={handleStartChange}
+                themeVariant={isDark ? 'dark' : 'light'}
+                textColor={colors.primaryText}
+              />
+            )}
 
-          {/* End Date */}
-          <TouchableOpacity
-            style={[
-              styles.dateField,
-              activePicker === 'end' && styles.dateFieldActive,
-            ]}
-            onPress={() =>
-              setActivePicker(activePicker === 'end' ? null : 'end')
-            }>
-            <View style={styles.dateFieldContent}>
-              <AppText fontSize={FONT_SIZE_XXS} color={colors.textSecondary}>
-                End Date
-              </AppText>
-              <AppText fontSize={FONT_SIZE_XS} color={colors.primaryText}>
-                {formatDate(tempEnd, DATE_DISPLAY_FORMAT)}
-              </AppText>
-            </View>
-            <CalendarIcon
-              size={ICON_SIZE_XS}
-              color={ACCENT_GREEN}
-            />
-          </TouchableOpacity>
+            {/* End Date */}
+            <TouchableOpacity
+              style={[
+                styles.dateField,
+                activePicker === 'end' && styles.dateFieldActive,
+              ]}
+              onPress={() =>
+                setActivePicker(activePicker === 'end' ? null : 'end')
+              }>
+              <View style={styles.dateFieldContent}>
+                <AppText fontSize={FONT_SIZE_XXS} color={colors.textSecondary}>
+                  End Date
+                </AppText>
+                <AppText fontSize={FONT_SIZE_XS} color={colors.primaryText}>
+                  {formatDate(tempEnd, DATE_DISPLAY_FORMAT)}
+                </AppText>
+              </View>
+              <CalendarIcon size={ICON_SIZE_XS} color={ACCENT_GREEN} />
+            </TouchableOpacity>
 
-          {activePicker === 'end' && (
-            <DateTimePicker
-              value={tempEnd}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={handleEndChange}
-              minimumDate={tempStart}
-              themeVariant={isDark ? 'dark' : 'light'}
-              textColor={colors.primaryText}
-            />
-          )}
-        </View>
+            {activePicker === 'end' && (
+              <DateTimePicker
+                value={tempEnd}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={handleEndChange}
+                minimumDate={tempStart}
+                maximumDate={maxEndDate}
+                themeVariant={isDark ? 'dark' : 'light'}
+                textColor={colors.primaryText}
+              />
+            )}
 
-        <View style={styles.footer}>
-          <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
-            <AppText fontSize={FONT_SIZE_XS} medium color={colors.textSecondary}>
-              Cancel
+            {/* Hint reminding the user about the cap — keeps the
+                modal honest about why later dates are greyed out. */}
+            <AppText
+              fontSize={FONT_SIZE_XXS}
+              color={colors.textSecondary}
+              center
+              style={styles.hint}>
+              Max range: 1 month
             </AppText>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.applyButton} onPress={handleApply}>
-            <AppText fontSize={FONT_SIZE_XS} medium color={WHITE}>
-              Apply
-            </AppText>
-          </TouchableOpacity>
+          </View>
+
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={handleCancel}>
+              <AppText
+                fontSize={FONT_SIZE_XS}
+                medium
+                color={colors.textSecondary}>
+                Cancel
+              </AppText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.applyButton}
+              onPress={handleApply}>
+              <AppText fontSize={FONT_SIZE_XS} medium color={WHITE}>
+                Apply
+              </AppText>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </Modal>
@@ -204,9 +252,17 @@ const createStyles = (colors: ThemeColors) =>
       paddingHorizontal: normalizeWidth(16),
       paddingVertical: normalizeHeight(16),
     },
-    body: {
+    /**
+     * Body + footer share a single background container so there's no
+     * possible visual seam between them. The internal vertical rhythm is
+     * driven by the flex `gap` rather than by competing paddings.
+     */
+    content: {
       backgroundColor: colors.inputDarkBg,
       padding: normalizeWidth(16),
+      gap: normalizeHeight(16),
+    },
+    dateFields: {
       gap: normalizeHeight(12),
     },
     dateField: {
@@ -226,12 +282,12 @@ const createStyles = (colors: ThemeColors) =>
       flex: 1,
       gap: normalizeHeight(4),
     },
+    hint: {
+      marginTop: normalizeHeight(2),
+    },
     footer: {
-      backgroundColor: colors.inputDarkBg,
       flexDirection: 'row',
       justifyContent: 'flex-end',
-      paddingHorizontal: normalizeWidth(16),
-      paddingBottom: normalizeHeight(16),
       gap: normalizeWidth(12),
     },
     cancelButton: {
