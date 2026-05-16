@@ -60,12 +60,10 @@ function App(): React.JSX.Element {
       setIsReady(true);
     } catch (error) {
       console.error('Error initializing app:', error);
-      // Continue with default settings if initialization fails
       setIsReady(true);
     }
   };
 
-  // Don't render until initialization is complete
   if (!isReady) {
     return <></>;
   }
