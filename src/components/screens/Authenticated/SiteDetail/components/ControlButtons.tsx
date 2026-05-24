@@ -1,13 +1,15 @@
-import React, { FC, useMemo } from "react";
-import { StyleSheet, TouchableOpacity, View } from "react-native";
+import React, { FC, useMemo } from 'react';
+import { StyleSheet, View } from 'react-native';
+import { PressableScale } from 'src/components/common';
+import { ICON_SIZE_MD, normalizeWidth } from 'src/utils';
+import { radius as radiusTokens, space, useScheme } from 'src/theme';
 import {
-  ICON_SIZE_MD,
-  normalizeHeight,
-  normalizeWidth,
-  ThemeColors,
-} from "src/utils";
-import { useThemeStore } from "src/hooks";
-import { LockIcon, LockIconOpen, Minus, NodeExpandIcon, Plus } from "src/assets/icons";
+  LockIcon,
+  LockIconOpen,
+  Minus,
+  NodeExpandIcon,
+  Plus,
+} from 'src/assets/icons';
 
 interface ControlButtonsProps {
   onZoomIn: () => void;
@@ -24,60 +26,76 @@ const ControlButtons: FC<ControlButtonsProps> = ({
   onToggleLock,
   onFullscreen,
   isLocked,
-  currentZoom
+  currentZoom,
 }) => {
-  const { colors } = useThemeStore();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const scheme = useScheme();
+  const styles = useMemo(() => createStyles(scheme), [scheme]);
   const isZoomInDisabled = isLocked || currentZoom >= 3 - 0.001;
   const isZoomOutDisabled = isLocked || currentZoom <= 0.5 + 0.001;
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity disabled={isZoomInDisabled} style={styles.button} onPress={onZoomIn}>
-        <Plus size={ICON_SIZE_MD} color={isZoomInDisabled ? colors.textSecondary : colors.primaryText} />
-      </TouchableOpacity>
-      <TouchableOpacity disabled={isZoomOutDisabled} style={styles.button} onPress={onZoomOut}>
-        <Minus size={ICON_SIZE_MD} color={isZoomOutDisabled ? colors.textSecondary : colors.primaryText} />
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.button} onPress={onFullscreen}>
-        <NodeExpandIcon size={ICON_SIZE_MD} color={colors.primaryText} />
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.button} onPress={onToggleLock}>
+      <PressableScale
+        disabled={isZoomInDisabled}
+        style={styles.button}
+        onPress={onZoomIn}
+        accessibilityLabel="Zoom in">
+        <Plus
+          size={ICON_SIZE_MD}
+          color={isZoomInDisabled ? scheme.textSecondary : scheme.textPrimary}
+        />
+      </PressableScale>
+      <PressableScale
+        disabled={isZoomOutDisabled}
+        style={styles.button}
+        onPress={onZoomOut}
+        accessibilityLabel="Zoom out">
+        <Minus
+          size={ICON_SIZE_MD}
+          color={isZoomOutDisabled ? scheme.textSecondary : scheme.textPrimary}
+        />
+      </PressableScale>
+      <PressableScale
+        style={styles.button}
+        onPress={onFullscreen}
+        accessibilityLabel="Fullscreen">
+        <NodeExpandIcon size={ICON_SIZE_MD} color={scheme.textPrimary} />
+      </PressableScale>
+      <PressableScale
+        style={styles.button}
+        onPress={onToggleLock}
+        accessibilityLabel={isLocked ? 'Unlock pan' : 'Lock pan'}>
         {isLocked ? (
-          <LockIcon
-            size={ICON_SIZE_MD}
-            color={isLocked ? colors.textSecondary : colors.primaryText}
-          />
+          <LockIcon size={ICON_SIZE_MD} color={scheme.textSecondary} />
         ) : (
-          <LockIconOpen
-            size={ICON_SIZE_MD}
-            color={isLocked ? colors.textSecondary : colors.primaryText}
-          />
+          <LockIconOpen size={ICON_SIZE_MD} color={scheme.textPrimary} />
         )}
-      </TouchableOpacity>
+      </PressableScale>
     </View>
   );
 };
 
-const createStyles = (colors: ThemeColors) =>
+const createStyles = (scheme: ReturnType<typeof useScheme>) =>
   StyleSheet.create({
     container: {
-      position: "absolute",
-      bottom: normalizeHeight(16),
-      left: normalizeWidth(16),
-      backgroundColor: colors.controlButtonBg,
-      borderRadius: normalizeWidth(12),
+      position: 'absolute',
+      bottom: space.lg,
+      left: space.lg,
+      backgroundColor: scheme.isDark
+        ? 'rgba(17, 24, 39, 0.92)'
+        : 'rgba(244, 245, 247, 0.92)',
+      borderRadius: radiusTokens.md,
       borderWidth: 1,
-      borderColor: colors.inputDarkBorder,
+      borderColor: scheme.border,
       padding: normalizeWidth(6),
       gap: normalizeWidth(2),
     },
     button: {
       width: normalizeWidth(36),
       height: normalizeWidth(36),
-      alignItems: "center",
-      justifyContent: "center",
-      borderRadius: normalizeWidth(8),
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: radiusTokens.sm,
     },
   });
 

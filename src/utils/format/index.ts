@@ -57,3 +57,47 @@ export const hexToRGB = (hexColor: string, alpha?: number): string => {
 export const formatDate = (date: Date, format = 'DD-MM-YYYY') => {
   return dayjs(date).format(format);
 };
+
+/** Format a number (or parseable string) to `decimals` decimal places,
+ *  returning an em-dash for non-finite / null / undefined inputs. */
+export const formatNumber = (
+  value: number | string | null | undefined,
+  decimals = 2,
+): string => {
+  let n: number;
+  if (typeof value === 'number') {
+    n = value;
+  } else if (typeof value === 'string' && value.trim() !== '') {
+    n = Number(value);
+  } else {
+    return '—';
+  }
+  if (!Number.isFinite(n)) return '—';
+  return n.toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+};
+
+/** Locale-format an energy value (kWh) to `decimals` decimal places. */
+export const formatKwh = (value: number, decimals = 2): string =>
+  value.toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+
+/** Convert an epoch-ms timestamp to a human-readable relative time string.
+ *  Returns 'Just now' / 'N min ago' / 'N hr ago' or a locale date for older. */
+export const formatRelativeTime = (raw: string | number | null | undefined): string => {
+  if (!raw) return '—';
+  const ms = Number(raw);
+  if (!Number.isFinite(ms) || ms <= 0) return '—';
+  const diffSec = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+  if (diffSec < 60) return 'Just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} min ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr} hr ago`;
+  const d = new Date(ms);
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+};

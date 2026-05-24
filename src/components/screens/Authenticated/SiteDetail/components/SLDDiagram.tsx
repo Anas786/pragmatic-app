@@ -1,11 +1,12 @@
 import React, {
   FC,
+  ReactNode,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-} from "react";
+} from 'react';
 import {
   Animated as RNAnimated,
   Dimensions,
@@ -14,299 +15,124 @@ import {
   StatusBar,
   StyleSheet,
   View,
-} from "react-native";
+} from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
   useAnimatedReaction,
   runOnJS,
-} from "react-native-reanimated";
+} from 'react-native-reanimated';
 import {
   Gesture,
   GestureDetector,
   GestureHandlerRootView,
-} from "react-native-gesture-handler";
-import Svg, { Circle, Path } from "react-native-svg";
-import { AppText } from "src/components/common";
-import {
-  ACCENT_GREEN,
-  ACCENT_RED,
-  FONT_SIZE_MICRO,
-  FONT_SIZE_SM,
-  FONT_SIZE_XS,
-  FONT_SIZE_XXS,
-  normalizeHeight,
-  normalizeWidth,
-  ThemeColors,
-} from "src/utils";
-import { useThemeStore } from "src/hooks";
-import { sldCenter, sldSources, SLDSourceNode } from "src/data/mock";
-import ControlButtons from "./ControlButtons";
-import { FactoryGif } from "src/assets/gif";
+} from 'react-native-gesture-handler';
+import { useScheme, useThemedStyles, Scheme } from 'src/theme';
+import { normalizeHeight, normalizeWidth } from 'src/utils';
+import ControlButtons from './ControlButtons';
+import { DiagramCanvas } from './SummaryView/SLDCanvas';
 
-const RNAnimatedPath = RNAnimated.createAnimatedComponent(Path);
-const { width: SW } = Dimensions.get("window");
+/* ─────────── viewport dimensions (normal mode) ─────────── */
 
-interface NodeIconProps {
-  IconComponent: FC<{ size?: number }>;
-  size: number;
-}
-const NodeIcons: FC<NodeIconProps> = ({ IconComponent, size }) => {
-  return <IconComponent size={size} />;
-};
-
-// Layout constants
-const PAD = normalizeWidth(8);
-const CW = normalizeWidth(152);
-const CH = normalizeHeight(118);
-const CD = normalizeWidth(90);
-
-// Viewport dimensions (normal mode)
+const { width: SW } = Dimensions.get('window');
 const VW = SW - normalizeWidth(24);
 const VH = normalizeHeight(480);
 
-// Helpers: compute positions from viewport size
-const getPositions = (vw: number, vh: number) => ({
-  dg: { x: PAD, y: PAD },
-  grid: { x: vw - CW - PAD, y: PAD },
-  solar: { x: PAD, y: vh - CH - PAD },
-  bess: { x: vw - CW - PAD, y: vh - CH - PAD },
+/* ─────────── static styles (not theme-dependent) ─────────── */
+
+const styles = StyleSheet.create({
+  container: {
+    position: 'relative',
+  },
+  fullscreenRoot: {
+    flex: 1,
+  },
+  fullscreenViewport: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 0,
+    borderWidth: 0,
+  },
+  fullscreenCanvas: {
+    width: VW,
+    height: VH,
+  },
+  fullscreenWrap: {
+    flex: 1,
+  },
 });
 
-const getLinePath = (idx: number, vw: number, vh: number) => {
-  const pos = getPositions(vw, vh);
-  const keys = ["dg", "grid", "solar", "bess"] as const;
-  const p = pos[keys[idx]];
-  const isTop = idx < 2;
-  const isLeft = idx % 2 === 0;
-  const sx = p.x + CW / 2;
-  const sy = isTop ? p.y + CH : p.y;
-  const ex = vw / 2 + (isLeft ? -CD / 3 : CD / 3);
-  const ey = vh / 2 + (isTop ? -CD / 3 : CD / 3);
-  const cx = sx;
-  const cy = (sy + ey) / 2;
-  return { path: `M ${sx} ${sy} Q ${cx} ${cy} ${ex} ${ey}`, cx, cy, ex, ey };
-};
+/* ─────────── theme-dependent styles ─────────── */
 
-const getArrowPath = (
-  ctrlX: number,
-  ctrlY: number,
-  endX: number,
-  endY: number,
-) => {
-  const angle = Math.atan2(endY - ctrlY, endX - ctrlX);
-  const len = 10;
-  const spread = Math.PI / 6;
-  const lx = endX - len * Math.cos(angle - spread);
-  const ly = endY - len * Math.sin(angle - spread);
-  const rx = endX - len * Math.cos(angle + spread);
-  const ry = endY - len * Math.sin(angle + spread);
-  return `M ${endX} ${endY} L ${lx} ${ly} L ${rx} ${ry} Z`;
-};
+const createSLDStyles = (scheme: Scheme) =>
+  StyleSheet.create({
+    viewport: {
+      overflow: 'hidden',
+      backgroundColor: scheme.surfaceRaised,
+      borderWidth: 1,
+      borderColor: scheme.border,
+      borderRadius: normalizeWidth(16),
+    },
+    fullscreenWrapBg: {
+      flex: 1,
+      backgroundColor: scheme.isDark ? '#000000' : '#FFFFFF',
+    },
+    controlBg: {
+      backgroundColor: scheme.isDark
+        ? 'rgba(17, 24, 39, 0.92)'
+        : 'rgba(244, 245, 247, 0.92)',
+    },
+  });
 
-// Grid dots
-const DOT_SPACING = 50;
-const makeGridDots = (vw: number, vh: number) => {
-  const dots: Array<{ cx: number; cy: number }> = [];
-  for (let y = 25; y < vh; y += DOT_SPACING) {
-    for (let x = 25; x < vw; x += DOT_SPACING) {
-      dots.push({ cx: x, cy: y });
-    }
-  }
-  return dots;
-};
+/* ─────────── styled primitives ─────────── */
 
-// --- Sub-components ---
-
-const FlowLine: FC<{
-  d: string;
-  color: string;
-  dashAnim: RNAnimated.Value;
-}> = ({ d, color, dashAnim }) => (
-  <RNAnimatedPath
-    d={d}
-    stroke={color}
-    strokeWidth={2}
-    strokeDasharray="8,6"
-    strokeDashoffset={dashAnim}
-    fill="none"
-  />
+const Container: FC<{ children?: ReactNode }> = ({ children }) => (
+  <View style={styles.container}>{children}</View>
 );
+Container.displayName = 'Container';
 
-const SolidLine: FC<{
-  d: string;
-  arrowD: string;
-  color: string;
-}> = ({ d, arrowD, color }) => (
-  <>
-    <Path d={d} stroke={color} strokeWidth={2} fill="none" />
-    <Path d={arrowD} fill={color} />
-  </>
+const FullscreenRoot: FC<{ children?: ReactNode }> = ({ children }) => (
+  <GestureHandlerRootView style={styles.fullscreenRoot}>
+    {children}
+  </GestureHandlerRootView>
 );
+FullscreenRoot.displayName = 'FullscreenRoot';
 
-const SourceCard: FC<{
-  source: SLDSourceNode;
-  x: number;
-  y: number;
-  colors: ThemeColors;
-}> = ({ source, x, y, colors }) => {
-  const styles = useMemo(() => createStyles(colors), [colors]);
+interface ViewportProps {
+  viewportStyle: object;
+  children?: ReactNode;
+}
 
-  return (
-    <View
-      style={[styles.sourceCard, { left: x, top: y, width: CW, height: CH }]}>
-      <AppText
-        fontSize={FONT_SIZE_SM}
-        bold
-        color={colors.primaryText}
-        numberOfLines={1}>
-        {source.title}
-      </AppText>
-      <View style={styles.cardContent}>
-        <NodeIcons IconComponent={source.iconName} size={normalizeWidth(34)} />
-        <View style={styles.metricsCol}>
-          {source.metrics.map((m, i) => (
-            <View key={i} style={styles.metricRow}>
-              <AppText
-                fontSize={FONT_SIZE_XS}
-                bold
-                color={colors.primaryText}
-                style={styles.metricLabel}>
-                {m.label}
-              </AppText>
-              <AppText
-                fontSize={FONT_SIZE_XS}
-                bold
-                color={colors.primaryText}
-                style={styles.metricValue}>
-                {m.value}
-              </AppText>
-              {m.unit ? (
-                <AppText fontSize={FONT_SIZE_XXS} color={colors.textSecondary}>
-                  {m.unit}
-                </AppText>
-              ) : null}
-            </View>
-          ))}
-        </View>
-      </View>
-    </View>
-  );
-};
+const Viewport: FC<ViewportProps> = ({ viewportStyle, children }) => (
+  <View style={viewportStyle}>{children}</View>
+);
+Viewport.displayName = 'Viewport';
 
-const CenterNode: FC<{ vw: number; vh: number; colors: ThemeColors }> = ({
-  vw,
-  vh,
-  colors,
-}) => {
-  const styles = useMemo(() => createStyles(colors), [colors]);
+const CanvasFrame: FC<{ style?: object; children?: ReactNode }> = ({
+  children,
+  style,
+}) => <Animated.View style={style}>{children}</Animated.View>;
+CanvasFrame.displayName = 'CanvasFrame';
 
-  return (
-    <View
-      style={[
-        styles.centerNode,
-        {
-          left: (vw - CD) / 2,
-          top: (vh - CD) / 2,
-          width: CD,
-          height: CD,
-          borderRadius: CD / 2,
-        },
-      ]}>
-      <FactoryGif size={normalizeWidth(24)} />
-      <AppText fontSize={FONT_SIZE_XS} bold color={colors.primaryText}>
-        {sldCenter.title}
-      </AppText>
-      <AppText fontSize={FONT_SIZE_MICRO} color={colors.textSecondary}>
-        Load = {sldCenter.loadValue}
-      </AppText>
-    </View>
-  );
-};
-
-// --- Main Canvas Content ---
-
-const DiagramCanvas: FC<{
-  vw: number;
-  vh: number;
-  dashAnim: RNAnimated.Value;
-  colors: ThemeColors;
-}> = ({ vw, vh, dashAnim, colors }) => {
-  const positions = getPositions(vw, vh);
-  const keys = ["dg", "grid", "solar", "bess"] as const;
-  const dots = makeGridDots(vw, vh);
-
-  return (
-    <>
-      <Svg style={StyleSheet.absoluteFill} width={vw} height={vh}>
-        {dots.map((dot, i) => (
-          <Circle
-            key={i}
-            cx={dot.cx}
-            cy={dot.cy}
-            r={1.5}
-            fill={ACCENT_GREEN}
-            opacity={0.2}
-          />
-        ))}
-        {sldSources.map((source, idx) => {
-          const line = getLinePath(idx, vw, vh);
-          if (source.lineStyle === "animated") {
-            return (
-              <FlowLine
-                key={source.id}
-                d={line.path}
-                color={source.lineColor}
-                dashAnim={dashAnim}
-              />
-            );
-          }
-          return (
-            <SolidLine
-              key={source.id}
-              d={line.path}
-              arrowD={getArrowPath(line.cx, line.cy, line.ex, line.ey)}
-              color={source.lineColor}
-            />
-          );
-        })}
-      </Svg>
-
-      {sldSources.map((source, idx) => {
-        const pos = positions[keys[idx]];
-        return (
-          <SourceCard
-            key={source.id}
-            source={source}
-            x={pos.x}
-            y={pos.y}
-            colors={colors}
-          />
-        );
-      })}
-
-      <CenterNode vw={vw} vh={vh} colors={colors} />
-    </>
-  );
-};
-
-// --- Main Component ---
+/* ─────────── SLDDiagram ─────────── */
 
 const SLDDiagram: FC = () => {
-  const { colors } = useThemeStore();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const scheme = useScheme();
+  const themed = useThemedStyles(createSLDStyles);
+
   const [isLocked, setIsLocked] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
-  const [currentZoom, setCurrentZoom] = useState<any>(1);
+  const [currentZoom, setCurrentZoom] = useState<number>(1);
 
-  // Reanimated shared values for gestures
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const scale = useSharedValue(1);
   const savedTX = useSharedValue(0);
   const savedTY = useSharedValue(0);
   const savedScale = useSharedValue(1);
+
   useAnimatedReaction(
     () => scale.value,
     value => {
@@ -314,7 +140,6 @@ const SLDDiagram: FC = () => {
     },
   );
 
-  // RN Animated for SVG dash animation
   const dashAnim = useRef(new RNAnimated.Value(0)).current;
 
   useEffect(() => {
@@ -330,7 +155,6 @@ const SLDDiagram: FC = () => {
     return () => anim.stop();
   }, [dashAnim]);
 
-  // Gesture factory — each GestureDetector needs its own gesture instance
   const makeGesture = useCallback(() => {
     const pan = Gesture.Pan()
       .enabled(!isLocked)
@@ -366,7 +190,6 @@ const SLDDiagram: FC = () => {
     ],
   }));
 
-  // Button handlers
   const handleZoomIn = useCallback(() => {
     const ns = Math.min(savedScale.value + 0.2, 3);
     savedScale.value = ns;
@@ -402,46 +225,67 @@ const SLDDiagram: FC = () => {
     setIsFullscreen(false);
   }, [handleFit]);
 
-  // Normal view
-  const renderDiagram = (vw: number, vh: number) => (
-    <GestureDetector gesture={normalGesture}>
-      <View style={[styles.viewport, { width: vw, height: vh }]}>
-        <Animated.View style={[{ width: vw, height: vh }, canvasStyle]}>
-          <DiagramCanvas vw={vw} vh={vh} dashAnim={dashAnim} colors={colors} />
-        </Animated.View>
-        <ControlButtons
-          onZoomIn={handleZoomIn}
-          onZoomOut={handleZoomOut}
-          onToggleLock={handleToggleLock}
-          onFullscreen={handleFullscreen}
-          isLocked={isLocked}
-          currentZoom={currentZoom}
-        />
-      </View>
-    </GestureDetector>
+  const viewportStyle = useMemo(
+    () => StyleSheet.flatten([themed.viewport, { width: VW, height: VH }]),
+    [themed.viewport],
+  );
+
+  const canvasFrameStyle = useMemo(
+    () => [{ width: VW, height: VH }, canvasStyle],
+    [canvasStyle],
+  );
+
+  const fullscreenViewportStyle = useMemo(
+    () => StyleSheet.flatten([themed.viewport, styles.fullscreenViewport]),
+    [themed.viewport],
+  );
+
+  const fullscreenCanvasFrameStyle = useMemo(
+    () => [styles.fullscreenCanvas, canvasStyle],
+    [canvasStyle],
   );
 
   return (
-    <View style={styles.container}>
-      {renderDiagram(VW, VH)}
+    <Container>
+      <GestureDetector gesture={normalGesture}>
+        <Viewport viewportStyle={viewportStyle}>
+          <CanvasFrame style={canvasFrameStyle}>
+            <DiagramCanvas
+              vw={VW}
+              vh={VH}
+              dashAnim={dashAnim}
+              dotColor={scheme.brand}
+            />
+          </CanvasFrame>
+          <ControlButtons
+            onZoomIn={handleZoomIn}
+            onZoomOut={handleZoomOut}
+            onToggleLock={handleToggleLock}
+            onFullscreen={handleFullscreen}
+            isLocked={isLocked}
+            currentZoom={currentZoom}
+          />
+        </Viewport>
+      </GestureDetector>
+
       <Modal
         visible={isFullscreen}
         animationType="slide"
         statusBarTranslucent
         onRequestClose={handleCloseFullscreen}>
         <StatusBar hidden />
-        <GestureHandlerRootView style={{ flex: 1 }}>
-          <View style={styles.fullscreenWrap}>
-            <View style={[styles.viewport, styles.fullscreenViewport]}>
+        <FullscreenRoot>
+          <View style={[styles.fullscreenWrap, themed.fullscreenWrapBg]}>
+            <Viewport viewportStyle={fullscreenViewportStyle}>
               <GestureDetector gesture={fullscreenGesture}>
-                <Animated.View style={[styles.fullscreenCanvas, canvasStyle]}>
+                <CanvasFrame style={fullscreenCanvasFrameStyle}>
                   <DiagramCanvas
                     vw={VW}
                     vh={VH}
                     dashAnim={dashAnim}
-                    colors={colors}
+                    dotColor={scheme.brand}
                   />
-                </Animated.View>
+                </CanvasFrame>
               </GestureDetector>
               <ControlButtons
                 onZoomIn={handleZoomIn}
@@ -451,93 +295,12 @@ const SLDDiagram: FC = () => {
                 isLocked={isLocked}
                 currentZoom={currentZoom}
               />
-            </View>
+            </Viewport>
           </View>
-        </GestureHandlerRootView>
+        </FullscreenRoot>
       </Modal>
-    </View>
+    </Container>
   );
 };
-
-const createStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
-    container: {
-      position: "relative",
-    },
-    viewport: {
-      overflow: "hidden",
-      backgroundColor: colors.metricCardBg,
-      borderWidth: 1,
-      borderColor: colors.inputDarkBorder,
-      borderRadius: normalizeWidth(16),
-    },
-    sourceCard: {
-      position: "absolute",
-      backgroundColor: colors.cardBg,
-      borderWidth: 1,
-      borderColor: colors.inputDarkBorder,
-      borderRadius: normalizeWidth(12),
-      padding: normalizeWidth(10),
-      gap: normalizeHeight(6),
-    },
-    cardContent: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: normalizeWidth(8),
-    },
-    metricsCol: {
-      flex: 1,
-      gap: normalizeHeight(2),
-    },
-    metricRow: {
-      flexDirection: "row",
-      alignItems: "baseline",
-      gap: normalizeWidth(4),
-    },
-    metricLabel: {
-      width: normalizeWidth(26),
-    },
-    metricValue: {
-      flex: 1,
-      textAlign: "right",
-    },
-    centerNode: {
-      position: "absolute",
-      backgroundColor: colors.cardBg,
-      borderWidth: 2,
-      borderColor: ACCENT_RED,
-      alignItems: "center",
-      justifyContent: "center",
-      gap: normalizeHeight(2),
-    },
-    fullscreenViewport: {
-      flex: 1,
-      alignItems: "center",
-      justifyContent: "center",
-      borderRadius: 0,
-      borderWidth: 0,
-    },
-    fullscreenCanvas: {
-      width: VW,
-      height: VH,
-    },
-    fullscreenWrap: {
-      flex: 1,
-      backgroundColor: colors.fullscreenBg,
-    },
-    closeBtn: {
-      position: "absolute",
-      top: normalizeHeight(16),
-      right: normalizeWidth(16),
-      width: normalizeWidth(40),
-      height: normalizeWidth(40),
-      borderRadius: normalizeWidth(20),
-      backgroundColor: colors.controlButtonBg,
-      borderWidth: 1,
-      borderColor: colors.inputDarkBorder,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-  });
 
 export default SLDDiagram;

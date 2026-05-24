@@ -1,79 +1,94 @@
-import React, { FC, useMemo } from "react";
+import React, { FC } from 'react';
+import { ScrollView, StatusBar, StyleSheet, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import {
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
-import { AppText } from "src/components/common";
-import { useThemeStore } from "src/hooks/useThemeStore";
+  AppText,
+  IconButton,
+  ScreenContainer,
+  Surface,
+  TopBar,
+} from 'src/components/common';
+import { Scheme, space, useScheme, useThemedStyles } from 'src/theme';
 import {
-  ACCENT_GREEN,
   FONT_SIZE_MD,
   FONT_SIZE_SM,
   FONT_SIZE_XS,
   FONT_SIZE_XXS,
   ICON_SIZE_LG,
-  normalizeHeight,
-  normalizeWidth,
-  ThemeColors,
-} from "src/utils";
-import { Back, EmailPlainIcon, MapMarkerIcon, PhoneIcon, WebIcon } from "src/assets/icons";
-import { IconProps } from "src/types";
+} from 'src/utils';
+import {
+  Back,
+  EmailPlainIcon,
+  MapMarkerIcon,
+  PhoneIcon,
+  WebIcon,
+} from 'src/assets/icons';
+import { IconProps } from 'src/types';
+
+interface ContactCardProps {
+  IconComponent: FC<IconProps>;
+  iconColor?: string;
+  title: string;
+  value: string;
+  subtitle?: string;
+}
+
+const ContactCard: FC<ContactCardProps> = ({
+  IconComponent,
+  iconColor,
+  title,
+  value,
+  subtitle,
+}) => {
+  const scheme = useScheme();
+  const resolvedIconColor = iconColor ?? scheme.brand;
+  const themed = useThemedStyles(createContactCardStyles);
+  return (
+    <Surface elevation="md" radius="xl" padding={space.lg} bordered>
+      <View style={styles.contactRow}>
+        <View style={[themed.contactIconWrap, { borderColor: resolvedIconColor }]}>
+          <IconComponent size={ICON_SIZE_LG} color={resolvedIconColor} />
+        </View>
+        <View style={styles.contactText}>
+          <AppText fontSize={FONT_SIZE_XXS} color={scheme.textSecondary}>
+            {title}
+          </AppText>
+          <AppText fontSize={FONT_SIZE_SM} medium color={scheme.textPrimary}>
+            {value}
+          </AppText>
+          {subtitle ? (
+            <AppText fontSize={FONT_SIZE_XXS} color={scheme.textSecondary}>
+              {subtitle}
+            </AppText>
+          ) : null}
+        </View>
+      </View>
+    </Surface>
+  );
+};
 
 const ContactUs: FC = () => {
   const navigation = useNavigation();
-  const { colors } = useThemeStore();
-  const styles = useMemo(() => createStyles(colors), [colors]);
-
-  const ContactCard: FC<{
-    IconComponent: FC<IconProps>;
-    iconColor?: string;
-    title: string;
-    value: string;
-    subtitle?: string;
-  }> = ({ IconComponent, iconColor = ACCENT_GREEN, title, value, subtitle }) => (
-    <View style={styles.contactCard}>
-      <View style={[styles.contactIconWrap, { borderColor: iconColor }]}>
-        <IconComponent size={ICON_SIZE_LG} color={iconColor} />
-      </View>
-      <View style={styles.contactText}>
-        <AppText fontSize={FONT_SIZE_XXS} color={colors.textSecondary}>
-          {title}
-        </AppText>
-        <AppText fontSize={FONT_SIZE_SM} medium color={colors.primaryText}>
-          {value}
-        </AppText>
-        {subtitle ? (
-          <AppText fontSize={FONT_SIZE_XXS} color={colors.textSecondary}>
-            {subtitle}
-          </AppText>
-        ) : null}
-      </View>
-    </View>
-  );
+  const scheme = useScheme();
 
   return (
-    <SafeAreaView style={styles.container}>
+    <ScreenContainer>
       <StatusBar
-        barStyle={colors.statusBarStyle}
-        backgroundColor={colors.splashBg}
+        barStyle={scheme.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={scheme.bg}
       />
 
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => navigation.goBack()}>
-          <Back size={ICON_SIZE_LG} color={colors.primaryText} />
-        </TouchableOpacity>
-        <AppText fontSize={FONT_SIZE_MD} bold color={colors.primaryText}>
+      <TopBar>
+        <IconButton
+          onPress={() => navigation.goBack()}
+          accessibilityLabel="Go back">
+          <Back size={ICON_SIZE_LG} color={scheme.textPrimary} />
+        </IconButton>
+        <AppText fontSize={FONT_SIZE_MD} bold color={scheme.textPrimary}>
           Contact Us
         </AppText>
-        <View style={styles.backBtn} />
-      </View>
+        <View style={styles.headerSpacer} />
+      </TopBar>
 
       <ScrollView
         style={styles.scroll}
@@ -81,7 +96,7 @@ const ContactUs: FC = () => {
         showsVerticalScrollIndicator={false}>
         <AppText
           fontSize={FONT_SIZE_XS}
-          color={colors.textSecondary}
+          color={scheme.textSecondary}
           center
           lineHeight={18}>
           Have questions or need support? Reach out to us through any of the
@@ -107,59 +122,45 @@ const ContactUs: FC = () => {
             value="Pragmatic Engineering Solutions"
             subtitle="Lahore, Punjab, Pakistan"
           />
-          <ContactCard IconComponent={WebIcon} title="Website" value="www.pragmatic.com" />
+          <ContactCard
+            IconComponent={WebIcon}
+            title="Website"
+            value="www.pragmatic.com"
+          />
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </ScreenContainer>
   );
 };
 
-const createStyles = (colors: ThemeColors) =>
+const createContactCardStyles = (scheme: Scheme) =>
   StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.splashBg },
-    header: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      backgroundColor: colors.cardBg,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.inputDarkBorder,
-      paddingHorizontal: normalizeWidth(12),
-      paddingVertical: normalizeHeight(14),
-    },
-    backBtn: {
-      width: normalizeWidth(36),
-      height: normalizeWidth(36),
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    scroll: { flex: 1 },
-    scrollContent: {
-      padding: normalizeWidth(16),
-      gap: normalizeHeight(20),
-      paddingTop: normalizeHeight(24),
-    },
-    cardGroup: { gap: normalizeHeight(12) },
-    contactCard: {
-      flexDirection: "row",
-      alignItems: "center",
-      backgroundColor: colors.cardBg,
-      borderWidth: 1,
-      borderColor: colors.inputDarkBorder,
-      borderRadius: normalizeWidth(16),
-      padding: normalizeWidth(16),
-      gap: normalizeWidth(14),
-    },
     contactIconWrap: {
-      width: normalizeWidth(48),
-      height: normalizeWidth(48),
-      borderRadius: normalizeWidth(12),
-      backgroundColor: colors.inputDarkBg,
+      width: 48,
+      height: 48,
+      borderRadius: 12,
+      backgroundColor: scheme.surfaceMuted,
       borderWidth: 1,
-      alignItems: "center",
-      justifyContent: "center",
+      alignItems: 'center',
+      justifyContent: 'center',
     },
-    contactText: { flex: 1, gap: normalizeHeight(2) },
   });
+
+const styles = StyleSheet.create({
+  headerSpacer: { width: 36, height: 36 },
+  scroll: { flex: 1 },
+  scrollContent: {
+    padding: space.lg,
+    gap: space.xl,
+    paddingTop: space['2xl'],
+  },
+  cardGroup: { gap: space.md },
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  contactText: { flex: 1, gap: 2 },
+});
 
 export default ContactUs;

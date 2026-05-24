@@ -7,13 +7,8 @@ import {
   TouchableWithoutFeedback,
 } from 'react-native';
 import { AppText } from 'src/components/common';
-import {
-  FONT_SIZE_SM,
-  normalizeHeight,
-  normalizeWidth,
-  ThemeColors,
-} from 'src/utils';
-import { useThemeStore } from 'src/hooks';
+import { FONT_SIZE_SM, normalizeHeight, normalizeWidth } from 'src/utils';
+import { radius as radiusTokens, space, useScheme } from 'src/theme';
 import CustomIcon from 'src/components/common/CustomIcon';
 
 type DropdownOption = 'Views' | 'Live Parameter' | 'Alarm';
@@ -30,8 +25,8 @@ const DropdownSelector: FC<DropdownSelectorProps> = ({
   onSelect,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const { colors } = useThemeStore();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const scheme = useScheme();
+  const styles = useMemo(() => createStyles(scheme), [scheme]);
 
   const handleSelect = (option: DropdownOption) => {
     onSelect(option);
@@ -43,10 +38,10 @@ const DropdownSelector: FC<DropdownSelectorProps> = ({
       <TouchableOpacity
         style={styles.container}
         onPress={() => setIsOpen(true)}>
-        <AppText fontSize={FONT_SIZE_SM} color={colors.textSecondary}>
+        <AppText fontSize={FONT_SIZE_SM} color={scheme.textSecondary}>
           {selected}
         </AppText>
-        <CustomIcon name="down_arrow" size={18} color={colors.textSecondary} />
+        <CustomIcon name="down_arrow" size={18} color={scheme.textSecondary} />
       </TouchableOpacity>
 
       <Modal
@@ -68,7 +63,7 @@ const DropdownSelector: FC<DropdownSelectorProps> = ({
                     onPress={() => handleSelect(option)}>
                     <AppText
                       fontSize={FONT_SIZE_SM}
-                      color={selected === option ? colors.primaryText : colors.textSecondary}>
+                      color={selected === option ? scheme.textPrimary : scheme.textSecondary}>
                       {option}
                     </AppText>
                   </TouchableOpacity>
@@ -82,17 +77,17 @@ const DropdownSelector: FC<DropdownSelectorProps> = ({
   );
 };
 
-const createStyles = (colors: ThemeColors) =>
+const createStyles = (scheme: ReturnType<typeof useScheme>) =>
   StyleSheet.create({
     container: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      backgroundColor: colors.dropdownBg,
+      backgroundColor: scheme.surface,
       borderWidth: 1,
-      borderColor: colors.inputDarkBorder,
-      borderRadius: 100,
-      paddingHorizontal: normalizeWidth(16),
+      borderColor: scheme.border,
+      borderRadius: radiusTokens.pill,
+      paddingHorizontal: space.lg,
       paddingVertical: normalizeHeight(12),
     },
     modalOverlay: {
@@ -102,20 +97,20 @@ const createStyles = (colors: ThemeColors) =>
       alignItems: 'center',
     },
     modalContent: {
-      backgroundColor: colors.dropdownBg,
+      backgroundColor: scheme.surface,
       borderWidth: 1,
-      borderColor: colors.inputDarkBorder,
-      borderRadius: 16,
+      borderColor: scheme.border,
+      borderRadius: radiusTokens.lg,
       paddingVertical: normalizeHeight(8),
       width: normalizeWidth(200),
     },
     optionItem: {
-      paddingHorizontal: normalizeWidth(16),
+      paddingHorizontal: space.lg,
       paddingVertical: normalizeHeight(12),
     },
     optionBorder: {
       borderBottomWidth: 1,
-      borderBottomColor: colors.inputDarkBorder,
+      borderBottomColor: scheme.border,
     },
   });
 

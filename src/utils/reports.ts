@@ -161,6 +161,24 @@ export const formatDateFilterLabel = (
 };
 
 /**
+ * Round `n` up to the nearest "nice" power-of-10 boundary so bar chart
+ * y-axes land on round numbers. Returns 0 for non-finite or non-positive
+ * input.
+ */
+export const niceCeiling = (n: number): number => {
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  const exp = Math.floor(Math.log10(n));
+  const base = Math.pow(10, exp);
+  const fraction = n / base;
+  let nice: number;
+  if (fraction <= 1) nice = 1;
+  else if (fraction <= 2) nice = 2;
+  else if (fraction <= 5) nice = 5;
+  else nice = 10;
+  return nice * base;
+};
+
+/**
  * Resolve a UI label for a backend column code via the report-mapping
  * config. Each mapping entry is shaped like:
  *

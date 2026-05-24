@@ -1,70 +1,73 @@
-import React, { FC, useMemo } from "react";
+import React, { FC } from 'react';
+import { ScrollView, StatusBar, StyleSheet, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import {
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
-import { AppText } from "src/components/common";
-import { useThemeStore } from "src/hooks/useThemeStore";
+  AppText,
+  IconButton,
+  ScreenContainer,
+  Surface,
+  TopBar,
+} from 'src/components/common';
+import { space, useScheme } from 'src/theme';
 import {
   FONT_SIZE_MD,
   FONT_SIZE_SM,
   FONT_SIZE_XS,
   ICON_SIZE_LG,
-  normalizeHeight,
-  normalizeWidth,
-  ThemeColors,
-} from "src/utils";
-import { Back } from "src/assets/icons";
+} from 'src/utils';
+import { Back } from 'src/assets/icons';
 
-const TermsAndConditions: FC = () => {
-  const navigation = useNavigation();
-  const { colors } = useThemeStore();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+interface SectionProps {
+  title: string;
+  body: string;
+}
 
-  const Section: FC<{ title: string; body: string }> = ({ title, body }) => (
+const Section: FC<SectionProps> = ({ title, body }) => {
+  const scheme = useScheme();
+  return (
     <View style={styles.section}>
-      <AppText fontSize={FONT_SIZE_SM} bold color={colors.primaryText}>
+      <AppText fontSize={FONT_SIZE_SM} bold color={scheme.textPrimary}>
         {title}
       </AppText>
       <AppText
         fontSize={FONT_SIZE_XS}
-        color={colors.textSecondary}
+        color={scheme.textSecondary}
         lineHeight={20}>
         {body}
       </AppText>
     </View>
   );
+};
+
+const TermsAndConditions: FC = () => {
+  const navigation = useNavigation();
+  const scheme = useScheme();
 
   return (
-    <SafeAreaView style={styles.container}>
+    <ScreenContainer>
       <StatusBar
-        barStyle={colors.statusBarStyle}
-        backgroundColor={colors.splashBg}
+        barStyle={scheme.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={scheme.bg}
       />
 
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => navigation.goBack()}>
-          <Back size={ICON_SIZE_LG} color={colors.primaryText} />
-        </TouchableOpacity>
-        <AppText fontSize={FONT_SIZE_MD} bold color={colors.primaryText}>
+      <TopBar>
+        <IconButton
+          onPress={() => navigation.goBack()}
+          accessibilityLabel="Go back">
+          <Back size={ICON_SIZE_LG} color={scheme.textPrimary} />
+        </IconButton>
+        <AppText fontSize={FONT_SIZE_MD} bold color={scheme.textPrimary}>
           Terms & Conditions
         </AppText>
-        <View style={styles.backBtn} />
-      </View>
+        <View style={styles.headerSpacer} />
+      </TopBar>
 
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
-        <View style={styles.card}>
-          <AppText fontSize={FONT_SIZE_XS} color={colors.textSecondary}>
+        <Surface elevation="md" radius="xl" padding={space.lg} bordered>
+          <AppText fontSize={FONT_SIZE_XS} color={scheme.textSecondary}>
             Last updated: February 2026
           </AppText>
           <Section
@@ -99,42 +102,17 @@ const TermsAndConditions: FC = () => {
             title="8. Contact"
             body="If you have questions about these Terms and Conditions, please contact us at info@pragmatic.com."
           />
-        </View>
+        </Surface>
       </ScrollView>
-    </SafeAreaView>
+    </ScreenContainer>
   );
 };
 
-const createStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.splashBg },
-    header: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      backgroundColor: colors.cardBg,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.inputDarkBorder,
-      paddingHorizontal: normalizeWidth(12),
-      paddingVertical: normalizeHeight(14),
-    },
-    backBtn: {
-      width: normalizeWidth(36),
-      height: normalizeWidth(36),
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    scroll: { flex: 1 },
-    scrollContent: { padding: normalizeWidth(16) },
-    card: {
-      backgroundColor: colors.cardBg,
-      borderWidth: 1,
-      borderColor: colors.inputDarkBorder,
-      borderRadius: normalizeWidth(16),
-      padding: normalizeWidth(16),
-      gap: normalizeHeight(16),
-    },
-    section: { gap: normalizeHeight(6) },
-  });
+const styles = StyleSheet.create({
+  headerSpacer: { width: 36, height: 36 },
+  scroll: { flex: 1 },
+  scrollContent: { padding: space.lg },
+  section: { gap: space.xs },
+});
 
 export default TermsAndConditions;

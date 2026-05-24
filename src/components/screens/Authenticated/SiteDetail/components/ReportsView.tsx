@@ -22,4 +22,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ReportsView;
+export default React.memo(ReportsView);

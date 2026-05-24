@@ -12,3 +12,4 @@ export * from './useSwitchActiveSite';
 export * from './useInverterReport';
 export * from './useEnergyReport';
 export * from './useReportMapping';
+export * from './useInteractionReady';

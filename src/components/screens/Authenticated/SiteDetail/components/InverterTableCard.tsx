@@ -1,265 +1,292 @@
-import React, { FC, useMemo, useState } from "react";
+import React, { FC, useMemo, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
+import { useRoute, RouteProp } from '@react-navigation/native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import { useRoute, RouteProp } from "@react-navigation/native";
-import { AppText } from "src/components/common";
+  AppText,
+  EmptyStateCard,
+  GlassChip,
+  HeroGradientCard,
+  HeroLiveBadge,
+  HeroTopRow,
+  HeroValueRow,
+  OverlineLabel,
+  PulseDot,
+  Skeleton,
+  Surface,
+  TintedPill,
+} from 'src/components/common';
 import {
-  ACCENT_BLUE,
-  ACCENT_GREEN,
+  duration,
+  glass,
+  Scheme,
+  semantic,
+  space,
+  useScheme,
+  useThemedStyles,
+} from 'src/theme';
+import {
   buildReportFilter,
   daysAgo,
   DEFAULT_CUSTOM_RANGE_DAYS,
-  FONT_SIZE_SM,
-  FONT_SIZE_XS,
-  FONT_SIZE_LG,
+  formatCompact,
   formatDateFilterLabel,
   MonthSelection,
-  normalizeHeight,
-  normalizeWidth,
-  PROGRESS_FILLED,
-  ThemeColors,
-  WHITE,
-} from "src/utils";
-import { useInverterReport, useThemeStore } from "src/hooks";
-import { InverterReportRow } from "src/networking";
-import { DashboardStackParamList } from "src/types";
-import {
-  InverterEntryData,
-  InverterFilterOption,
-  inverterFilters,
-} from "src/data/mock";
-import DateRangePickerModal from "./DateRangePickerModal";
-import DateFilterHeader from "./DateFilterHeader";
-import MonthYearPickerModal from "./MonthYearPickerModal";
+  FONT_SIZE_SM,
+  FONT_SIZE_XS,
+  FONT_SIZE_XXS,
+  FONT_SIZE_XXL,
+} from 'src/utils';
+import { useInteractionReady, useInverterReport } from 'src/hooks';
+import { DashboardStackParamList } from 'src/types';
+import { InverterFilterOption, inverterFilters } from 'src/data/mock';
+import DateRangePickerModal from './DateRangePickerModal';
+import DateFilterHeader from './DateFilterHeader';
+import MonthYearPickerModal from './MonthYearPickerModal';
+import { mapRowsToEntries, InverterEntry, statusFor } from './InverterTable/helpers';
+import InverterCard from './InverterTable/InverterCard';
+import ReportFilterPill from './PerformanceReport/ReportFilterPill';
 
-type SiteDetailRouteProp = RouteProp<DashboardStackParamList, "SiteDetail">;
-
-/**
- * Format a backend-supplied number with locale separators + 2 decimals.
- * Returns em-dash for non-finite / missing values so the row gracefully
- * degrades when an inverter reports incomplete data.
- */
-const formatNumber = (value: unknown): string => {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
-  return value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-};
-
-/**
- * Convert backend rows into the shape `<InverterEntry>` already knows
- * how to render. Keeps the rendering layer untouched while moving the
- * data source from `mockInverterData` to the live API.
- *
- *   inverter_num → "Inverter <n>" title
- *   ed_solar     → Production (kWh)
- *   yield        → Yield
- *   pr           → Performance Ratio (0–100, drives the green progress bar)
- *   up_percent   → Uptime % (0–100, drives the blue progress bar)
- */
-const mapRowsToEntries = (rows: InverterReportRow[]): InverterEntryData[] =>
-  rows.map(row => ({
-    title: `Inverter ${row.inverter_num ?? "—"}`,
-    production: formatNumber(row.ed_solar),
-    yield: formatNumber(row.yield),
-    performanceRatio:
-      typeof row.pr === "number" && Number.isFinite(row.pr) ? row.pr : 0,
-    uptimePercent:
-      typeof row.up_percent === "number" && Number.isFinite(row.up_percent)
-        ? row.up_percent
-        : 0,
-  }));
-
-const PROGRESS_BAR_HEIGHT = normalizeHeight(6);
-const PROGRESS_BAR_RADIUS = 1000;
-const FILTER_PILL_PH = normalizeWidth(20);
-const FILTER_PILL_PV = normalizeHeight(10);
-const FILTER_PILL_RADIUS = 100;
-const METRIC_CARD_RADIUS = normalizeWidth(12);
-const METRIC_CARD_PV = normalizeHeight(14);
-const METRIC_CARD_PH = normalizeWidth(12);
+type SiteDetailRouteProp = RouteProp<DashboardStackParamList, 'SiteDetail'>;
 
 const InverterTableCard: FC = () => {
-  const { colors } = useThemeStore();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const scheme = useScheme();
+  const themed = useThemedStyles(createThemedStyles);
   const route = useRoute<SiteDetailRouteProp>();
   const { siteId } = route.params;
 
-  // Default Custom-filter range: last 15 days through today.
-  const [startDate, setStartDate] = useState(() =>
-    daysAgo(DEFAULT_CUSTOM_RANGE_DAYS),
-  );
+  const [startDate, setStartDate] = useState(() => daysAgo(DEFAULT_CUSTOM_RANGE_DAYS));
   const [endDate, setEndDate] = useState(() => new Date());
   const [selectedMonth, setSelectedMonth] = useState<MonthSelection>(() => {
     const now = new Date();
     return { month: now.getMonth() + 1, year: now.getFullYear() };
   });
-  const [selectedYear, setSelectedYear] = useState<number>(() =>
-    new Date().getFullYear(),
-  );
+  const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [showYearPicker, setShowYearPicker] = useState(false);
-  const [activeFilter, setActiveFilter] =
-    useState<InverterFilterOption>("Custom");
+  const [activeFilter, setActiveFilter] = useState<InverterFilterOption>('Custom');
 
-  // Memoise the filter shape so React Query treats identical selections
-  // as the same cache entry. New object only when pill or dates change.
   const reportFilter = useMemo(
-    () =>
-      buildReportFilter(
-        activeFilter,
-        startDate,
-        endDate,
-        selectedMonth,
-        selectedYear,
-      ),
+    () => buildReportFilter(activeFilter, startDate, endDate, selectedMonth, selectedYear),
     [activeFilter, startDate, endDate, selectedMonth, selectedYear],
   );
 
-  // Fires GET /protected/data/v2/report/{siteId}?type=inverter_queries&...
-  // automatically on mount, on filter change, and on date change.
-  const {
-    data: reportData,
-    refetch,
-    isLoading,
-    isFetching,
-    error,
-  } = useInverterReport(siteId, reportFilter);
+  const { data: reportData, refetch, isLoading, error } = useInverterReport(
+    siteId,
+    reportFilter,
+  );
+  // Defer the inverter-row mount (10 FadeInDown + Reanimated bars per
+  // row) so the chip-morph + hero card render first on a cold visit.
+  const ready = useInteractionReady();
 
-  // Map backend rows → render-friendly entries. Memoised on the actual
-  // data reference so flips between cache-hit selections don't recompute.
-  const inverterEntries = useMemo<InverterEntryData[]>(
+  const inverterEntries = useMemo<InverterEntry[]>(
     () => mapRowsToEntries(reportData?.data ?? []),
     [reportData],
   );
+
+  const fleet = useMemo(() => {
+    if (inverterEntries.length === 0) return null;
+    const valid = inverterEntries.filter(e => e.performanceRatio > 0);
+    if (valid.length === 0) return null;
+    const avgPr = valid.reduce((s, e) => s + e.performanceRatio, 0) / valid.length;
+    const best = valid.reduce((a, b) => (a.performanceRatio >= b.performanceRatio ? a : b));
+    const worst = valid.reduce((a, b) => (a.performanceRatio <= b.performanceRatio ? a : b));
+    const totalProduction = inverterEntries.reduce(
+      (s, e) => s + (e.productionRaw ?? 0),
+      0,
+    );
+    return { avgPr, best, worst, totalProduction, count: inverterEntries.length };
+  }, [inverterEntries]);
 
   const handleDateApply = (start: Date, end: Date) => {
     setStartDate(start);
     setEndDate(end);
   };
-
   const handleMonthApply = (sel: { year: number; month: number }) => {
     setSelectedMonth({ year: sel.year, month: sel.month });
   };
-
   const handleYearApply = (sel: { year: number }) => {
     setSelectedYear(sel.year);
   };
-
   const handlePillPress = () => {
     switch (activeFilter) {
-      case "Custom":
+      case 'Custom':
         setShowDatePicker(true);
         break;
-      case "Month":
+      case 'Month':
         setShowMonthPicker(true);
         break;
-      case "Year":
+      case 'Year':
         setShowYearPicker(true);
         break;
-      case "Life Time":
+      case 'Life Time':
       default:
         break;
     }
   };
 
-  const handleRefresh = () => {
-    refetch();
+  const renderHero = () => {
+    if (!fleet) return null;
+    const avgStatus = statusFor(fleet.avgPr);
+    return (
+      <Animated.View
+        entering={FadeInDown.duration(duration.fast).springify().damping(20)}>
+        <HeroGradientCard>
+          <HeroTopRow>
+            <HeroLiveBadge>
+              <PulseDot color={scheme.heroOnGradient} size={8} />
+              <OverlineLabel color={scheme.heroOnGradient}>LIVE · FLEET</OverlineLabel>
+            </HeroLiveBadge>
+            <GlassChip>
+              <AppText fontSize={FONT_SIZE_XXS} bold color={scheme.heroOnGradient}>
+                {fleet.count}
+              </AppText>
+            </GlassChip>
+          </HeroTopRow>
+
+          <OverlineLabel color={scheme.heroOnGradientMuted} style={styles.heroSectionLabel}>
+            FLEET AVERAGE PR
+          </OverlineLabel>
+          <HeroValueRow>
+            <AppText
+              fontSize={FONT_SIZE_XXL}
+              bold
+              color={scheme.heroOnGradient}
+              numberOfLines={1}>
+              {fleet.avgPr.toFixed(2)}
+            </AppText>
+            <AppText fontSize={FONT_SIZE_SM} color={scheme.heroOnGradientMuted} medium>
+              %
+            </AppText>
+            <TintedPill
+              color={avgStatus.color}
+              alpha="38"
+              paddingX={space.sm}
+              paddingY={3}
+              style={styles.heroStatusPill}>
+              <AppText fontSize={FONT_SIZE_XXS} bold color={scheme.heroOnGradient}>
+                {avgStatus.label.toUpperCase()}
+              </AppText>
+            </TintedPill>
+          </HeroValueRow>
+
+          <View style={styles.heroDivider} />
+
+          <AggRow>
+            <AggLeft>
+              <View style={styles.aggDotBest} />
+              <AppText fontSize={FONT_SIZE_XXS} bold color={scheme.heroOnGradientMuted}>
+                BEST
+              </AppText>
+              <AppText fontSize={FONT_SIZE_XS} color={scheme.heroOnGradient}>
+                Inverter {fleet.best.num || '—'}
+              </AppText>
+            </AggLeft>
+            <AppText fontSize={FONT_SIZE_XS} bold color={scheme.heroOnGradient}>
+              {fleet.best.performanceRatio.toFixed(2)}%
+            </AppText>
+          </AggRow>
+
+          <AggRow>
+            <AggLeft>
+              <View style={styles.aggDotWorst} />
+              <AppText fontSize={FONT_SIZE_XXS} bold color={scheme.heroOnGradientMuted}>
+                WORST
+              </AppText>
+              <AppText fontSize={FONT_SIZE_XS} color={scheme.heroOnGradient}>
+                Inverter {fleet.worst.num || '—'}
+              </AppText>
+            </AggLeft>
+            <AppText fontSize={FONT_SIZE_XS} bold color={scheme.heroOnGradient}>
+              {fleet.worst.performanceRatio.toFixed(2)}%
+            </AppText>
+          </AggRow>
+
+          <AggRow>
+            <AggLeft>
+              <AppText fontSize={FONT_SIZE_XXS} bold color={scheme.heroOnGradientMuted}>
+                Σ TOTAL PRODUCTION
+              </AppText>
+            </AggLeft>
+            <AppText fontSize={FONT_SIZE_XS} bold color={scheme.heroOnGradient}>
+              {formatCompact(fleet.totalProduction)} kWh
+            </AppText>
+          </AggRow>
+        </HeroGradientCard>
+      </Animated.View>
+    );
   };
 
-  const ProgressBar: FC<{ percent: number; color: string }> = ({
-    percent,
-    color,
-  }) => (
-    <View style={styles.progressTrack}>
-      <View
-        style={[
-          styles.progressFill,
-          { width: `${percent}%`, backgroundColor: color },
-        ]}
-      />
+  const renderFilters = () => (
+    <View style={styles.filterRow}>
+      {inverterFilters.map(filter => (
+        <ReportFilterPill
+          key={filter}
+          active={activeFilter === filter}
+          label={filter}
+          onPress={() => setActiveFilter(filter)}
+        />
+      ))}
     </View>
   );
 
-  const ProgressRow: FC<{
-    label: string;
-    value: string;
-    color: string;
-    percent: number;
-  }> = ({ label, value, color, percent }) => (
-    <View style={styles.progressSection}>
-      <View style={styles.progressLabelRow}>
-        <AppText fontSize={FONT_SIZE_SM} bold color={colors.primaryText}>
-          {label}
-        </AppText>
-        <AppText fontSize={FONT_SIZE_XS} bold color={color}>
-          {value}
-        </AppText>
+  const renderSkeletons = () => (
+    <View style={styles.list}>
+      {Array.from({ length: 3 }).map((_, i) => (
+        <Surface
+          key={i}
+          elevation="md"
+          radius="xl"
+          background={scheme.surface}
+          padding={space.lg}
+          style={themed.card}>
+          <View style={styles.cardHeader}>
+            <View style={styles.badgeRow}>
+              <Skeleton width={32} height={32} radius="md" />
+              <Skeleton width={120} height={14} />
+            </View>
+            <Skeleton width={80} height={20} radius="pill" />
+          </View>
+          <View style={styles.metricsRow}>
+            <Skeleton width="48%" height={72} radius="md" />
+            <Skeleton width="48%" height={72} radius="md" />
+          </View>
+          <Skeleton width="100%" height={8} radius="md" />
+          <Skeleton width="100%" height={8} radius="md" />
+        </Surface>
+      ))}
+    </View>
+  );
+
+  const renderList = () => {
+    if (!ready) return renderSkeletons();
+    if (isLoading && inverterEntries.length === 0) return renderSkeletons();
+    if (error) {
+      return (
+        <EmptyStateCard
+          title="Couldn't load inverter report"
+          message="Tap retry to try again."
+          onRetry={() => refetch()}
+        />
+      );
+    }
+    if (inverterEntries.length === 0) {
+      return <EmptyStateCard message="No inverter data for this period." />;
+    }
+    return (
+      <View style={styles.list}>
+        {inverterEntries.map((entry, i) => (
+          <InverterCard key={`${entry.title}-${i}`} entry={entry} index={i} />
+        ))}
       </View>
-      <ProgressBar percent={percent} color={color} />
-    </View>
-  );
-
-  const InverterEntry: FC<InverterEntryData> = ({
-    title,
-    production,
-    yield: yieldValue,
-    performanceRatio,
-    uptimePercent,
-  }) => (
-    <View style={styles.entryContainer}>
-      <AppText fontSize={FONT_SIZE_SM} medium color={colors.primaryText}>
-        {title}
-      </AppText>
-
-      <View style={styles.metricsRow}>
-        <View style={styles.metricCard}>
-          <AppText fontSize={FONT_SIZE_XS} color={colors.primaryText}>
-            Production
-          </AppText>
-          <AppText fontSize={FONT_SIZE_LG} bold color={colors.primaryText}>
-            {production}
-          </AppText>
-        </View>
-        <View style={styles.metricCard}>
-          <AppText fontSize={FONT_SIZE_XS} color={colors.primaryText}>
-            Yield
-          </AppText>
-          <AppText fontSize={FONT_SIZE_LG} bold color={colors.primaryText}>
-            {yieldValue}
-          </AppText>
-        </View>
-      </View>
-
-      <ProgressRow
-        label="Performance Ratio"
-        // 2-decimal display so a raw 79.50382950726677 from the API
-        // renders as "79.50%" instead of dumping the full float.
-        value={`${performanceRatio.toFixed(2)}%`}
-        color={ACCENT_GREEN}
-        percent={performanceRatio}
-      />
-
-      <ProgressRow
-        label="Uptime %"
-        value={`${uptimePercent.toFixed(2)}%`}
-        color={ACCENT_BLUE}
-        percent={uptimePercent}
-      />
-    </View>
-  );
+    );
+  };
 
   return (
     <View style={styles.container}>
       <DateFilterHeader
-        title="Inverter Table"
+        title="Inverter Fleet"
         dateLabel={formatDateFilterLabel(
           activeFilter,
           startDate,
@@ -267,80 +294,17 @@ const InverterTableCard: FC = () => {
           selectedMonth,
           selectedYear,
         )}
-        pillDisabled={activeFilter === "Life Time"}
+        pillDisabled={activeFilter === 'Life Time'}
         onDatePress={handlePillPress}
-        onRefresh={handleRefresh}
+        onRefresh={refetch}
       />
 
-      <View style={styles.body}>
-        {/* Filter tabs */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterRow}>
-          {inverterFilters.map(filter => {
-            const isActive = activeFilter === filter;
-            return (
-              <TouchableOpacity
-                key={filter}
-                style={[
-                  styles.filterPill,
-                  isActive ? styles.filterActive : styles.filterInactive,
-                ]}
-                onPress={() => setActiveFilter(filter)}>
-                <AppText
-                  fontSize={FONT_SIZE_XS}
-                  medium
-                  color={isActive ? WHITE : colors.textSecondary}>
-                  {filter}
-                </AppText>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
-        {/* Inverter entries — driven by the inverter_queries report API */}
-        {isLoading ? (
-          <View style={styles.statusContainer}>
-            <ActivityIndicator color={colors.primaryText} />
-            <AppText
-              fontSize={FONT_SIZE_XS}
-              color={colors.textSecondary}
-              center>
-              Loading inverters...
-            </AppText>
-          </View>
-        ) : error ? (
-          <View style={styles.statusContainer}>
-            <AppText fontSize={FONT_SIZE_XS} color={colors.textSecondary} center>
-              Couldn't load inverter report.
-            </AppText>
-            <TouchableOpacity onPress={() => refetch()} style={styles.retryBtn}>
-              <AppText fontSize={FONT_SIZE_XS} medium color={PROGRESS_FILLED}>
-                Retry
-              </AppText>
-            </TouchableOpacity>
-          </View>
-        ) : inverterEntries.length === 0 ? (
-          <View style={styles.statusContainer}>
-            <AppText fontSize={FONT_SIZE_XS} color={colors.textSecondary} center>
-              No inverter data for this period.
-            </AppText>
-          </View>
-        ) : (
-          inverterEntries.map((entry, index) => (
-            <InverterEntry key={`${entry.title}-${index}`} {...entry} />
-          ))
-        )}
-
-        {/* Subtle background-refetch indicator: shows while a silent
-            refetch (e.g. stale cache crossed 5 min) is in flight. */}
-        {!isLoading && isFetching ? (
-          <View style={styles.bgFetchHint}>
-            <ActivityIndicator size="small" color={colors.textSecondary} />
-          </View>
-        ) : null}
-      </View>
+      {/* Filter pills sit directly under the date selector — they
+          drive the API the hero summarises, so it reads top-down:
+          control → snapshot → detail list. */}
+      {renderFilters()}
+      {renderHero()}
+      {renderList()}
 
       <DateRangePickerModal
         visible={showDatePicker}
@@ -370,94 +334,94 @@ const InverterTableCard: FC = () => {
   );
 };
 
-const createStyles = (colors: ThemeColors) =>
+/* ─────────────── local layout boxes ─────────────── */
+
+const AggRow: FC<{ children?: React.ReactNode }> = ({ children }) => (
+  <View style={styles.aggRow}>{children}</View>
+);
+AggRow.displayName = 'AggRow';
+
+const AggLeft: FC<{ children?: React.ReactNode }> = ({ children }) => (
+  <View style={styles.aggLeft}>{children}</View>
+);
+AggLeft.displayName = 'AggLeft';
+
+/* ─────────────── styles ─────────────── */
+
+const styles = StyleSheet.create({
+  container: {
+    gap: space.md,
+  },
+  heroSectionLabel: {
+    marginTop: space.lg,
+  },
+  heroStatusPill: {
+    alignSelf: 'center',
+  },
+  heroDivider: {
+    height: 1,
+    marginVertical: space.lg,
+    backgroundColor: glass.borderSubtle,
+  },
+  aggRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.sm,
+    paddingVertical: 4,
+  },
+  aggLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 1,
+  },
+  aggDotBest: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: semantic.success,
+  },
+  aggDotWorst: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: semantic.warning,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    gap: space.sm,
+    flexWrap: 'wrap',
+    paddingHorizontal: space.xs,
+  },
+  list: {
+    gap: space.md,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.sm,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    flexShrink: 1,
+  },
+  metricsRow: {
+    flexDirection: 'row',
+    gap: space.sm,
+  },
+});
+
+const createThemedStyles = (scheme: Scheme) =>
   StyleSheet.create({
-    container: {
+    card: {
+      overflow: 'hidden',
+      gap: space.md,
       borderWidth: 1,
-      borderColor: colors.inputDarkBorder,
-      borderRadius: normalizeWidth(16),
-      overflow: "hidden",
-    },
-    body: {
-      backgroundColor: colors.cardBg,
-      padding: normalizeWidth(12),
-      gap: normalizeHeight(16),
-    },
-    filterRow: {
-      flexDirection: "row",
-      gap: normalizeWidth(8),
-      paddingVertical: normalizeHeight(4),
-    },
-    filterPill: {
-      paddingHorizontal: FILTER_PILL_PH,
-      paddingVertical: FILTER_PILL_PV,
-      borderRadius: FILTER_PILL_RADIUS,
-      borderWidth: 1,
-    },
-    filterActive: {
-      backgroundColor: colors.tabActiveBg,
-      borderColor: colors.tabActiveBg,
-    },
-    filterInactive: {
-      backgroundColor: colors.tabInactiveBg,
-      borderColor: colors.inputDarkBorder,
-    },
-    entryContainer: {
-      backgroundColor: colors.metricCardBg,
-      borderWidth: 1,
-      borderColor: colors.inputDarkBorder,
-      borderRadius: normalizeWidth(16),
-      padding: normalizeWidth(16),
-      gap: normalizeHeight(16),
-    },
-    metricsRow: {
-      flexDirection: "row",
-      gap: normalizeWidth(10),
-    },
-    metricCard: {
-      flex: 1,
-      alignItems: "center",
-      backgroundColor: colors.metricCardBg,
-      borderWidth: 1,
-      borderColor: colors.inputDarkBorder,
-      borderRadius: METRIC_CARD_RADIUS,
-      paddingVertical: METRIC_CARD_PV,
-      paddingHorizontal: METRIC_CARD_PH,
-      gap: normalizeHeight(6),
-    },
-    progressSection: {
-      gap: normalizeHeight(6),
-    },
-    progressLabelRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-    },
-    progressTrack: {
-      height: PROGRESS_BAR_HEIGHT,
-      backgroundColor: colors.progressBg,
-      borderRadius: PROGRESS_BAR_RADIUS,
-      overflow: "hidden",
-    },
-    progressFill: {
-      height: "100%",
-      borderRadius: PROGRESS_BAR_RADIUS,
-    },
-    statusContainer: {
-      paddingVertical: normalizeHeight(24),
-      alignItems: "center",
-      gap: normalizeHeight(8),
-    },
-    retryBtn: {
-      paddingHorizontal: normalizeWidth(20),
-      paddingVertical: normalizeHeight(8),
-      borderWidth: 1,
-      borderColor: PROGRESS_FILLED,
-      borderRadius: 100,
-    },
-    bgFetchHint: {
-      alignItems: "center",
-      paddingTop: normalizeHeight(4),
+      borderColor: scheme.border,
     },
   });
 

@@ -1,23 +1,27 @@
-import React, { FC, useMemo, useState } from 'react';
+import React, { FC, ReactNode, useState } from 'react';
 import {
+  Image,
   ScrollView,
   StatusBar,
   StyleSheet,
-  TouchableOpacity,
   View,
-  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { AppText } from 'src/components/common';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { AppText, createBox, PressableScale } from 'src/components/common';
+import {
+  duration,
+  Scheme,
+  space,
+  useScheme,
+  useThemedStyles,
+} from 'src/theme';
 import {
   FONT_SIZE_MD,
-  FONT_SIZE_XS,
+  FONT_SIZE_SM,
   FONT_SIZE_XXS,
   ICON_SIZE_LG,
-  normalizeHeight,
-  normalizeWidth,
-  ThemeColors,
 } from 'src/utils';
 import {
   useReportMapping,
@@ -36,32 +40,16 @@ const SiteDetail: FC = () => {
   const navigation = useNavigation();
   const route = useRoute<SiteDetailRouteProp>();
   const { siteId, siteName, siteSubtitle, siteimage } = route.params;
-  const { isDark, colors, toggleTheme } = useThemeStore();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const { isDark, toggleTheme } = useThemeStore();
+  const scheme = useScheme();
 
-  // Subscribe to all three caches that drive this screen. Dashboard's
-  // `useSwitchActiveSite` already prefetched them in parallel on tap so
-  // these are typically synchronous reads from React Query's in-memory
-  // store. On a deep-link / hard-reload they fire here.
   const liveData = useSiteData(siteId);
   const siteConfig = useSiteConfig(siteId);
-  // Report-mapping is global (not per-site) but the product spec wants
-  // it re-evaluated whenever the active site changes. The eviction +
-  // prefetch happens inside `useSwitchActiveSite`; this subscription
-  // ensures the cache is also primed when SiteDetail is opened directly
-  // (e.g. via a deep link that bypasses Dashboard).
   useReportMapping();
 
-  // Show the skeleton only on the *initial* load (no cached data yet).
-  // Background refetches (e.g. silently re-running after staleTime
-  // expires) leave the existing UI in place.
   const isInitialLoading = liveData.isLoading || siteConfig.isLoading;
 
   const [logoFailed, setLogoFailed] = useState(false);
-
-  // Logo can arrive as either a remote URL string (from buildSiteLogoUrl)
-  // or — for legacy callers / mock data — a bundled `require()` asset.
-  // Normalize to an Image source object for both shapes.
   const logoSource =
     !logoFailed && siteimage
       ? typeof siteimage === 'string'
@@ -70,119 +58,198 @@ const SiteDetail: FC = () => {
       : null;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.splashBg} />
+    <Container>
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={scheme.bg}
+      />
 
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}>
-          <Back size={ICON_SIZE_LG} color={colors.primaryText} />
-        </TouchableOpacity>
+      <Header>
+        <PressableScale
+          onPress={() => navigation.goBack()}
+          style={styles.iconButton}
+          accessibilityLabel="Go back"
+          hitSlop={8}>
+          <Back size={ICON_SIZE_LG} color={scheme.textPrimary} />
+        </PressableScale>
 
-        <View style={styles.siteInfo}>
-          <View style={styles.siteAvatar}>
-          {logoSource ? (
-            <Image
-              source={logoSource}
-              style={styles.brandlogo}
-              onError={() => setLogoFailed(true)}
-            />
-          ) : (
+        <Identity>
+          <AvatarRing>
+            <AvatarFrame>
+              {logoSource ? (
+                <Image
+                  source={logoSource}
+                  style={styles.avatarImage}
+                  onError={() => setLogoFailed(true)}
+                />
+              ) : (
+                <AppText
+                  fontSize={FONT_SIZE_MD}
+                  bold
+                  color={scheme.textSecondary}>
+                  {siteName.substring(0, 2).toUpperCase()}
+                </AppText>
+              )}
+            </AvatarFrame>
+          </AvatarRing>
+
+          <IdentityText>
             <AppText
-              fontSize={FONT_SIZE_MD}
-              bold
-              color={colors.textSecondary}>
-              {siteName.substring(0, 2).toUpperCase()}
-            </AppText>
-          )}
-          </View>
-          <View style={styles.siteTextContainer}>
-            <AppText fontSize={FONT_SIZE_XS} medium color={colors.primaryText}>
+              fontSize={FONT_SIZE_SM}
+              semi_bold
+              color={scheme.textPrimary}
+              numberOfLines={1}>
               {siteName}
             </AppText>
-            <AppText fontSize={FONT_SIZE_XXS} color={colors.textSecondary}>
-              {siteSubtitle}
-            </AppText>
-          </View>
-        </View>
+            {siteSubtitle ? (
+              <AppText
+                fontSize={FONT_SIZE_XXS}
+                color={scheme.textSecondary}
+                numberOfLines={1}>
+                {siteSubtitle}
+              </AppText>
+            ) : null}
+          </IdentityText>
+        </Identity>
 
-        <TouchableOpacity
-          style={styles.themeButton}
-          onPress={toggleTheme}>
+        <PressableScale
+          onPress={toggleTheme}
+          style={styles.iconButton}
+          accessibilityLabel="Toggle theme">
           {isDark ? (
-            <SunIcon size={ICON_SIZE_LG} color={colors.primaryText} />
+            <SunIcon size={ICON_SIZE_LG} color={scheme.textPrimary} />
           ) : (
-            <MoonIcon size={ICON_SIZE_LG} color={colors.primaryText} />
+            <MoonIcon size={ICON_SIZE_LG} color={scheme.textPrimary} />
           )}
-        </TouchableOpacity>
-      </View>
+        </PressableScale>
+      </Header>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
-        {isInitialLoading ? <SiteDetailSkeleton /> : <ViewsContent />}
-      </ScrollView>
-    </SafeAreaView>
+      <BodyScroll>
+        {isInitialLoading ? (
+          <SiteDetailSkeleton />
+        ) : (
+          <ContentFade>
+            <ViewsContent />
+          </ContentFade>
+        )}
+      </BodyScroll>
+    </Container>
   );
 };
 
-const createStyles = (colors: ThemeColors) =>
+const styles = StyleSheet.create({
+  iconButton: {
+    padding: space.xs,
+  },
+  identity: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+  },
+  avatarImage: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+  identityText: {
+    flex: 1,
+    gap: 2,
+  },
+  scrollView: { flex: 1 },
+  scrollContent: {
+    padding: space.lg,
+    gap: space.lg,
+  },
+});
+
+const createStyles = (scheme: Scheme) =>
   StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.splashBg,
-    },
+    container: { flex: 1, backgroundColor: scheme.bg },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
-      backgroundColor: colors.cardBg,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.inputDarkBorder,
-      paddingHorizontal: normalizeWidth(12),
-      paddingVertical: normalizeHeight(16),
+      paddingHorizontal: space.lg,
+      paddingVertical: space.md,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      gap: space.md,
+      backgroundColor: scheme.surface,
+      borderBottomColor: scheme.hairline,
     },
-    backButton: {
-      padding: normalizeWidth(4),
-    },
-    siteInfo: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginHorizontal: normalizeWidth(12),
-      gap: normalizeWidth(10),
-    },
-    siteAvatar: {
-      width: normalizeWidth(36),
-      height: normalizeWidth(36),
-      borderRadius: 100,
-      backgroundColor: colors.darkBgSecondary,
-      borderWidth: 1,
-      borderColor: colors.inputDarkBorder,
+    avatarRing: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      borderWidth: 2,
       alignItems: 'center',
       justifyContent: 'center',
+      padding: 2,
+      borderColor: scheme.brand,
     },
-    brandlogo:{
-      width: normalizeWidth(36),
-      height: normalizeHeight(36),
-      borderRadius: 100,
-    },
-    siteTextContainer: {
-      flex: 1,
-      gap: normalizeHeight(4),
-    },
-    themeButton: {
-      padding: normalizeWidth(4),
-    },
-    scrollView: {
-      flex: 1,
-    },
-    scrollContent: {
-      padding: normalizeWidth(12),
-      gap: normalizeHeight(16),
+    avatar: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+      backgroundColor: scheme.surfaceMuted,
     },
   });
+
+/* ─────────────── styled wrappers ─────────────── */
+
+const Identity = createBox(styles.identity, 'Identity');
+const IdentityText = createBox(styles.identityText, 'IdentityText');
+
+const Container: FC<{children?: ReactNode}> = ({children}) => {
+  const themed = useThemedStyles(createStyles);
+  return <SafeAreaView style={themed.container}>{children}</SafeAreaView>;
+};
+Container.displayName = 'Container';
+
+const Header: FC<{children?: ReactNode}> = ({children}) => {
+  const themed = useThemedStyles(createStyles);
+  return <View style={themed.header}>{children}</View>;
+};
+Header.displayName = 'Header';
+
+const AvatarRing: FC<{children?: ReactNode}> = ({children}) => {
+  const themed = useThemedStyles(createStyles);
+  return <View style={themed.avatarRing}>{children}</View>;
+};
+AvatarRing.displayName = 'AvatarRing';
+
+const AvatarFrame: FC<{children?: ReactNode}> = ({children}) => {
+  const themed = useThemedStyles(createStyles);
+  return <View style={themed.avatar}>{children}</View>;
+};
+AvatarFrame.displayName = 'AvatarFrame';
+
+const BodyScroll: FC<{children?: ReactNode}> = ({children}) => (
+  <ScrollView
+    style={styles.scrollView}
+    contentContainerStyle={styles.scrollContent}
+    showsVerticalScrollIndicator={false}
+    // Perf knobs for scrolling a deep tree of charts, Lottie tiles and
+    // heavy Surfaces. `removeClippedSubviews` lets RN drop offscreen
+    // native views during scroll; `scrollEventThrottle` keeps any
+    // onScroll cadence cheap; `keyboardShouldPersistTaps` avoids the
+    // hidden-keyboard relayout that was triggering on each tap.
+    removeClippedSubviews
+    scrollEventThrottle={16}
+    keyboardShouldPersistTaps="handled">
+    {children}
+  </ScrollView>
+);
+BodyScroll.displayName = 'BodyScroll';
+
+const ContentFade: FC<{children?: ReactNode}> = ({children}) => (
+  <Animated.View
+    entering={FadeInDown.duration(duration.slow).springify().damping(22)}>
+    {children}
+  </Animated.View>
+);
+ContentFade.displayName = 'ContentFade';
 
 export default SiteDetail;

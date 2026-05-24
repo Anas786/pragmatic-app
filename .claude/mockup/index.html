@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SiteCard — design exploration</title>
+<style>
+  :root {
+    --bg: #F1F2F5;
+    --surface: #FFFFFF;
+    --surfaceMuted: #F4F5F7;
+    --surfaceMutedDark: #ECEEF2;
+    --textPrimary: #111827;
+    --textSecondary: #6B7280;
+    --textTertiary: #9CA3AF;
+    --hairline: rgba(17,24,39,0.06);
+    --border: rgba(17,24,39,0.10);
+    --brand: #10B981;
+    --brandSoft: rgba(16,185,129,0.10);
+    --accentGold: #B5891F;
+    --accentGoldSoft: rgba(181,137,31,0.13);
+    --solar: #84CC16;
+    --wind: #06B6D4;
+    --grid: #3B82F6;
+    --genset: #F97316;
+    --battery: #A855F7;
+    --shadow: 0 4px 20px rgba(17,24,39,0.06), 0 1px 3px rgba(17,24,39,0.04);
+    --shadow-lifted: 0 14px 40px rgba(17,24,39,0.10), 0 4px 12px rgba(17,24,39,0.06);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--textPrimary);
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    padding: 48px 32px 80px;
+    min-height: 100vh;
+  }
+
+  .canvas {
+    max-width: 1280px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 56px;
+  }
+
+  .column {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .col-head {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 20px;
+  }
+  .col-head .tag {
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    font-weight: 700;
+    color: var(--textTertiary);
+    text-transform: uppercase;
+  }
+  .col-head h2 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .col-head p {
+    margin: 4px 0 0;
+    font-size: 13px;
+    color: var(--textSecondary);
+    line-height: 1.55;
+    max-width: 460px;
+  }
+
+  /* phone frame */
+  .phone {
+    width: 380px;
+    margin: 0 auto;
+    background: var(--bg);
+    border-radius: 32px;
+    padding: 18px;
+    box-shadow:
+      inset 0 0 0 1px rgba(17,24,39,0.05),
+      0 30px 60px -10px rgba(17,24,39,0.12),
+      0 18px 24px -16px rgba(17,24,39,0.10);
+  }
+
+  /* ───── common card surface ───── */
+  .card {
+    background: var(--surface);
+    border-radius: 24px;
+    padding: 18px;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    transition: box-shadow 280ms ease, transform 280ms ease;
+  }
+  .card:hover {
+    box-shadow: var(--shadow-lifted);
+    transform: translateY(-2px);
+  }
+
+  /* ───── header (shared) ───── */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .avatar-ring {
+    position: relative;
+    width: 52px;
+    height: 52px;
+    border-radius: 9999px;
+    border: 2px solid var(--brand);
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .avatar-ring::before {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 9999px;
+    border: 2px solid var(--brand);
+    opacity: 0.5;
+    animation: ring-pulse 2200ms cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+  @keyframes ring-pulse {
+    0%   { transform: scale(1.0); opacity: 0.45; }
+    70%  { transform: scale(1.18); opacity: 0; }
+    100% { transform: scale(1.18); opacity: 0; }
+  }
+  .avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 9999px;
+    background: var(--surfaceMutedDark);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 13px;
+    color: #5B6471;
+    overflow: hidden;
+  }
+  .avatar-logo {
+    width: 100%;
+    height: 100%;
+    background: #6B3026;
+    color: #E9B254;
+    font-family: serif;
+    font-weight: 800;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .header-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .header-text .name { font-size: 14px; font-weight: 600; }
+  .status-row { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 6px; height: 6px; border-radius: 9999px; background: var(--brand); }
+  .status-row .text { font-size: 11px; color: var(--textSecondary); }
+
+  .pill-pro {
+    background: var(--accentGoldSoft);
+    color: var(--accentGold);
+    padding: 4px 10px;
+    border-radius: 9999px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+
+  /* ───── Variant A — Hero + Satellites ───── */
+  .hero {
+    position: relative;
+    overflow: hidden;
+    border-radius: 18px;
+    padding: 18px 18px 20px;
+    background: linear-gradient(135deg,
+      rgba(249,115,22,0.18) 0%,
+      rgba(249,115,22,0.04) 60%,
+      rgba(249,115,22,0.02) 100%);
+    border: 1px solid rgba(249,115,22,0.18);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .hero .label-row { display: flex; align-items: center; gap: 6px; }
+  .hero .source-dot { width: 9px; height: 9px; border-radius: 9999px; background: var(--genset); }
+  .hero .label {
+    text-transform: uppercase;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    color: #B85B0E;
+  }
+  .hero .value-row { display: flex; align-items: baseline; gap: 6px; margin-top: 4px; }
+  .hero .value {
+    font-size: 40px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    color: #C44F09;
+  }
+  .hero .unit {
+    font-size: 12px;
+    color: var(--textSecondary);
+    font-weight: 600;
+  }
+  .hero .spark {
+    position: absolute;
+    right: 14px;
+    top: 16px;
+    width: 80px;
+    height: 28px;
+  }
+  .hero .badge-live {
+    position: absolute;
+    right: 14px;
+    bottom: 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(255,255,255,0.65);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border: 1px solid rgba(249,115,22,0.25);
+    border-radius: 9999px;
+    padding: 3px 8px 3px 7px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #C44F09;
+  }
+  .live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--genset);
+    box-shadow: 0 0 0 0 rgba(249,115,22,0.5);
+    animation: live-pulse 1500ms ease-out infinite;
+  }
+  @keyframes live-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(249,115,22,0.55); }
+    70%  { box-shadow: 0 0 0 6px rgba(249,115,22,0); }
+    100% { box-shadow: 0 0 0 0 rgba(249,115,22,0); }
+  }
+
+  /* satellites */
+  .satellites {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .sat {
+    background: var(--surfaceMuted);
+    border-radius: 14px;
+    padding: 10px 11px 11px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .sat .sat-head { display: flex; align-items: center; gap: 5px; }
+  .sat .sat-dot { width: 7px; height: 7px; border-radius: 9999px; }
+  .sat .sat-label {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    color: var(--textTertiary);
+    text-transform: uppercase;
+  }
+  .sat .sat-value-row { display: flex; align-items: baseline; gap: 3px; }
+  .sat .sat-value { font-size: 15px; font-weight: 700; color: var(--textPrimary); letter-spacing: -0.01em; }
+  .sat .sat-unit { font-size: 9px; color: var(--textSecondary); }
+
+  /* per-source dot colors */
+  .src-solar { background: var(--solar); }
+  .src-grid { background: var(--grid); }
+  .src-genset { background: var(--genset); }
+  .src-wind { background: var(--wind); }
+
+  .expand-toggle {
+    margin-top: 4px;
+    background: var(--surfaceMuted);
+    border-radius: 9999px;
+    padding: 9px 16px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--textSecondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    cursor: pointer;
+  }
+  .expand-toggle .chev { font-size: 14px; line-height: 1; }
+
+  /* ───── Variant B — Animation polish ───── */
+  .chips-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .chip {
+    background: var(--surfaceMuted);
+    border-radius: 16px;
+    padding: 12px 13px 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    transition: transform 220ms cubic-bezier(0.4,0,0.2,1);
+  }
+  .chip:hover { transform: translateY(-1px); }
+  .chip .chip-head { display: flex; align-items: center; gap: 6px; }
+  .chip-dot { width: 8px; height: 8px; border-radius: 9999px; }
+  .chip-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    color: var(--textTertiary);
+    text-transform: uppercase;
+  }
+  .chip-value-row { display: flex; align-items: baseline; gap: 4px; }
+  .chip-value { font-size: 17px; font-weight: 700; color: var(--textPrimary); letter-spacing: -0.01em; }
+  .chip-unit { font-size: 10px; color: var(--textSecondary); }
+  /* chip count-up animation hint */
+  .chip-value {
+    background: linear-gradient(90deg, transparent, rgba(16,185,129,0.10) 50%, transparent);
+    background-size: 200% 100%;
+    background-position: 100% 0;
+    animation: shimmer-once 4s ease-out;
+  }
+  @keyframes shimmer-once {
+    0% { background-position: 100% 0; }
+    25% { background-position: -100% 0; }
+    100% { background-position: -100% 0; }
+  }
+
+  /* wide chip when alone on a row */
+  .chips-row .chip.span-3 { grid-column: span 3; flex-direction: row; align-items: center; justify-content: space-between; }
+  .chips-row .chip.span-3 .chip-head { flex: 1; }
+  .chips-row .chip.span-3 .chip-value-row { flex: 0 0 auto; }
+
+  /* ───── annotations ───── */
+  .notes {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 20px;
+    padding: 14px 16px;
+    background: var(--surface);
+    border-radius: 14px;
+    border: 1px solid var(--hairline);
+  }
+  .notes .note {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--textSecondary);
+  }
+  .notes .note .bullet {
+    flex: 0 0 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--brand);
+    margin-top: 7px;
+  }
+  .notes .note .bullet.amber { background: #F59E0B; }
+  .notes .note strong { color: var(--textPrimary); font-weight: 600; }
+
+  /* header bar above the cards (mimics dashboard top) */
+  .top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 6px 18px;
+  }
+  .top .menu { width: 24px; display: flex; flex-direction: column; gap: 4px; }
+  .top .menu .line { height: 2px; border-radius: 1px; background: var(--textPrimary); }
+  .top .menu .line:nth-child(1) { width: 18px; }
+  .top .menu .line:nth-child(2) { width: 12px; }
+  .top .menu .line:nth-child(3) { width: 6px; }
+  .top .brand-logo {
+    width: 32px; height: 22px;
+    background: #6B3026; border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    color: #E9B254; font-family: serif; font-weight: 800; font-size: 11px;
+  }
+  .top .icon-btn {
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--textPrimary);
+  }
+
+</style>
+</head>
+<body>
+
+<div class="canvas">
+
+  <!-- ─────────── VARIANT A ─────────── -->
+  <div class="column">
+    <div class="col-head">
+      <span class="tag">Variant A</span>
+      <h2>Hero + satellites</h2>
+      <p>One dominant metric scaled up with a tinted gradient backdrop and a live indicator; the other sources collapse into compact chips below. Best for quick fleet scanning when sites have an obvious primary source.</p>
+    </div>
+
+    <div class="phone">
+      <div class="top">
+        <div class="menu"><div class="line"></div><div class="line"></div><div class="line"></div></div>
+        <div class="brand-logo">P</div>
+        <div class="icon-btn">☾</div>
+      </div>
+
+      <div class="card">
+        <div class="header">
+          <div class="avatar-ring">
+            <div class="avatar"><div class="avatar-logo">L</div></div>
+          </div>
+          <div class="header-text">
+            <div class="name">Lucky Cement Nooriabad</div>
+            <div class="status-row"><span class="dot"></span><span class="text">Online · 1 min ago</span></div>
+          </div>
+          <div class="pill-pro">PRO</div>
+        </div>
+
+        <div class="hero">
+          <div class="label-row">
+            <span class="source-dot"></span>
+            <span class="label">Genset · Primary</span>
+          </div>
+          <div class="value-row">
+            <span class="value">121K</span>
+            <span class="unit">kWh</span>
+          </div>
+          <svg class="spark" viewBox="0 0 80 28" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="sp" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0" stop-color="#F97316" stop-opacity="0.35"/>
+                <stop offset="1" stop-color="#F97316" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <path d="M0 20 L10 16 L20 18 L30 12 L40 14 L50 8 L60 11 L70 6 L80 9 L80 28 L0 28 Z" fill="url(#sp)"/>
+            <path d="M0 20 L10 16 L20 18 L30 12 L40 14 L50 8 L60 11 L70 6 L80 9" stroke="#F97316" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <div class="badge-live"><span class="live-dot"></span>LIVE</div>
+        </div>
+
+        <div class="satellites">
+          <div class="sat">
+            <div class="sat-head"><span class="sat-dot src-solar"></span><span class="sat-label">Solar</span></div>
+            <div class="sat-value-row"><span class="sat-value">100K</span><span class="sat-unit">kWh</span></div>
+          </div>
+          <div class="sat">
+            <div class="sat-head"><span class="sat-dot src-grid"></span><span class="sat-label">Grid</span></div>
+            <div class="sat-value-row"><span class="sat-value">76K</span><span class="sat-unit">kWh</span></div>
+          </div>
+          <div class="sat">
+            <div class="sat-head"><span class="sat-dot src-wind"></span><span class="sat-label">Wind</span></div>
+            <div class="sat-value-row"><span class="sat-value">6.5K</span><span class="sat-unit">kWh</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note"><span class="bullet"></span><div><strong>Hero gradient tinted by source</strong> — solar→lime, grid→blue, genset→orange, wind→cyan, battery→purple. Card immediately telegraphs the dominant fuel.</div></div>
+      <div class="note"><span class="bullet"></span><div><strong>Inline sparkline</strong> placeholder shows last-N readings trend (needs minor backend wiring; falls back to nothing if absent).</div></div>
+      <div class="note"><span class="bullet"></span><div><strong>LIVE badge with pulse-dot</strong> ambient motion, brand color follows the hero source.</div></div>
+      <div class="note"><span class="bullet amber"></span><div><strong>Tradeoff:</strong> sites with equal/no telemetry look uneven; hero collapses to "—" placeholder when zero data.</div></div>
+    </div>
+  </div>
+
+  <!-- ─────────── VARIANT B ─────────── -->
+  <div class="column">
+    <div class="col-head">
+      <span class="tag">Variant B</span>
+      <h2>Animation polish (keep current layout)</h2>
+      <p>Same uniform grid you already have, with three additions: pulsing online ring, soft press-lift shadow, and a brief value-shimmer on telemetry updates. Lowest-risk; preserves symmetry across the fleet.</p>
+    </div>
+
+    <div class="phone">
+      <div class="top">
+        <div class="menu"><div class="line"></div><div class="line"></div><div class="line"></div></div>
+        <div class="brand-logo">P</div>
+        <div class="icon-btn">☾</div>
+      </div>
+
+      <div class="card">
+        <div class="header">
+          <div class="avatar-ring">
+            <div class="avatar"><div class="avatar-logo">L</div></div>
+          </div>
+          <div class="header-text">
+            <div class="name">Lucky Cement Nooriabad</div>
+            <div class="status-row"><span class="dot"></span><span class="text">Online · 1 min ago</span></div>
+          </div>
+          <div class="pill-pro">PRO</div>
+        </div>
+
+        <div class="chips-row">
+          <div class="chip">
+            <div class="chip-head"><span class="chip-dot src-solar"></span><span class="chip-label">Solar</span></div>
+            <div class="chip-value-row"><span class="chip-value">100K</span><span class="chip-unit">kWh</span></div>
+          </div>
+          <div class="chip">
+            <div class="chip-head"><span class="chip-dot src-grid"></span><span class="chip-label">Grid</span></div>
+            <div class="chip-value-row"><span class="chip-value">76K</span><span class="chip-unit">kWh</span></div>
+          </div>
+          <div class="chip">
+            <div class="chip-head"><span class="chip-dot src-genset"></span><span class="chip-label">Genset</span></div>
+            <div class="chip-value-row"><span class="chip-value">121K</span><span class="chip-unit">kWh</span></div>
+          </div>
+          <div class="chip span-3">
+            <div class="chip-head"><span class="chip-dot src-wind"></span><span class="chip-label">Wind</span></div>
+            <div class="chip-value-row"><span class="chip-value">6.5K</span><span class="chip-unit">kWh</span></div>
+          </div>
+        </div>
+
+        <div class="expand-toggle">Show less <span class="chev">⌃</span></div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note"><span class="bullet"></span><div><strong>Avatar ring pulse</strong> — Reanimated 3 shared-value loop, breathing scale 1.0→1.18 with opacity fade. Only runs when site is Online.</div></div>
+      <div class="note"><span class="bullet"></span><div><strong>Press lift</strong> — card scale stays (PressableScale) plus shadow grows on press-in. Cheaper than a full Surface elevation change.</div></div>
+      <div class="note"><span class="bullet"></span><div><strong>Value-shimmer on update</strong> — a one-shot emerald shimmer sweeps across changed values when telemetry refresh comes in (capped to first ~12 visible cards via existing ANIM_LIMIT).</div></div>
+      <div class="note"><span class="bullet"></span><div><strong>Layout.springify()</strong> on the chip grid — Show more / Show less animates between states instead of snapping.</div></div>
+      <div class="note"><span class="bullet amber"></span><div><strong>Tradeoff:</strong> all sites look identical at a glance; user must read values to spot the dominant source.</div></div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

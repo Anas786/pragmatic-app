@@ -1,138 +1,181 @@
-import React, { FC, useMemo } from 'react';
-import {
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { FC } from 'react';
+import { ScrollView, StatusBar, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { AppText, Avatar } from 'src/components/common';
+import {
+  AppText,
+  Avatar,
+  IconButton,
+  ScreenContainer,
+  Surface,
+  TopBar,
+} from 'src/components/common';
 import { useUserStore } from 'src/hooks/useUserStore';
-import { useThemeStore } from 'src/hooks/useThemeStore';
+import { Scheme, space, useScheme, useThemedStyles } from 'src/theme';
 import {
   FONT_SIZE_MD,
   FONT_SIZE_SM,
   FONT_SIZE_XS,
   FONT_SIZE_XXS,
   ICON_SIZE_LG,
-  normalizeHeight,
-  normalizeWidth,
-  ThemeColors,
 } from 'src/utils';
 import dayjs from 'dayjs';
-import { Back, EmailPlainIcon, InfoIcon, PhoneIcon, ProfileCompanyIcon, UserProfileIcon } from 'src/assets/icons';
+import {
+  Back,
+  EmailPlainIcon,
+  InfoIcon,
+  PhoneIcon,
+  ProfileCompanyIcon,
+  UserProfileIcon,
+} from 'src/assets/icons';
 import { IconProps } from 'src/types';
 
-const Profile: FC = () => {
-  const navigation = useNavigation();
-  const { user } = useUserStore();
-  const { colors } = useThemeStore();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+interface InfoRowProps {
+  IconComponent: FC<IconProps>;
+  label: string;
+  value: string;
+}
 
-  const InfoRow: FC<{
-    IconComponent: FC<IconProps>;
-    label: string;
-    value: string;
-  }> = ({ IconComponent, label, value }) => (
+const createInfoRowStyles = (scheme: Scheme) =>
+  StyleSheet.create({
+    infoIconWrap: {
+      width: 40,
+      height: 40,
+      borderRadius: 10,
+      backgroundColor: scheme.surfaceMuted,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+  });
+
+const createDividerStyles = (scheme: Scheme) =>
+  StyleSheet.create({
+    divider: { height: 1, backgroundColor: scheme.hairline },
+  });
+
+const ProfileDivider: FC = () => {
+  const themed = useThemedStyles(createDividerStyles);
+  return <View style={themed.divider} />;
+};
+
+const InfoRow: FC<InfoRowProps> = ({ IconComponent, label, value }) => {
+  const scheme = useScheme();
+  const themed = useThemedStyles(createInfoRowStyles);
+  return (
     <View style={styles.infoRow}>
-      <View style={styles.infoIconWrap}>
-        <IconComponent size={ICON_SIZE_LG} color={colors.textSecondary} />
+      <View style={themed.infoIconWrap}>
+        <IconComponent size={ICON_SIZE_LG} color={scheme.textSecondary} />
       </View>
       <View style={styles.infoText}>
-        <AppText fontSize={FONT_SIZE_XXS} color={colors.textSecondary}>
+        <AppText fontSize={FONT_SIZE_XXS} color={scheme.textSecondary}>
           {label}
         </AppText>
-        <AppText fontSize={FONT_SIZE_SM} medium color={colors.primaryText}>
+        <AppText fontSize={FONT_SIZE_SM} medium color={scheme.textPrimary}>
           {value}
         </AppText>
       </View>
     </View>
   );
+};
+
+const Profile: FC = () => {
+  const navigation = useNavigation();
+  const { user } = useUserStore();
+  const scheme = useScheme();
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.splashBg} />
+    <ScreenContainer>
+      <StatusBar
+        barStyle={scheme.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={scheme.bg}
+      />
 
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => navigation.goBack()}>
-          <Back size={ICON_SIZE_LG} color={colors.primaryText}/>
-        </TouchableOpacity>
-        <AppText fontSize={FONT_SIZE_MD} bold color={colors.primaryText}>
+      <TopBar>
+        <IconButton
+          onPress={() => navigation.goBack()}
+          accessibilityLabel="Go back">
+          <Back size={ICON_SIZE_LG} color={scheme.textPrimary} />
+        </IconButton>
+        <AppText fontSize={FONT_SIZE_MD} bold color={scheme.textPrimary}>
           Profile
         </AppText>
-        <View style={styles.backBtn} />
-      </View>
+        <View style={styles.headerSpacer} />
+      </TopBar>
 
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
         <View style={styles.avatarSection}>
-          <Avatar
-            name={user?.name || 'User'}
-            size={100}
-            imageUrl={user?.image}
-          />
+          <Avatar name={user?.name || 'User'} size={100} imageUrl={user?.image} />
           <AppText
             fontSize={FONT_SIZE_MD}
             bold
-            color={colors.primaryText}
+            color={scheme.textPrimary}
             style={styles.userName}>
             {user?.name || 'User'}
           </AppText>
-          <AppText fontSize={FONT_SIZE_XS} color={colors.textSecondary}>
+          <AppText fontSize={FONT_SIZE_XS} color={scheme.textSecondary}>
             {user?.company || 'Company'}
           </AppText>
         </View>
 
-        <View style={styles.infoCard}>
-          <InfoRow IconComponent={UserProfileIcon} label="Full Name" value={user?.name || '-'} />
-          <View style={styles.divider} />
-          <InfoRow IconComponent={EmailPlainIcon} label="Email" value={user?.email || '-'} />
-          <View style={styles.divider} />
-          <InfoRow IconComponent={PhoneIcon} label="Phone" value={user?.phone || '-'} />
-          <View style={styles.divider} />
-          <InfoRow IconComponent={ProfileCompanyIcon} label="Company" value={user?.company || '-'} />
-          <View style={styles.divider} />
+        <Surface elevation="md" radius="xl" padding={space.lg} bordered>
+          <InfoRow
+            IconComponent={UserProfileIcon}
+            label="Full Name"
+            value={user?.name || '-'}
+          />
+          <ProfileDivider />
+          <InfoRow
+            IconComponent={EmailPlainIcon}
+            label="Email"
+            value={user?.email || '-'}
+          />
+          <ProfileDivider />
+          <InfoRow
+            IconComponent={PhoneIcon}
+            label="Phone"
+            value={user?.phone || '-'}
+          />
+          <ProfileDivider />
+          <InfoRow
+            IconComponent={ProfileCompanyIcon}
+            label="Company"
+            value={user?.company || '-'}
+          />
+          <ProfileDivider />
           <InfoRow
             IconComponent={InfoIcon}
             label="Last Login"
-            value={user?.login_date ? dayjs(user.login_date).format('DD MMM YYYY, hh:mm A') : '-'}
+            value={
+              user?.login_date
+                ? dayjs(user.login_date).format('DD MMM YYYY, hh:mm A')
+                : '-'
+            }
           />
-        </View>
+        </Surface>
       </ScrollView>
-    </SafeAreaView>
+    </ScreenContainer>
   );
 };
 
-const createStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.splashBg },
-    header: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      backgroundColor: colors.cardBg, borderBottomWidth: 1, borderBottomColor: colors.inputDarkBorder,
-      paddingHorizontal: normalizeWidth(12), paddingVertical: normalizeHeight(14),
-    },
-    backBtn: { width: normalizeWidth(36), height: normalizeWidth(36), alignItems: 'center', justifyContent: 'center' },
-    scroll: { flex: 1 },
-    scrollContent: { padding: normalizeWidth(16), gap: normalizeHeight(24) },
-    avatarSection: { alignItems: 'center', paddingTop: normalizeHeight(16), gap: normalizeHeight(8) },
-    userName: { marginTop: normalizeHeight(4) },
-    infoCard: {
-      backgroundColor: colors.cardBg, borderWidth: 1, borderColor: colors.inputDarkBorder,
-      borderRadius: normalizeWidth(16), padding: normalizeWidth(16),
-    },
-    infoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: normalizeHeight(12), gap: normalizeWidth(14) },
-    infoIconWrap: {
-      width: normalizeWidth(40), height: normalizeWidth(40), borderRadius: normalizeWidth(10),
-      backgroundColor: colors.inputDarkBg, alignItems: 'center', justifyContent: 'center',
-    },
-    infoText: { flex: 1, gap: normalizeHeight(2) },
-    divider: { height: 1, backgroundColor: colors.inputDarkBorder },
-  });
+const styles = StyleSheet.create({
+  headerSpacer: { width: 36, height: 36 },
+  scroll: { flex: 1 },
+  scrollContent: { padding: space.lg, gap: space['2xl'] },
+  avatarSection: {
+    alignItems: 'center',
+    paddingTop: space.lg,
+    gap: space.sm,
+  },
+  userName: { marginTop: space.xs },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: space.md,
+    gap: 14,
+  },
+  infoText: { flex: 1, gap: 2 },
+});
 
 export default Profile;

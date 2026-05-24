@@ -1,41 +1,41 @@
-import React, { FC, useMemo, useState } from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
-import Modal from 'react-native-modal';
-import { AppText } from 'src/components/common';
+/**
+ * MonthYearPickerModal — v2 (modern grids).
+ *
+ * Two modes share the same bottom-sheet shell:
+ *
+ *   - `month` — a 4×3 grid of months with a year nav header above.
+ *     Tap a month to select; ±1 chevrons step the year.
+ *
+ *   - `year`  — a 3×4 grid of years drawn from the current decade.
+ *     Header shows the decade range (e.g. "2020 – 2029"); ±1
+ *     chevrons step the decade.
+ *
+ * Selected cell uses brand fill + glow shadow; today's month / year
+ * gets a brand-coloured ring for context.
+ */
+
+import React, { FC, ReactNode, useMemo, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
+import { AppText, PressableScale } from 'src/components/common';
 import {
-  ACCENT_GREEN,
-  FONT_SIZE_LG,
-  FONT_SIZE_SM,
-  FONT_SIZE_XS,
-  ICON_SIZE_XS,
-  normalizeHeight,
-  normalizeWidth,
-  ThemeColors,
-  WHITE,
-} from 'src/utils';
-import { useThemeStore } from 'src/hooks';
-import {
-  Close,
-  DownArrow,
-  UpArrow,
-} from 'src/assets/icons';
+  radius as radiusTokens,
+  Scheme,
+  space,
+  useScheme,
+  useThemedStyles,
+} from 'src/theme';
+import { FONT_SIZE_SM, FONT_SIZE_XS } from 'src/utils';
+import { DownArrow, UpArrow } from 'src/assets/icons';
+import PickerSheet from './pickers/PickerSheet';
 
 export type PickerMode = 'month' | 'year';
 
 interface MonthYearPickerModalProps {
   visible: boolean;
   onClose: () => void;
-  /** What to pick: a (month, year) tuple or just a year. */
   mode: PickerMode;
-  /** Initial year (always required — `mode='month'` adds month on top). */
   initialYear: number;
-  /** Initial 1-based month — only used in `mode='month'`. */
   initialMonth?: number;
-  /**
-   * Apply handler. For `mode='year'` only `year` is meaningful. For
-   * `mode='month'` both fields are populated; consumers can ignore
-   * `month` if they only need a year.
-   */
   onApply: (selection: { year: number; month: number }) => void;
 }
 
@@ -54,15 +54,92 @@ const MONTH_LABELS = [
   'Dec',
 ];
 
-/**
- * Lightweight calendar-style modal for picking either:
- *   - a specific month within a year (`mode='month'`), or
- *   - just a year (`mode='year'`).
- *
- * Shape mirrors `DateRangePickerModal` so the two feel like the same
- * component family — header / content / footer with rounded corners
- * and a 60 %-opacity backdrop.
- */
+/* ─────────────── nav header ─────────────── */
+
+const NavHeader: FC<{
+  label: string;
+  onPrev: () => void;
+  onNext: () => void;
+  prevLabel: string;
+  nextLabel: string;
+}> = ({ label, onPrev, onNext, prevLabel, nextLabel }) => {
+  const scheme = useScheme();
+  const themed = useThemedStyles(createStyles);
+  return (
+    <View style={themed.nav}>
+      <PressableScale
+        onPress={onPrev}
+        haptic="tap"
+        scaleTo={0.92}
+        style={themed.navArrow}
+        accessibilityLabel={prevLabel}>
+        <DownArrow size={14} color={scheme.textPrimary} />
+      </PressableScale>
+      <AppText fontSize={FONT_SIZE_SM} bold color={scheme.textPrimary}>
+        {label}
+      </AppText>
+      <PressableScale
+        onPress={onNext}
+        haptic="tap"
+        scaleTo={0.92}
+        style={themed.navArrow}
+        accessibilityLabel={nextLabel}>
+        <UpArrow size={14} color={scheme.textPrimary} />
+      </PressableScale>
+    </View>
+  );
+};
+NavHeader.displayName = 'NavHeader';
+
+/* ─────────────── selectable cell ─────────────── */
+
+const GridCell: FC<{
+  label: string;
+  selected: boolean;
+  highlighted?: boolean;
+  onPress: () => void;
+  widthPct: `${number}%`;
+}> = ({ label, selected, highlighted, onPress, widthPct }) => {
+  const scheme = useScheme();
+  const themed = useThemedStyles(createStyles);
+
+  // The width has to live on a real flex child of the Grid row —
+  // PressableScale's `style` lands on a nested View inside a default
+  // column-direction parent, where `flexBasis` / `width: %` doesn't
+  // resolve the way we want. Wrapping with an explicit-width slot
+  // makes the layout deterministic.
+  const cellStyle = [
+    themed.cellInner,
+    selected ? themed.cellSelected : null,
+    !selected && highlighted ? themed.cellHighlighted : null,
+  ];
+  const textColor = selected
+    ? scheme.textOnBrand
+    : highlighted
+      ? scheme.brand
+      : scheme.textPrimary;
+  return (
+    <View style={[themed.slot, { width: widthPct }]}>
+      <PressableScale
+        onPress={onPress}
+        haptic="select"
+        scaleTo={0.94}
+        style={cellStyle}
+        accessibilityLabel={label}>
+        <AppText
+          fontSize={FONT_SIZE_SM}
+          semi_bold={selected || highlighted}
+          color={textColor}>
+          {label}
+        </AppText>
+      </PressableScale>
+    </View>
+  );
+};
+GridCell.displayName = 'GridCell';
+
+/* ─────────────── main ─────────────── */
+
 const MonthYearPickerModal: FC<MonthYearPickerModalProps> = ({
   visible,
   onClose,
@@ -71,219 +148,172 @@ const MonthYearPickerModal: FC<MonthYearPickerModalProps> = ({
   initialMonth,
   onApply,
 }) => {
-  const { colors } = useThemeStore();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const scheme = useScheme();
+  const themed = useThemedStyles(createStyles);
 
   const [tempYear, setTempYear] = useState(initialYear);
   const [tempMonth, setTempMonth] = useState(initialMonth ?? 1);
+  // For year mode, the decade cursor controls which 12-year window
+  // is shown. We compute its start as `floor(year/10)*10`.
+  // Year-page cursor: align to a 12-year page that contains the
+  // initial year. Using a 12-year window keeps the grid balanced
+  // (4×3) and matches the page header.
+  const pageOf = (y: number) => Math.floor(y / 12) * 12;
+  const [decadeStart, setDecadeStart] = useState(() => pageOf(initialYear));
 
-  // Reset working state on every open so a previously-cancelled change
-  // doesn't bleed into the next session.
-  const handleVisible = (vis: boolean) => {
-    if (vis) {
-      setTempYear(initialYear);
-      setTempMonth(initialMonth ?? 1);
-    }
-  };
-
-  // Apply the visible→`true` reset on each open.
+  // Reset working state on every open.
   const wasVisibleRef = React.useRef(visible);
-  if (visible && !wasVisibleRef.current) handleVisible(true);
+  if (visible && !wasVisibleRef.current) {
+    setTempYear(initialYear);
+    setTempMonth(initialMonth ?? 1);
+    setDecadeStart(pageOf(initialYear));
+  }
   wasVisibleRef.current = visible;
+
+  const today = useMemo(() => new Date(), []);
+  const todayYear = today.getFullYear();
+  const todayMonth = today.getMonth() + 1;
 
   const handleApply = () => {
     onApply({ year: tempYear, month: tempMonth });
     onClose();
   };
 
-  const handleCancel = () => {
-    onClose();
-  };
-
-  const adjustYear = (delta: number) => {
-    setTempYear(prev => prev + delta);
-  };
-
-  const title = mode === 'month' ? 'Select Month' : 'Select Year';
+  const subtitle = mode === 'month' ? `${MONTH_LABELS[tempMonth - 1]} ${tempYear}` : `${tempYear}`;
 
   return (
-    <Modal
-      isVisible={visible}
-      onBackdropPress={handleCancel}
-      onBackButtonPress={handleCancel}
-      backdropOpacity={0.6}
-      style={styles.modal}>
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <AppText fontSize={FONT_SIZE_SM} medium color={colors.primaryText}>
-            {title}
-          </AppText>
-          <TouchableOpacity onPress={handleCancel} hitSlop={8}>
-            <Close size={ICON_SIZE_XS} color={colors.textSecondary} />
-          </TouchableOpacity>
+    <PickerSheet
+      visible={visible}
+      title={mode === 'month' ? 'Pick Month' : 'Pick Year'}
+      subtitle={subtitle}
+      onCancel={onClose}
+      onApply={handleApply}>
+      {mode === 'month' ? (
+        <View style={themed.card}>
+          <NavHeader
+            label={String(tempYear)}
+            onPrev={() => setTempYear(y => y - 1)}
+            onNext={() => setTempYear(y => y + 1)}
+            prevLabel="Previous year"
+            nextLabel="Next year"
+          />
+          <Grid>
+            {MONTH_LABELS.map((label, idx) => {
+              const monthNum = idx + 1;
+              return (
+                <GridCell
+                  key={label}
+                  label={label}
+                  selected={tempMonth === monthNum}
+                  highlighted={
+                    tempYear === todayYear && todayMonth === monthNum
+                  }
+                  onPress={() => setTempMonth(monthNum)}
+                  widthPct="25%"
+                />
+              );
+            })}
+          </Grid>
         </View>
-
-        <View style={styles.content}>
-          {/* Year stepper — always visible. */}
-          <View style={styles.yearRow}>
-            <TouchableOpacity
-              onPress={() => adjustYear(-1)}
-              style={styles.yearButton}
-              accessibilityRole="button"
-              accessibilityLabel="Previous year"
-              hitSlop={8}>
-              <DownArrow size={ICON_SIZE_XS} color={colors.primaryText} />
-            </TouchableOpacity>
-            <AppText
-              fontSize={FONT_SIZE_LG}
-              bold
-              color={colors.primaryText}
-              center>
-              {tempYear}
-            </AppText>
-            <TouchableOpacity
-              onPress={() => adjustYear(1)}
-              style={styles.yearButton}
-              accessibilityRole="button"
-              accessibilityLabel="Next year"
-              hitSlop={8}>
-              <UpArrow size={ICON_SIZE_XS} color={colors.primaryText} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Month grid — only when picking a month. */}
-          {mode === 'month' ? (
-            <View style={styles.monthGrid}>
-              {MONTH_LABELS.map((label, idx) => {
-                const monthNum = idx + 1;
-                const isActive = tempMonth === monthNum;
-                return (
-                  <TouchableOpacity
-                    key={label}
-                    onPress={() => setTempMonth(monthNum)}
-                    style={[
-                      styles.monthCell,
-                      isActive && styles.monthCellActive,
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isActive }}>
-                    <AppText
-                      fontSize={FONT_SIZE_XS}
-                      medium
-                      color={isActive ? WHITE : colors.primaryText}
-                      center>
-                      {label}
-                    </AppText>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          ) : null}
+      ) : (
+        <View style={themed.card}>
+          <NavHeader
+            label={`${decadeStart} – ${decadeStart + 11}`}
+            onPrev={() => setDecadeStart(d => d - 12)}
+            onNext={() => setDecadeStart(d => d + 12)}
+            prevLabel="Previous years"
+            nextLabel="Next years"
+          />
+          <Grid>
+            {Array.from({ length: 12 }).map((_, i) => {
+              // 4×3 grid showing 12 years per page so the layout reads
+              // as a balanced block (5×2 looks awkward, 4×3 with 10
+              // years leaves two empty slots). The header label uses
+              // the actual 12-year span shown.
+              const year = decadeStart + i;
+              return (
+                <GridCell
+                  key={year}
+                  label={String(year)}
+                  selected={tempYear === year}
+                  highlighted={todayYear === year}
+                  onPress={() => setTempYear(year)}
+                  widthPct="33.333%"
+                />
+              );
+            })}
+          </Grid>
         </View>
-
-        <View style={styles.footer}>
-          <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
-            <AppText
-              fontSize={FONT_SIZE_XS}
-              medium
-              color={colors.textSecondary}>
-              Cancel
-            </AppText>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.applyButton} onPress={handleApply}>
-            <AppText fontSize={FONT_SIZE_XS} medium color={WHITE}>
-              Apply
-            </AppText>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
+      )}
+    </PickerSheet>
   );
 };
+MonthYearPickerModal.displayName = 'MonthYearPickerModal';
 
-const createStyles = (colors: ThemeColors) =>
+/* ─────────────── styled helpers ─────────────── */
+
+const Grid: FC<{ children: ReactNode }> = ({ children }) => {
+  const themed = useThemedStyles(createStyles);
+  return <View style={themed.grid}>{children}</View>;
+};
+Grid.displayName = 'Grid';
+
+/* ─────────────── styles ─────────────── */
+
+const createStyles = (scheme: Scheme) =>
   StyleSheet.create({
-    modal: {
-      justifyContent: 'center',
-      margin: normalizeWidth(20),
+    card: {
+      backgroundColor: scheme.surfaceMuted,
+      borderRadius: radiusTokens.xl,
+      padding: space.md,
+      gap: space.md,
     },
-    container: {
-      borderRadius: normalizeWidth(16),
-      overflow: 'hidden',
-      borderWidth: 1,
-      borderColor: colors.inputDarkBorder,
-    },
-    header: {
-      backgroundColor: colors.cardBg,
+    nav: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: normalizeWidth(16),
-      paddingVertical: normalizeHeight(16),
+      paddingHorizontal: space.sm,
     },
-    content: {
-      backgroundColor: colors.inputDarkBg,
-      padding: normalizeWidth(16),
-      gap: normalizeHeight(16),
-    },
-    yearRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      backgroundColor: colors.cardBg,
-      borderRadius: normalizeWidth(12),
-      borderWidth: 1,
-      borderColor: colors.inputDarkBorder,
-      paddingVertical: normalizeHeight(12),
-      paddingHorizontal: normalizeWidth(16),
-    },
-    yearButton: {
-      width: normalizeWidth(32),
-      height: normalizeWidth(32),
+    navArrow: {
+      width: 32,
+      height: 32,
       alignItems: 'center',
       justifyContent: 'center',
-      borderRadius: normalizeWidth(16),
-      backgroundColor: colors.inputDarkBg,
+      borderRadius: radiusTokens.pill,
+      backgroundColor: scheme.surface,
+      transform: [{ rotate: '90deg' }],
     },
-    monthGrid: {
+    grid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: normalizeWidth(8),
+      // Negative inset balances the per-slot padding so the grid's
+      // outer edges sit flush with the card padding.
+      marginHorizontal: -4,
     },
-    monthCell: {
-      width: '23%',
-      paddingVertical: normalizeHeight(12),
-      borderRadius: normalizeWidth(10),
-      backgroundColor: colors.cardBg,
+    slot: {
+      // Half-gap per side → 8px visual gap between neighbouring cells.
+      padding: 4,
+    },
+    cellInner: {
+      paddingVertical: 14,
+      borderRadius: radiusTokens.md,
+      backgroundColor: scheme.surface,
       borderWidth: 1,
-      borderColor: colors.inputDarkBorder,
+      borderColor: scheme.hairline,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    monthCellActive: {
-      backgroundColor: ACCENT_GREEN,
-      borderColor: ACCENT_GREEN,
+    cellSelected: {
+      backgroundColor: scheme.brand,
+      borderColor: scheme.brand,
+      shadowColor: scheme.brand,
+      shadowOpacity: 0.35,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 3 },
+      elevation: 3,
     },
-    footer: {
-      backgroundColor: colors.inputDarkBg,
-      flexDirection: 'row',
-      justifyContent: 'flex-end',
-      paddingHorizontal: normalizeWidth(16),
-      paddingBottom: normalizeHeight(16),
-      gap: normalizeWidth(12),
-    },
-    cancelButton: {
-      paddingHorizontal: normalizeWidth(20),
-      paddingVertical: normalizeHeight(10),
-      borderRadius: 100,
-      borderWidth: 1,
-      borderColor: colors.textSecondary,
-    },
-    applyButton: {
-      paddingHorizontal: normalizeWidth(20),
-      paddingVertical: normalizeHeight(10),
-      borderRadius: 100,
-      backgroundColor: ACCENT_GREEN,
+    cellHighlighted: {
+      borderColor: scheme.brand,
     },
   });
 

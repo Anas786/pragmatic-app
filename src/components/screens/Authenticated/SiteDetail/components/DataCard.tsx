@@ -1,24 +1,20 @@
-import React, { FC, ReactNode, useMemo } from 'react';
+import React, { FC, ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { AppText } from 'src/components/common';
+import { AccentBar, AppText } from 'src/components/common';
 import {
   ACCENT_BLUE,
   FONT_SIZE_XS,
   FONT_SIZE_XXS,
   normalizeHeight,
   normalizeWidth,
-  ThemeColors,
 } from 'src/utils';
-import { useThemeStore } from 'src/hooks';
+import { radius as radiusTokens, space, useScheme } from 'src/theme';
 
 interface DataCardProps {
   label: string;
-  /** Already-formatted display value (string), e.g. "1,005,727,768.96". */
   value: string;
   unit?: string;
-  /** Accent bar colour on the leading edge of the card. Defaults to blue. */
   accentColor?: string;
-  /** Pre-rendered icon node — usually an `<Image>` (GIF) or an SVG component. */
   icon?: ReactNode;
 }
 
@@ -31,12 +27,6 @@ interface DataCardProps {
  *   │   <value> <unit>                           │ icon│        │
  *   │                                            ╰───╯         │
  *   └─────────────────────────────────────────────────────────┘
- *
- * - Accent bar uses `accentColor` (defaults to ACCENT_BLUE).
- * - Icon sits inside a 48×48 circle whose fill matches `cardBg` and which
- *   is outlined with `inputDarkBorder` so it stays visible in BOTH themes.
- * - Value is one-line with an `adjustsFontSizeToFit` safety net so long
- *   numbers (e.g. lifetime kWh totals) don't overflow.
  */
 const DataCard: FC<DataCardProps> = ({
   label,
@@ -45,16 +35,23 @@ const DataCard: FC<DataCardProps> = ({
   accentColor = ACCENT_BLUE,
   icon,
 }) => {
-  const { colors } = useThemeStore();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const scheme = useScheme();
 
   return (
-    <View style={styles.card}>
-      <View style={[styles.accentBar, { backgroundColor: accentColor }]} />
+    <View
+      style={[
+        styles.card,
+        { backgroundColor: scheme.surfaceRaised, borderColor: scheme.border },
+      ]}>
+      <AccentBar
+        color={accentColor}
+        width={normalizeWidth(3)}
+        height={normalizeHeight(36)}
+      />
       <View style={styles.cardContent}>
         <AppText
           fontSize={FONT_SIZE_XXS}
-          color={colors.textSecondary}
+          color={scheme.textSecondary}
           numberOfLines={2}>
           {label}
         </AppText>
@@ -62,7 +59,7 @@ const DataCard: FC<DataCardProps> = ({
           <AppText
             fontSize={FONT_SIZE_XS}
             semi_bold
-            color={colors.primaryText}
+            color={scheme.textPrimary}
             numberOfLines={1}
             adjustsFontSizeToFit
             minimumFontScale={0.7}
@@ -72,7 +69,7 @@ const DataCard: FC<DataCardProps> = ({
           {unit ? (
             <AppText
               fontSize={FONT_SIZE_XXS}
-              color={colors.primaryText}
+              color={scheme.textPrimary}
               numberOfLines={1}>
               {' '}
               {unit}
@@ -80,59 +77,48 @@ const DataCard: FC<DataCardProps> = ({
           ) : null}
         </View>
       </View>
-      <View style={styles.iconCircle}>{icon}</View>
+      <View
+        style={[
+          styles.iconCircle,
+          { backgroundColor: scheme.surface, borderColor: scheme.border },
+        ]}>
+        {icon}
+      </View>
     </View>
   );
 };
 
-const createStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
-    card: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: colors.metricCardBg,
-      borderWidth: 1,
-      borderColor: colors.inputDarkBorder,
-      borderRadius: 12,
-      paddingVertical: normalizeHeight(14),
-      paddingHorizontal: normalizeWidth(12),
-      gap: normalizeWidth(12),
-    },
-    accentBar: {
-      width: normalizeWidth(3),
-      height: normalizeHeight(36),
-      borderRadius: 2,
-    },
-    cardContent: {
-      flex: 1,
-      gap: normalizeHeight(4),
-    },
-    valueRow: {
-      flexDirection: 'row',
-      alignItems: 'baseline',
-      flexWrap: 'nowrap',
-    },
-    valueText: {
-      flexShrink: 1,
-    },
-    /**
-     * Icon circle: theme-aware fill (`cardBg`) with a soft border, same
-     * style as the Cards tab. Works as long as the icon node has a
-     * transparent background (e.g. SVG, Lottie JSON). For opaque-bg
-     * GIFs you'll see a visible square inside the circle in dark mode —
-     * use Lottie JSON in that case.
-     */
-    iconCircle: {
-      width: normalizeWidth(48),
-      height: normalizeWidth(48),
-      borderRadius: normalizeWidth(24),
-      backgroundColor: colors.cardBg,
-      borderWidth: 1,
-      borderColor: colors.inputDarkBorder,
-      alignItems: 'center',
-      justifyContent: 'center',
-      overflow: 'hidden',
-    },
-  });
+const styles = StyleSheet.create({
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: radiusTokens.md,
+    paddingVertical: normalizeHeight(14),
+    paddingHorizontal: space.md,
+    gap: space.md,
+  },
+  cardContent: {
+    flex: 1,
+    gap: normalizeHeight(4),
+  },
+  valueRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flexWrap: 'nowrap',
+  },
+  valueText: {
+    flexShrink: 1,
+  },
+  iconCircle: {
+    width: normalizeWidth(48),
+    height: normalizeWidth(48),
+    borderRadius: normalizeWidth(24),
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+});
 
 export default DataCard;

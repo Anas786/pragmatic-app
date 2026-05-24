@@ -1,151 +1,189 @@
 import React, { FC, useMemo } from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
-import { AppText } from 'src/components/common';
+import { ActivityIndicator, StyleSheet } from 'react-native';
+import { AppText, createBox, PressableScale } from 'src/components/common';
 import {
-  ACCENT_GREEN,
+  radius as radiusTokens,
+  Scheme,
+  space,
+  useScheme,
+  useThemedStyles,
+} from 'src/theme';
+import {
   FONT_SIZE_SM,
   FONT_SIZE_XS,
+  FONT_SIZE_XXS,
   ICON_SIZE_MD,
   ICON_SIZE_XS,
-  normalizeHeight,
-  normalizeWidth,
-  ThemeColors,
 } from 'src/utils';
-import { useThemeStore } from 'src/hooks';
 import { CalendarIcon, RefreshIcon } from 'src/assets/icons';
 
 interface DateFilterHeaderProps {
-  /** Section title shown on the leading edge of the header. */
+  /** Section title — rendered as a small overline label above the row. */
   title: string;
-  /**
-   * Pre-formatted label shown inside the date pill. Caller computes
-   * this via `formatDateFilterLabel(...)` so the pill stays in sync
-   * with the active filter (date range / month-year / year / lifetime).
-   */
+  /** Pre-formatted label inside the date pill. */
   dateLabel: string;
-  /** Tap handler for the pill. Caller decides which picker to open. */
+  /** Tap handler for the date pill. */
   onDatePress: () => void;
-  /**
-   * When true (Lifetime filter), the pill is rendered as non-interactive
-   * — there's nothing to pick.
-   */
+  /** When true (Lifetime filter), the pill is non-interactive. */
   pillDisabled?: boolean;
-  /**
-   * Tap handler for the green-bordered refresh button. When omitted, the
-   * button is hidden — useful for cards that don't need a manual refetch
-   * trigger.
-   */
+  /** Tap handler for the refresh button. Hidden when omitted. */
   onRefresh?: () => void;
+  /** Show a spinner inside the refresh button while a refetch is in flight. */
+  refreshing?: boolean;
+  /** Optional secondary line — small caption under the title (e.g. "Live"). */
+  caption?: string;
 }
 
-/**
- * Shared header used by every card on the Trends tab (Chart Analysis,
- * Trend Analysis, Performance Report, Inverter Table). Centralising the
- * layout here:
- *  - Guarantees pixel-perfect visual parity across cards.
- *  - Keeps the date-range pill and refresh button in lock-step
- *    (paddings, gap, border radius, sizes, theme tokens) so a future
- *    design tweak only touches this file.
- *  - Refresh button is opt-in via `onRefresh` so cards that don't need
- *    it (e.g. read-only summaries) don't render an empty placeholder.
- */
 const DateFilterHeader: FC<DateFilterHeaderProps> = ({
   title,
   dateLabel,
   onDatePress,
   pillDisabled = false,
   onRefresh,
+  refreshing = false,
+  caption,
 }) => {
-  const { colors } = useThemeStore();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const scheme = useScheme();
+  const themed = useThemedStyles(createThemedStyles);
+  const datePillStyle = useMemo(
+    () =>
+      StyleSheet.flatten([
+        themed.datePill,
+        pillDisabled ? styles.dateRangeContainerDisabled : null,
+      ]),
+    [themed.datePill, pillDisabled],
+  );
 
   return (
-    <View style={styles.header}>
-      <AppText
-        fontSize={FONT_SIZE_SM}
-        bold
-        color={colors.primaryText}
-        numberOfLines={2}
-        style={styles.title}>
-        {title}
-      </AppText>
-
-      <View style={styles.actions}>
-        <TouchableOpacity
-          style={styles.dateRangeContainer}
-          onPress={onDatePress}
-          disabled={pillDisabled}
-          accessibilityRole="button"
-          accessibilityLabel="Pick date filter"
-          accessibilityState={{ disabled: pillDisabled }}>
-          <CalendarIcon size={ICON_SIZE_XS} color={colors.dateFilterText} />
+    <Header>
+      <TitleColumn>
+        <AppText
+          fontSize={FONT_SIZE_XXS}
+          color={scheme.textTertiary}
+          medium
+          style={styles.overline}
+          numberOfLines={1}>
+          {title}
+        </AppText>
+        {caption ? (
           <AppText
             fontSize={FONT_SIZE_XS}
-            color={colors.dateFilterText}
+            color={scheme.textSecondary}
+            numberOfLines={1}>
+            {caption}
+          </AppText>
+        ) : null}
+      </TitleColumn>
+
+      <Actions>
+        <PressableScale
+          onPress={onDatePress}
+          haptic="select"
+          scaleTo={0.96}
+          disabled={pillDisabled}
+          style={datePillStyle}
+          accessibilityLabel="Pick date filter"
+          accessibilityHint="Opens the date filter picker">
+          <CalendarIcon size={ICON_SIZE_XS} color={scheme.brand} />
+          <AppText
+            fontSize={FONT_SIZE_XS}
+            medium
+            color={scheme.textPrimary}
             numberOfLines={1}>
             {dateLabel}
           </AppText>
-        </TouchableOpacity>
+        </PressableScale>
 
         {onRefresh ? (
-          <TouchableOpacity
-            style={styles.refreshButton}
+          <PressableScale
             onPress={onRefresh}
-            accessibilityRole="button"
+            haptic="tap"
+            disabled={refreshing}
+            style={themed.refreshButton}
             accessibilityLabel="Refresh">
-            <RefreshIcon size={ICON_SIZE_MD} color={ACCENT_GREEN} />
-          </TouchableOpacity>
+            {refreshing ? (
+              <ActivityIndicator size="small" color={scheme.brand} />
+            ) : (
+              <RefreshIcon size={ICON_SIZE_MD} color={scheme.brand} />
+            )}
+          </PressableScale>
         ) : null}
-      </View>
-    </View>
+      </Actions>
+    </Header>
   );
 };
 
-const createStyles = (colors: ThemeColors) =>
+const Header = createBox(
   StyleSheet.create({
-    header: {
-      backgroundColor: colors.inputDarkBg,
+    s: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: normalizeWidth(16),
-      paddingVertical: normalizeHeight(16),
-      gap: normalizeWidth(10),
+      paddingHorizontal: space.xs,
+      paddingBottom: space.sm,
+      gap: space.md,
     },
-    title: {
-      // Take whatever's left after the actions row claims its width,
-      // and shrink (wrapping to 2 lines if necessary) so the date pill
-      // and refresh button never get clipped on long titles.
-      flexShrink: 1,
-      flexGrow: 1,
+  }).s,
+  'Header',
+);
+
+const TitleColumn = createBox(
+  StyleSheet.create({
+    s: {
+      flex: 1,
+      minWidth: 0,
+      gap: 2,
     },
-    actions: {
+  }).s,
+  'TitleColumn',
+);
+
+const Actions = createBox(
+  StyleSheet.create({
+    s: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: normalizeWidth(10),
-      // Don't allow the actions row to shrink — date pill + refresh
-      // button stay full size; the title gives way instead.
+      gap: space.sm,
       flexShrink: 0,
     },
-    dateRangeContainer: {
+  }).s,
+  'Actions',
+);
+
+const styles = StyleSheet.create({
+  overline: {
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  dateRangeContainerDisabled: {
+    opacity: 0.55,
+  },
+});
+
+const createThemedStyles = (scheme: Scheme) =>
+  StyleSheet.create({
+    datePill: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: colors.dateFilterBg,
       borderWidth: 1,
-      borderColor: colors.dateFilterBg,
-      borderRadius: 100,
-      paddingHorizontal: normalizeWidth(14),
-      paddingVertical: normalizeHeight(8),
-      gap: normalizeWidth(8),
+      borderRadius: radiusTokens.pill,
+      paddingHorizontal: space.md,
+      paddingVertical: 8,
+      gap: 8,
+      backgroundColor: scheme.surfaceMuted,
+      borderColor: scheme.border,
     },
     refreshButton: {
-      width: normalizeWidth(38),
-      height: normalizeWidth(38),
+      width: 38,
+      height: 38,
       alignItems: 'center',
       justifyContent: 'center',
-      borderWidth: 1.5,
-      borderColor: ACCENT_GREEN,
-      borderRadius: 100,
+      borderRadius: radiusTokens.pill,
+      backgroundColor: scheme.brandSoft,
     },
   });
+
+// Suppress unused-import warning for FONT_SIZE_SM (kept available for
+// future caller variants).
+void FONT_SIZE_SM;
 
 export default DateFilterHeader;

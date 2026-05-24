@@ -1,38 +1,76 @@
-import React, { FC, useMemo, useState } from "react";
-import { Controller } from "react-hook-form";
+import React, { FC, useState } from 'react';
+import { Controller } from 'react-hook-form';
 import {
   ActivityIndicator,
   Image,
-  KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StatusBar,
   StyleSheet,
-  TextInput,
-  TouchableOpacity,
   View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { AppText } from "src/components/common";
-import { useLogin } from "src/hooks";
-import { useThemeStore } from "src/hooks/useThemeStore";
+} from 'react-native';
 import {
-  normalizeHeight,
-  normalizeWidth,
-  WHITE,
+  AppText,
+  AppTextInput,
+  BaseKeyboardAvoid,
+  PressableScale,
+  ScreenContainer,
+  ScrollContainer,
+} from 'src/components/common';
+import { useLogin } from 'src/hooks';
+import { Scheme, radius, space, useScheme, useThemedStyles } from 'src/theme';
+import {
+  FONT_SIZE_MD,
   FONT_SIZE_XL,
   FONT_SIZE_XS,
-  FONT_SIZE_MD,
   ICON_SIZE_MD,
-  ThemeColors,
-} from "src/utils";
-import { Logo } from "src/assets";
+  WHITE,
+  normalizeHeight,
+  normalizeWidth,
+} from 'src/utils';
+import { Logo } from 'src/assets';
 import {
   EmailPlainIcon,
   EyeIcon,
   EyeOffIcon,
   PasswordIcon,
-} from "src/assets/icons";
+} from 'src/assets/icons';
+
+const EmailIcon: FC = () => (
+  <View style={styles.iconContainer}>
+    <EmailPlainIcon size={ICON_SIZE_MD} />
+  </View>
+);
+
+const LockIcon: FC = () => (
+  <View style={styles.iconContainer}>
+    <PasswordIcon size={ICON_SIZE_MD} />
+  </View>
+);
+
+interface PasswordVisibilityToggleProps {
+  visible: boolean;
+  onToggle: () => void;
+  color: string;
+}
+
+const PasswordVisibilityToggle: FC<PasswordVisibilityToggleProps> = ({
+  visible,
+  onToggle,
+  color,
+}) => (
+  <PressableScale
+    onPress={onToggle}
+    hitSlop={10}
+    accessibilityLabel={visible ? 'Hide password' : 'Show password'}
+    style={styles.iconContainer}
+    scaleTo={0.9}>
+    {visible ? (
+      <EyeOffIcon size={ICON_SIZE_MD} color={color} />
+    ) : (
+      <EyeIcon size={ICON_SIZE_MD} color={color} />
+    )}
+  </PressableScale>
+);
 
 const Login: FC = () => {
   const {
@@ -46,68 +84,36 @@ const Login: FC = () => {
   } = useLogin();
   const [showPassword, setShowPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
-  const { colors } = useThemeStore();
-  const styles = useMemo(() => createStyles(colors), [colors]);
-
-  const EmailIcon = () => (
-    <View style={styles.iconContainer}>
-      <EmailPlainIcon size={ICON_SIZE_MD} />
-    </View>
-  );
-
-  const LockIcon = () => (
-    <View style={styles.iconContainer}>
-      <PasswordIcon size={ICON_SIZE_MD} />
-    </View>
-  );
-
-  const PasswordVisibilityToggle: FC<{
-    visible: boolean;
-    onToggle: () => void;
-  }> = ({ visible, onToggle }) => (
-    <TouchableOpacity
-      onPress={onToggle}
-      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-      accessibilityRole="button"
-      accessibilityLabel={visible ? "Hide password" : "Show password"}
-      style={styles.iconContainer}>
-      {visible ? (
-        <EyeOffIcon size={ICON_SIZE_MD} color={colors.textSecondary} />
-      ) : (
-        <EyeIcon size={ICON_SIZE_MD} color={colors.textSecondary} />
-      )}
-    </TouchableOpacity>
-  );
+  const scheme = useScheme();
+  const themed = useThemedStyles(createStyles);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <ScreenContainer>
       <StatusBar
-        barStyle={colors.statusBarStyle}
-        backgroundColor={colors.splashBg}
+        barStyle={scheme.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={scheme.bg}
       />
 
-      <KeyboardAvoidingView
+      <BaseKeyboardAvoid
         style={styles.keyboardView}
-        behavior={Platform.OS === "ios" ? "padding" : 'height'}>
-        <ScrollView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollContainer
           contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="none"
-          >
+          keyboardDismissMode="none">
           <View style={styles.content}>
             <View style={styles.headerContainer}>
               <View style={styles.logoContainer}>
                 <Image source={Logo} style={styles.logo} resizeMode="contain" />
                 <AppText
-                  color={colors.primaryText}
+                  color={scheme.textPrimary}
                   fontSize={FONT_SIZE_XL}
                   medium>
                   Welcome
                 </AppText>
               </View>
               <AppText
-                color={colors.textSecondary}
+                color={scheme.textSecondary}
                 fontSize={FONT_SIZE_XS}
                 center
                 style={styles.subtitle}>
@@ -124,12 +130,11 @@ const Login: FC = () => {
                       control={control}
                       name="email"
                       render={({ field: { onChange, onBlur, value } }) => (
-                        <View style={styles.inputWrapper}>
+                        <View style={themed.inputWrapper}>
                           <EmailIcon />
-                          <TextInput
+                          <AppTextInput
                             style={styles.input}
                             placeholder="Email or Phone"
-                            placeholderTextColor={colors.textSecondary}
                             value={value}
                             onChangeText={onChange}
                             onBlur={onBlur}
@@ -146,12 +151,11 @@ const Login: FC = () => {
                       control={control}
                       name="password"
                       render={({ field: { onChange, onBlur, value } }) => (
-                        <View style={styles.inputWrapper}>
+                        <View style={themed.inputWrapper}>
                           <LockIcon />
-                          <TextInput
+                          <AppTextInput
                             style={styles.input}
                             placeholder="Password"
-                            placeholderTextColor={colors.textSecondary}
                             value={value}
                             onChangeText={onChange}
                             onBlur={onBlur}
@@ -163,16 +167,18 @@ const Login: FC = () => {
                           <PasswordVisibilityToggle
                             visible={showPassword}
                             onToggle={() => setShowPassword(prev => !prev)}
+                            color={scheme.textSecondary}
                           />
                         </View>
                       )}
                     />
                   </View>
 
-                  <TouchableOpacity
-                    style={styles.loginButton}
+                  <PressableScale
                     onPress={onSubmit}
-                    disabled={loading}>
+                    disabled={loading}
+                    style={themed.loginButton}
+                    haptic="success">
                     {loading ? (
                       <ActivityIndicator color={WHITE} />
                     ) : (
@@ -180,12 +186,12 @@ const Login: FC = () => {
                         Login
                       </AppText>
                     )}
-                  </TouchableOpacity>
+                  </PressableScale>
                 </>
               ) : (
                 <>
                   <AppText
-                    color={colors.primaryText}
+                    color={scheme.textPrimary}
                     fontSize={FONT_SIZE_XS}
                     center
                     style={styles.subtitle}>
@@ -197,12 +203,11 @@ const Login: FC = () => {
                       control={newPasswordControl}
                       name="newPassword"
                       render={({ field: { onChange, onBlur, value } }) => (
-                        <View style={styles.inputWrapper}>
+                        <View style={themed.inputWrapper}>
                           <LockIcon />
-                          <TextInput
+                          <AppTextInput
                             style={styles.input}
                             placeholder="New password"
-                            placeholderTextColor={colors.textSecondary}
                             value={value}
                             onChangeText={onChange}
                             onBlur={onBlur}
@@ -214,23 +219,23 @@ const Login: FC = () => {
                           <PasswordVisibilityToggle
                             visible={showNewPassword}
                             onToggle={() => setShowNewPassword(prev => !prev)}
+                            color={scheme.textSecondary}
                           />
                         </View>
                       )}
                     />
                     {newPasswordErrors.newPassword?.message ? (
-                      <AppText
-                        color={colors.termsLink}
-                        fontSize={FONT_SIZE_XS}>
+                      <AppText color={scheme.brand} fontSize={FONT_SIZE_XS}>
                         {newPasswordErrors.newPassword.message}
                       </AppText>
                     ) : null}
                   </View>
 
-                  <TouchableOpacity
-                    style={styles.loginButton}
+                  <PressableScale
                     onPress={onSubmitNewPassword}
-                    disabled={loading}>
+                    disabled={loading}
+                    style={themed.loginButton}
+                    haptic="success">
                     {loading ? (
                       <ActivityIndicator color={WHITE} />
                     ) : (
@@ -238,7 +243,7 @@ const Login: FC = () => {
                         Set password &amp; continue
                       </AppText>
                     )}
-                  </TouchableOpacity>
+                  </PressableScale>
                 </>
               )}
             </View>
@@ -246,119 +251,108 @@ const Login: FC = () => {
 
           <View style={styles.footer}>
             <AppText
-              color={colors.primaryText}
+              color={scheme.textPrimary}
               fontSize={FONT_SIZE_XS}
               center
               style={styles.footerText}>
-              By clicking Continue, you agree to Dart{" "}
-              <AppText
-                color={colors.termsLink}
-                fontSize={FONT_SIZE_XS}
-                semi_bold>
+              By clicking Continue, you agree to Dart{' '}
+              <AppText color={scheme.brand} fontSize={FONT_SIZE_XS} semi_bold>
                 Terms of Use
-              </AppText>{" "}
-              and{" "}
-              <AppText
-                color={colors.termsLink}
-                fontSize={FONT_SIZE_XS}
-                semi_bold>
+              </AppText>{' '}
+              and{' '}
+              <AppText color={scheme.brand} fontSize={FONT_SIZE_XS} semi_bold>
                 Privacy Policy
               </AppText>
               .
             </AppText>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        </ScrollContainer>
+      </BaseKeyboardAvoid>
+    </ScreenContainer>
   );
 };
 
-const createStyles = (colors: ThemeColors) =>
+const createStyles = (scheme: Scheme) =>
   StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.splashBg,
-    },
-    keyboardView: {
-      flex: 1,
-    },
-    scrollContent: {
-      flexGrow: 1,
-      justifyContent: "space-between",
-    },
-    content: {
-      flex: 1,
-      alignItems: "center",
-      justifyContent: "center",
-      paddingHorizontal: normalizeWidth(28),
-      paddingTop: normalizeHeight(40),
-    },
-    headerContainer: {
-      alignItems: "center",
-      gap: normalizeHeight(8),
-      marginBottom: normalizeHeight(28),
-    },
-    logoContainer: {
-      alignItems: "center",
-      gap: normalizeHeight(28),
-    },
-    logo: {
-      width: normalizeWidth(85),
-      height: normalizeHeight(58),
-    },
-    subtitle: {
-      maxWidth: normalizeWidth(309),
-      lineHeight: normalizeHeight(14),
-      paddingHorizontal: normalizeWidth(10),
-    },
-    formContainer: {
-      width: "100%",
-      maxWidth: normalizeWidth(337),
-      gap: normalizeHeight(20),
-    },
-    inputsContainer: {
-      gap: normalizeHeight(16),
-    },
     inputWrapper: {
-      flexDirection: "row",
-      alignItems: "center",
-      backgroundColor: colors.inputDarkBg,
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: scheme.surfaceMuted,
       borderWidth: 1,
-      borderColor: colors.inputDarkBorder,
-      borderRadius: normalizeHeight(100),
+      borderColor: scheme.border,
+      borderRadius: radius.pill,
       height: normalizeHeight(44),
-      paddingHorizontal: normalizeWidth(12),
-      gap: normalizeWidth(8),
-    },
-    iconContainer: {
-      width: normalizeWidth(20),
-      height: normalizeHeight(20),
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    input: {
-      flex: 1,
-      color: colors.primaryText,
-      fontSize: FONT_SIZE_XS,
-      fontFamily: "Poppins-Regular",
-      paddingVertical: 0,
+      paddingHorizontal: space.md,
+      gap: space.sm,
     },
     loginButton: {
-      backgroundColor: colors.loginButtonBg,
+      backgroundColor: scheme.brand,
       height: normalizeHeight(48),
-      borderRadius: normalizeHeight(100),
-      alignItems: "center",
-      justifyContent: "center",
-      marginBottom: normalizeHeight(20),
-    },
-    footer: {
-      paddingHorizontal: normalizeWidth(20),
-      paddingBottom: normalizeHeight(20),
-      paddingTop: normalizeHeight(10),
-    },
-    footerText: {
-      lineHeight: normalizeHeight(20),
+      borderRadius: radius.pill,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: space.xl,
     },
   });
+
+const styles = StyleSheet.create({
+  keyboardView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'space-between',
+  },
+  content: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: normalizeWidth(28),
+    paddingTop: normalizeHeight(40),
+  },
+  headerContainer: {
+    alignItems: 'center',
+    gap: space.sm,
+    marginBottom: normalizeHeight(28),
+  },
+  logoContainer: {
+    alignItems: 'center',
+    gap: normalizeHeight(28),
+  },
+  logo: {
+    width: normalizeWidth(85),
+    height: normalizeHeight(58),
+  },
+  subtitle: {
+    maxWidth: normalizeWidth(309),
+    lineHeight: normalizeHeight(14),
+    paddingHorizontal: space.sm,
+  },
+  formContainer: {
+    width: '100%',
+    maxWidth: normalizeWidth(337),
+    gap: space.xl,
+  },
+  inputsContainer: {
+    gap: space.lg,
+  },
+  iconContainer: {
+    width: normalizeWidth(20),
+    height: normalizeHeight(20),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  input: {
+    flex: 1,
+  },
+  footer: {
+    paddingHorizontal: space.xl,
+    paddingBottom: space.xl,
+    paddingTop: space.sm,
+  },
+  footerText: {
+    lineHeight: normalizeHeight(20),
+  },
+});
 
 export default Login;

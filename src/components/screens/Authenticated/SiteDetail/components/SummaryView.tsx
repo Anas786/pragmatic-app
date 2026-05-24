@@ -1,4 +1,32 @@
-import React, { FC, useEffect, useMemo, useState } from 'react';
+/**
+ * SummaryView — v2 redesign.
+ *
+ * Layout direction: command-center / glance-first.
+ *
+ *  ┌─────────────────────────────────────────┐
+ *  │  PLANT YIELD · TODAY                    │  (hero card)
+ *  │  4,628.32 mWh                  [icon]   │
+ *  │  Revenue · USD 14,210.50                │
+ *  └─────────────────────────────────────────┘
+ *
+ *  ┌────────┐ ┌────────┐ ┌────────┐
+ *  │ CO₂    │ │ COAL   │ │ TREES  │  (impact row)
+ *  │ XX.XX  │ │ XX.XX  │ │ XX.XX  │
+ *  │ Tons   │ │ Tons   │ │ Nos.   │
+ *  └────────┘ └────────┘ └────────┘
+ *
+ *  ┌─────────────────────────────────────────┐
+ *  │ Energy Flow                             │
+ *  │  ────────────────────────────           │
+ *  │  [SLD diagram]                          │
+ *  └─────────────────────────────────────────┘
+ *
+ * Data sources unchanged from the legacy implementation:
+ *   - p24 (today's plant yield) drives every formula on this screen
+ *   - site_info.revenue.tariff/currency drive the Revenue line
+ */
+
+import React, { FC, ReactNode, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   InteractionManager,
@@ -7,69 +35,64 @@ import {
 } from 'react-native';
 import LottieView from 'lottie-react-native';
 import { useRoute, RouteProp } from '@react-navigation/native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import {
-  ACCENT_RED,
-  formatCardValue,
-  GRADIENT_GREEN,
-  normalizeHeight,
-  normalizeWidth,
+  AppText,
+  createBox,
+  GlassChip,
+  HeroGradientCard,
+  HeroLiveBadge,
+  HeroTopRow,
+  HeroValueRow,
+  OverlineLabel,
+  PulseDot,
+} from 'src/components/common';
+import { IconWell } from 'src/components/common';
+import {
+  duration,
+  glass,
+  radius as radiusTokens,
+  Scheme,
+  space,
+  useScheme,
+  useThemedStyles,
+} from 'src/theme';
+import { BoltIcon } from 'src/assets/icons';
+import {
+  formatCardValue as formatCardValueLegacy,
+  formatNumber,
   resolveCardValue,
-  YELLOW,
+  FONT_SIZE_XXS,
+  FONT_SIZE_XS,
+  FONT_SIZE_SM,
+  FONT_SIZE_LG,
+  FONT_SIZE_XXL,
 } from 'src/utils';
-import { useSiteConfig, useSiteData, useThemeStore } from 'src/hooks';
+import { useSiteConfig, useSiteData } from 'src/hooks';
 import {
   DashboardStackParamList,
   ICardConfig,
   ISiteAllData,
   ISiteConfig,
 } from 'src/types';
-import {
-  co2Lottie,
-  coalLottie,
-  electricLottie,
-  revenueLottie,
-  treePlantLottie,
-} from 'src/assets/lottie';
-import MetricCard, { MetricCardItem } from './MetricCard';
+import { revenueLottie } from 'src/assets/lottie';
 import SLDDiagram from './SLDDiagram';
+import SummaryEnvImpact from './SummaryView/SummaryEnvImpact';
+
+void formatCardValueLegacy; // kept exported by utils; not consumed here
 
 type SiteDetailRouteProp = RouteProp<DashboardStackParamList, 'SiteDetail'>;
 
-/**
- * Summary tab — Yield + Environmental Benefits.
- *
- * Source 1: a single live-data point — `live.p24.value` (today's plant
- * yield in kWh).
- *
- * Source 2: site-config — `site_info.revenue.tariff` (USD/kWh, used by
- * the Revenue formula) and `site_info.revenue.currency` (display unit).
- *
- * Five cards computed from those sources:
- *
- *   Yield value      = p24 ÷ 1000                       (display: MWh)
- *   Revenue value    = p24 × tariff                     (display: <currency>)
- *   CO₂ Reduction    = p24 × 0.00021233                 (display: Tons)
- *   Coal Saved       = p24 ÷ 2.086                      (display: Tons)
- *   Trees Planted    = p24 ÷ 0.88                       (display: Nos.)
- *
- * Icons are real Lottie JSONs (transparent background, vector quality)
- * rendered via `lottie-react-native`.
- */
+/* ─────────────── data resolution (unchanged from v1) ─────────────── */
 
-// Sentinel "card config" used only to tunnel through `resolveCardValue`'s
-// existing `dataStore` + `objKey` walker. Avoids duplicating that logic.
 const P24_PROBE: ICardConfig = {
   name: '',
   dataStore: 'live',
   objKey: 'live.p24.value',
 };
 
-/**
- * Backend ships `p24` in kWh. CO₂ / Coal / Trees multipliers are
- * calibrated against kWh input, so `getP24` returns the raw kWh value.
- * Only the Total Plant Yeild card converts to MWh in its own `compute`
- * fn (because its display unit is `mWh`).
- */
+const KWH_TO_MWH = 1 / 1000;
+
 const getP24 = (
   liveData: ISiteAllData | null | undefined,
 ): number | undefined => {
@@ -78,14 +101,8 @@ const getP24 = (
   return raw;
 };
 
-const KWH_TO_MWH = 1 / 1000;
-
-/* ─────────────── site-config extractors ─────────────── */
-
 interface SummaryContext {
-  /** USD/kWh price multiplier from site_info.revenue.tariff. */
   tariff: number | undefined;
-  /** Display unit string from site_info.revenue.currency, defaults to 'USD'. */
   currency: string;
 }
 
@@ -106,92 +123,148 @@ const extractRevenueContext = (
   }
   const r = revenueCfg as Record<string, unknown>;
   return {
-    tariff: typeof r.tariff === 'number' && Number.isFinite(r.tariff)
-      ? r.tariff
-      : undefined,
-    currency: typeof r.currency === 'string' && r.currency.length > 0
-      ? r.currency
-      : 'USD',
+    tariff:
+      typeof r.tariff === 'number' && Number.isFinite(r.tariff)
+        ? r.tariff
+        : undefined,
+    currency:
+      typeof r.currency === 'string' && r.currency.length > 0
+        ? r.currency
+        : 'USD',
   };
 };
 
-/* ─────────────── formulas (data-only) ─────────────── */
-//
-// Plain data — DO NOT pre-build JSX elements at module-init time. JSX
-// construction happens inside the component where `styles` is defined.
+/* ─────────────── styles ─────────────── */
 
-interface SummaryFormula {
-  label: string;
-  /** Static unit string OR function of context (Revenue uses currency). */
-  unit?: string | ((ctx: SummaryContext) => string);
-  decimalPlaces: number;
-  accentColor: string;
-  // `lottie-react-native`'s typings don't narrow `source` cleanly off a
-  // `require()` JSON, so we type it as `any` here and let the renderer
-  // coerce. Functionally it's just the parsed Lottie JSON.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  lottieSource: any;
-  compute: (
-    p24: number | undefined,
-    ctx: SummaryContext,
-  ) => number | undefined;
-}
+const styles = StyleSheet.create({
+  container: {
+    gap: space.lg,
+  },
+  heroTopRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 0,
+  },
+  heroBoltWell: {
+    width: 32,
+    height: 32,
+    borderRadius: radiusTokens.md,
+    backgroundColor: glass.medium,
+    borderWidth: 1,
+    borderColor: glass.borderSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroSectionLabel: {
+    marginTop: space.lg,
+  },
+  heroValueText: {
+    flexShrink: 1,
+  },
+  heroDivider: {
+    height: 1,
+    marginVertical: space.lg,
+    backgroundColor: glass.borderSubtle,
+  },
+  heroRevenue: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.md,
+  },
+  heroRevenueLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+  },
+  heroRevenueRight: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+  },
+  smallLottie: {
+    width: 28,
+    height: 28,
+  },
+  sldSection: {
+    gap: space.sm,
+  },
+  sldHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: space.xs,
+    paddingBottom: 4,
+  },
+  liveTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  diagramPlaceholder: {
+    minHeight: 220,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
 
-const YIELD_CARDS: SummaryFormula[] = [
-  {
-    label: 'Total Plant Yeild',
-    unit: 'mWh',
-    decimalPlaces: 2,
-    accentColor: GRADIENT_GREEN,
-    lottieSource: electricLottie,
-    compute: p24 => (p24 !== undefined ? p24 * KWH_TO_MWH : undefined),
-  },
-  {
-    label: 'Revenue',
-    unit: ctx => ctx.currency,
-    decimalPlaces: 2,
-    accentColor: GRADIENT_GREEN,
-    lottieSource: revenueLottie,
-    compute: (p24, ctx) =>
-      p24 !== undefined && ctx.tariff !== undefined
-        ? p24 * ctx.tariff
-        : undefined,
-  },
-];
+const createSummaryStyles = (scheme: Scheme) =>
+  StyleSheet.create({
+    smallIconWrap: {
+      width: 36,
+      height: 36,
+      borderRadius: radiusTokens.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+      backgroundColor: scheme.accentGold + '33',
+      borderWidth: 1,
+      borderColor: scheme.accentGold + '66',
+    },
+    liveDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: scheme.brand,
+    },
+  });
 
-const ENV_CARDS: SummaryFormula[] = [
-  {
-    label: 'CO₂ Reduction',
-    unit: 'Tons',
-    decimalPlaces: 2,
-    accentColor: YELLOW,
-    lottieSource: co2Lottie,
-    compute: p24 => (p24 !== undefined ? p24 * 0.00021233 : undefined),
-  },
-  {
-    label: 'Coal Saved',
-    unit: 'Tons',
-    decimalPlaces: 2,
-    accentColor: ACCENT_RED,
-    lottieSource: coalLottie,
-    compute: p24 => (p24 !== undefined ? p24 / 2.086 : undefined),
-  },
-  {
-    label: 'Trees Planted',
-    unit: 'Nos.',
-    decimalPlaces: 2,
-    accentColor: GRADIENT_GREEN,
-    lottieSource: treePlantLottie,
-    compute: p24 => (p24 !== undefined ? p24 / 0.88 : undefined),
-  },
-];
+/* ─────────────── styled wrappers ─────────────── */
+
+const Container = createBox(styles.container, 'Container');
+const HeroTopRight = createBox(styles.heroTopRight, 'HeroTopRight');
+const HeroBoltWell = createBox(styles.heroBoltWell, 'HeroBoltWell');
+const HeroDivider = createBox(styles.heroDivider, 'HeroDivider');
+const HeroRevenue = createBox(styles.heroRevenue, 'HeroRevenue');
+const HeroRevenueLeft = createBox(styles.heroRevenueLeft, 'HeroRevenueLeft');
+const HeroRevenueRight = createBox(styles.heroRevenueRight, 'HeroRevenueRight');
+const SldHeader = createBox(styles.sldHeader, 'SldHeader');
+const LiveTag = createBox(styles.liveTag, 'LiveTag');
+const DiagramPlaceholder = createBox(
+  styles.diagramPlaceholder,
+  'DiagramPlaceholder',
+);
+
+const SmallIconWrap: FC<{ children?: ReactNode }> = ({ children }) => {
+  const themed = useThemedStyles(createSummaryStyles);
+  return <View style={themed.smallIconWrap}>{children}</View>;
+};
+SmallIconWrap.displayName = 'SmallIconWrap';
+
+const LiveDot: FC = () => {
+  const themed = useThemedStyles(createSummaryStyles);
+  return <View style={themed.liveDot} />;
+};
+LiveDot.displayName = 'LiveDot';
 
 /* ─────────────── component ─────────────── */
 
 const SummaryView: FC = () => {
   const route = useRoute<SiteDetailRouteProp>();
   const { siteId } = route.params;
-  const { colors } = useThemeStore();
+  const scheme = useScheme();
   const { data: liveData } = useSiteData(siteId);
   const { data: siteConfig } = useSiteConfig(siteId);
 
@@ -211,67 +284,149 @@ const SummaryView: FC = () => {
     [siteConfig],
   );
 
-  // Resolve formulas → MetricCard items. Lottie JSX is constructed here
-  // (inside the component) so it can safely reference `styles.lottie`.
-  const buildItems = (
-    formulas: SummaryFormula[],
-    p24: number | undefined,
-    context: SummaryContext,
-  ): MetricCardItem[] =>
-    formulas.map(f => ({
-      label: f.label,
-      value: formatCardValue(f.compute(p24, context), f.decimalPlaces),
-      unit:
-        typeof f.unit === 'function' ? f.unit(context) : f.unit,
-      accentColor: f.accentColor,
-      icon: (
-        <LottieView
-          source={f.lottieSource}
-          autoPlay
-          loop
-          style={styles.lottie}
-        />
-      ),
-    }));
-
   const p24 = getP24(liveData);
-  const yieldItems = useMemo(
-    () => buildItems(YIELD_CARDS, p24, ctx),
-    [p24, ctx],
-  );
-  const envItems = useMemo(
-    () => buildItems(ENV_CARDS, p24, ctx),
-    [p24, ctx],
-  );
+
+  const yieldMwh = p24 !== undefined ? p24 * KWH_TO_MWH : undefined;
+  const revenue =
+    p24 !== undefined && ctx.tariff !== undefined ? p24 * ctx.tariff : undefined;
+
+  const co2Tons = p24 !== undefined ? p24 * 0.00021233 : undefined;
+  const coalTons = p24 !== undefined ? p24 / 2.086 : undefined;
+  const treesPlanted = p24 !== undefined ? p24 / 0.88 : undefined;
 
   return (
-    <View style={styles.container}>
-      <MetricCard title="Yield" items={yieldItems} />
-      <MetricCard title="Environmental Benefits" items={envItems} />
-      {showDiagram ? (
-        <SLDDiagram />
-      ) : (
-        <View style={styles.diagramPlaceholder}>
-          <ActivityIndicator color={colors.primaryText} />
-        </View>
-      )}
-    </View>
+    <Container>
+      {/* ── Hero — Plant Yield + Revenue ── */}
+      <Animated.View
+        entering={FadeInDown.duration(duration.fast).springify().damping(20)}>
+        <HeroGradientCard>
+          <HeroTopRow>
+            <HeroLiveBadge>
+              <PulseDot color={scheme.heroOnGradient} size={8} />
+              <OverlineLabel color={scheme.heroOnGradient}>
+                LIVE · YIELD
+              </OverlineLabel>
+            </HeroLiveBadge>
+            <HeroTopRight>
+              <GlassChip>
+                <AppText
+                  fontSize={FONT_SIZE_XXS}
+                  bold
+                  color={scheme.heroOnGradient}>
+                  TODAY
+                </AppText>
+              </GlassChip>
+              <HeroBoltWell>
+                <BoltIcon size={18} color={scheme.heroOnGradient} />
+              </HeroBoltWell>
+            </HeroTopRight>
+          </HeroTopRow>
+
+          <OverlineLabel
+            color={scheme.heroOnGradientMuted}
+            style={styles.heroSectionLabel}>
+            PLANT YIELD
+          </OverlineLabel>
+          <HeroValueRow>
+            <AppText
+              fontSize={FONT_SIZE_XXL}
+              bold
+              color={scheme.heroOnGradient}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.5}
+              style={styles.heroValueText}>
+              {formatNumber(yieldMwh)}
+            </AppText>
+            <AppText
+              fontSize={FONT_SIZE_SM}
+              color={scheme.heroOnGradientMuted}
+              medium>
+              mWh
+            </AppText>
+          </HeroValueRow>
+
+          <HeroDivider />
+
+          <HeroRevenue>
+            <HeroRevenueLeft>
+              <SmallIconWrap>
+                <LottieView
+                  source={revenueLottie}
+                  autoPlay
+                  loop
+                  style={styles.smallLottie}
+                />
+              </SmallIconWrap>
+              <View>
+                <OverlineLabel color={scheme.heroOnGradientMuted}>
+                  REVENUE
+                </OverlineLabel>
+                <AppText
+                  fontSize={FONT_SIZE_XS}
+                  color={scheme.heroOnGradient}>
+                  Today's earnings
+                </AppText>
+              </View>
+            </HeroRevenueLeft>
+            <HeroRevenueRight>
+              <AppText
+                fontSize={FONT_SIZE_LG}
+                bold
+                color={scheme.heroOnGradient}
+                numberOfLines={1}>
+                {formatNumber(revenue)}
+              </AppText>
+              <AppText
+                fontSize={FONT_SIZE_XXS}
+                color={scheme.heroOnGradientMuted}>
+                {ctx.currency}
+              </AppText>
+            </HeroRevenueRight>
+          </HeroRevenue>
+        </HeroGradientCard>
+      </Animated.View>
+
+      {/* ── Environmental Impact — 3 cards ── */}
+      <SummaryEnvImpact
+        co2Tons={co2Tons}
+        coalTons={coalTons}
+        treesPlanted={treesPlanted}
+        formatNumber={formatNumber}
+      />
+
+      {/* ── Energy Flow Diagram (SLD) ──
+          The SLDDiagram already renders its own framed viewport
+          (background + hairline + radius), so wrapping it in another
+          Surface produced a visible double-card. Section heading sits
+          as plain text above the diagram instead. */}
+      <Animated.View
+        entering={FadeInDown.duration(duration.fast)
+          .delay(90)
+          .springify()
+          .damping(20)}
+        style={styles.sldSection}>
+        <SldHeader>
+          <OverlineLabel color={scheme.textTertiary}>
+            ENERGY FLOW
+          </OverlineLabel>
+          <LiveTag>
+            <LiveDot />
+            <AppText fontSize={FONT_SIZE_XXS} color={scheme.brand} medium>
+              Live
+            </AppText>
+          </LiveTag>
+        </SldHeader>
+        {showDiagram ? (
+          <SLDDiagram />
+        ) : (
+          <DiagramPlaceholder>
+            <ActivityIndicator color={scheme.brand} />
+          </DiagramPlaceholder>
+        )}
+      </Animated.View>
+    </Container>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    gap: normalizeHeight(12),
-  },
-  diagramPlaceholder: {
-    minHeight: normalizeHeight(220),
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  lottie: {
-    width: normalizeWidth(36),
-    height: normalizeWidth(36),
-  },
-});
-
-export default SummaryView;
+export default React.memo(SummaryView);

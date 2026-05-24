@@ -23,4 +23,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default TablesView;
+export default React.memo(TablesView);
