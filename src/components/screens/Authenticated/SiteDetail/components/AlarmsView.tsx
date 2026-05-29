@@ -48,8 +48,10 @@ import {
   FONT_SIZE_XXL,
 } from 'src/utils';
 import { AlarmCardData, mockAlarmsData } from 'src/data/mock';
+import { useInteractionReady } from 'src/hooks';
 import AlarmFilterPill from './AlarmsView/AlarmFilterPill';
-import AlarmRow, { SeverityDef, ANIM_LIMIT } from './AlarmsView/AlarmRow';
+import AlarmRow, { SeverityDef } from './AlarmsView/AlarmRow';
+import TabSkeleton from './TabSkeleton';
 
 type SeverityKey = 'priority' | 'major' | 'minor' | 'warning';
 type FilterKey = 'all' | SeverityKey;
@@ -101,6 +103,7 @@ const HeroLegendItemComp: FC<HeroLegendItemProps> = ({
 const AlarmsView: FC = () => {
   const scheme = useScheme();
   const [activeFilter, setActiveFilter] = useState<FilterKey>('all');
+  const ready = useInteractionReady();
 
   // Severity definitions — colour from the semantic palette so it stays
   // theme-aware. `rank` drives the sort order in the list.
@@ -186,6 +189,12 @@ const AlarmsView: FC = () => {
   );
 
   /* ── render branches ──────────────────────────────────────── */
+
+  // Open instantly → skeleton while the deferred mount settles (the
+  // alarm row list with its entrance animations is the heavy part).
+  if (!ready) {
+    return <TabSkeleton />;
+  }
 
   // Empty state — celebratory feel when nothing to triage.
   if (enriched.length === 0) {

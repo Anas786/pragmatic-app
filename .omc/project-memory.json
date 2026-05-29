@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1779451174047,
+  "lastScanned": 1780002331065,
   "projectRoot": "/Users/muhammadanas/Documents/Projects/pragmatic-app-updated",
   "techStack": {
     "languages": [
@@ -78,13 +78,44 @@
       "branchingStrategy": null
     }
   },
-  "customNotes": [],
+  "customNotes": [
+    {
+      "timestamp": 1780002596128,
+      "source": "manual",
+      "category": "trends-chart-spec",
+      "content": "TRENDS TAB — feature spec (chart impl currently DISCARDED; data layer must be rebuilt from scratch next session).\n\nAPI CONTRACT:\n1. Config: GET {baseUrl}/protected/config/site/:id → response.siteComponents.trends[] (array). Already fetched via useSiteConfig(siteId).\n2. Data: GET {baseUrl}/protected/data/v2/trends/:siteId?idx={N}&start={expr}&end={expr}&tz={IANA}\n   - idx = 0-based index of the trend item in siteComponents.trends[] (1:1 mapping).\n   - start/end are SQL-ish expressions, e.g. start=\"now() - INTERVAL 24 HOUR\", end=\"now()\". Custom range uses quoted absolute literals \"'YYYY-MM-DD HH:MM:SS'\".\n   - tz e.g. \"Asia/Karachi\" (use device tz via Intl.DateTimeFormat().resolvedOptions().timeZone).\n   - Response: { metadata, data: [{ time: <unix ms>, <param>: <number|null>, ... }] }. Each row = one time bucket; keys after `time` match each aggregation's `param`.\n\nCONFIG FIELD WHITELIST (user was EMPHATIC — use ONLY these, ignore everything else):\n   - trend.heading, trend.subHeading\n   - trend.payload.unit (for x-axis label granularity)\n   - trend.payload.aggregations[].{ color, display, type, param }\n     - type ∈ line | area | column | bar  (drives the series render type)\n     - param matches the data-row key\n   - IGNORE: id, dataStore, poll (NO polling), chartConfig, payload.chartType (NO pie special-casing), payload.interval, agg.method, agg.chartType, top-level type.\n\nRENDERING REQUIREMENTS (user-stated):\n   - ALL aggregations of one trend render in ONE MERGED chart frame (line+area+column+bar coexisting on shared axes). NOT split panes.\n   - Zoom in / zoom out controls per chart.\n   - Horizontal left/right scroll/pan with y-axis PINNED (stays visible while plot scrolls).\n   - Default period filter = 24H. Pills: 24H / 72H / 7D / 30D / Custom.\n   - x-axis date format DD/MM (e.g. 25/05).\n   - Hide on-tap tooltip/legend popup (\"not needed\")."
+    },
+    {
+      "timestamp": 1780002610848,
+      "source": "manual",
+      "category": "trends-chart-pitfalls",
+      "content": "TRENDS CHART — hard-won learnings from the DISCARDED attempt (read before re-attempting charts).\n\nLIBRARY LANDSCAPE (already in package.json, committed): @wuba/react-native-echarts ^3.0.1, react-native-echarts-pro ^1.9.3, react-native-gifted-charts ^1.4.71, react-native-svg 15.3.0, react-native-reanimated 3.16.7. react-native-skia is NOT installed.\n\nWHAT FAILED:\n1. gifted-charts: cannot cleanly merge line+area+column+bar in ONE frame at native quality. Forced into 2-pane split (LineChart + BarChart). Rejected by user.\n2. @wuba/react-native-echarts (SVG renderer) WORKS for combo charts but is dependency hell on RN/Metro/Hermes:\n   - echarts core is NOT a dep of the wrapper — must `yarn add echarts`. echarts 6.x is ESM-only (\"type\":\"module\") and crashes Metro at module-eval. PIN echarts to ^5.5/5.6.\n   - The wrapper pulls zrender 6.x to top-level while echarts 5.6 ships nested zrender 5.6.1 → setPlatformAPI set on the wrong zrender → \"Cannot read property '__extends' of undefined\". FIX: pin zrender ~5.6.1 to dedupe.\n   - zrender's nested tslib 2.3.0 has a broken ESM entry (modules/index.js) under Metro strict-mode interop → same __extends crash. FIX: package.json \"resolutions\": { \"tslib\": \"^2.8.1\" }.\n   - Import the wrapper from the DEEP entry '@wuba/react-native-echarts/svgChart' (NOT package root) — root re-exports the Skia variant and Metro statically resolves @shopify/react-native-skia which isn't installed.\n   - Top-level imports of echarts/wrapper cascade-crash the whole src/components barrel (symptom: \"Cannot read property 'Splash' of undefined\" in Onboarding). FIX: lazy require() all echarts modules inside the component body on first mount, cache at module scope.\n   - echarts.init needs an EXPLICIT numeric width (Dimensions-based); width:undefined → blank zero-width canvas.\n   - dataZoom type:'inside' with moveOnMouseMove:true is what enables finger-pan in RN (the wrapper's PanResponder feeds touch through the mouse pipeline). preventDefaultMouseMove:true stops the parent vertical ScrollView stealing horizontal swipes.\n   - Wildly different magnitudes (line ~3K vs bar ~5M) need DUAL Y-AXES (bars yAxisIndex:0 left, lines/areas yAxisIndex:1 right) + z-order (lines/areas z>bars) or the small series is an invisible flat sliver / hidden behind bars.\n\nUNTESTED ALTERNATIVE for next time: react-native-echarts-pro (WebView-based, bundles its own echarts — sidesteps ALL the Metro/ESM/zrender/tslib dependency hell above) OR victory-native. Consider these before re-fighting @wuba dependency issues.\n\nCURRENT STATE: all trend chart + data-layer work reverted to commit 789cadb. TrendView is back to the mock-driven GradientRangeBar + TrendAnalysisCard. No getTrendData, no useTrendData, no trend types. echarts/zrender deps + tslib resolution removed from package.json."
+    },
+    {
+      "timestamp": 1780064212560,
+      "source": "manual",
+      "category": "env",
+      "content": "`pod install` via the Bash tool / non-interactive shells CRASHES with \"Unicode Normalization not appropriate for ASCII-8BIT (Encoding::CompatibilityError)\" (CocoaPods 1.15.2). FIX: set a UTF-8 locale → `cd ios && LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 pod install`. Always export those before running pod install in automation."
+    },
+    {
+      "timestamp": 1780064228245,
+      "source": "manual",
+      "category": "architecture",
+      "content": "TRENDS TAB — REBUILT (supersedes the old \"trends-chart-spec / DISCARDED, rebuild from scratch\" note; that note is now STALE). Current implementation under src/components/screens/Authenticated/SiteDetail/components/Trends/:\n- Data layer: types/trends.ts, getTrendData() (networking/site), useTrendData() hook, utils/trends.ts (selectTrends config selector, buildTrendRange SQL exprs, splitAggregations, formatTrendLabel, period pills 24H/48H/72H/Custom, custom max 3 days). TrendView maps siteConfig.siteComponents.trends[] → one TrendSection per idx; each owns its own period filter + fetch; fires API on mount, defers chart mount via useInteractionReady (skeleton meanwhile).\n- Charts: gifted-charts for the split (line/area in TrendLineChart, bar/column in TrendBarChart) — used on sections 1+. Section 0 is the PROTOTYPE combined chart via react-native-echarts-pro (WebView, bundles own echarts — sidesteps the @wuba dependency hell). echartsOption.ts builds the option: detailed=false → compact dual-axis (bars left/lines right, no y-axis titles, y-tick labels shown, default zoom window ~40 buckets); detailed=true → one colour-coded y-axis PER series + every x label (used only in fullscreen).\n- Fullscreen: TrendChartFullscreenModal.tsx = portrait-LOCKED Modal (supportedOrientations=['portrait']) with content rotated 90deg (rotate-transform trick; NO orientation lib). NOTCH_INSET(40,left)/RIGHT_INSET(20,right) clear the camera + axis clipping. Title+Export+Close in a centered header row.\n- Export: exportChart.ts uses RNEChartsPro ref.getInstance('getDataURL',{type:'png',pixelRatio:2,backgroundColor}) → base64 PNG → react-native-share Share.open({url:dataURL}). react-native-share@12.3.1 added (native dep — needs pod install + rebuild). Export button on inline card + fullscreen header.\nPENDING/UNVERIFIED on device: whether to keep echarts-pro combo for ALL sections vs gifted split; touch through the rotate-transform; default zoom density."
+    },
+    {
+      "timestamp": 1780069787932,
+      "source": "manual",
+      "category": "architecture",
+      "content": "CHARTING — fully migrated to echarts (react-native-echarts-pro, WebView). `react-native-gifted-charts` has been REMOVED from package.json (it was pure-JS; react-native-svg stays for icons, so no rebuild needed for the removal). Updates the earlier trends note: there is NO gifted/echarts split anymore — ALL trend sections use TrendComboChart (echarts combo), and the Reports tab (PerformanceReportCard) pie donut + stacked bar are now echarts too via PerformanceReport/echartsReportOption.ts (buildReportPieOption + buildReportStackBarOption). Pie slice tap → RNEChartsPro onPress(params.dataIndex) → setSelectedIndex (highlights source row). Stacked bar uses echarts dataZoom slider for zoom/scroll (replaced the manual ZoomControls). echarts click events route to onPress only when type==='click'. NOTE: `@wuba/react-native-echarts` (3.0.1) is still in package.json but UNUSED (unmet zrender peer) — safe to remove as cleanup; we use react-native-echarts-pro exclusively."
+    }
+  ],
   "directoryMap": {
     "__tests__": {
       "path": "__tests__",
       "purpose": "Test files",
       "fileCount": 1,
-      "lastAccessed": 1779451173972,
+      "lastAccessed": 1780002331018,
       "keyFiles": [
         "App.test.tsx"
       ]
@@ -93,7 +124,7 @@
       "path": "android",
       "purpose": null,
       "fileCount": 5,
-      "lastAccessed": 1779451173974,
+      "lastAccessed": 1780002331023,
       "keyFiles": [
         "build.gradle",
         "gradle.properties",
@@ -106,14 +137,14 @@
       "path": "assets",
       "purpose": "Static assets",
       "fileCount": 0,
-      "lastAccessed": 1779451174023,
+      "lastAccessed": 1780002331024,
       "keyFiles": []
     },
     "ios": {
       "path": "ios",
       "purpose": null,
       "fileCount": 5,
-      "lastAccessed": 1779451174024,
+      "lastAccessed": 1780002331024,
       "keyFiles": [
         "Podfile",
         "Podfile.lock"
@@ -123,7 +154,7 @@
       "path": "src",
       "purpose": "Source code",
       "fileCount": 2,
-      "lastAccessed": 1779451174025,
+      "lastAccessed": 1780002331024,
       "keyFiles": [
         "react-app-env.d.ts"
       ]
@@ -132,7 +163,7 @@
       "path": "android/app",
       "purpose": "Application code",
       "fileCount": 3,
-      "lastAccessed": 1779451174025,
+      "lastAccessed": 1780002331025,
       "keyFiles": [
         "build.gradle",
         "debug.keystore",
@@ -143,21 +174,21 @@
       "path": "android/build",
       "purpose": "Build output",
       "fileCount": 0,
-      "lastAccessed": 1779451174026,
+      "lastAccessed": 1780002331025,
       "keyFiles": []
     },
     "ios/build": {
       "path": "ios/build",
       "purpose": "Build output",
       "fileCount": 0,
-      "lastAccessed": 1779451174027,
+      "lastAccessed": 1780002331025,
       "keyFiles": []
     },
     "src/assets": {
       "path": "src/assets",
       "purpose": "Static assets",
       "fileCount": 2,
-      "lastAccessed": 1779451174028,
+      "lastAccessed": 1780002331026,
       "keyFiles": [
         "index.ts"
       ]
@@ -166,7 +197,7 @@
       "path": "src/components",
       "purpose": "UI components",
       "fileCount": 1,
-      "lastAccessed": 1779451174028,
+      "lastAccessed": 1780002331026,
       "keyFiles": [
         "index.ts"
       ]
@@ -175,7 +206,7 @@
       "path": "src/config",
       "purpose": "Configuration files",
       "fileCount": 2,
-      "lastAccessed": 1779451174032,
+      "lastAccessed": 1780002331026,
       "keyFiles": [
         "amplify.ts",
         "index.ts"
@@ -185,14 +216,14 @@
       "path": "src/data",
       "purpose": "Data files",
       "fileCount": 0,
-      "lastAccessed": 1779451174033,
+      "lastAccessed": 1780002331027,
       "keyFiles": []
     },
     "src/routes": {
       "path": "src/routes",
       "purpose": "Route handlers",
       "fileCount": 4,
-      "lastAccessed": 1779451174033,
+      "lastAccessed": 1780002331027,
       "keyFiles": [
         "dashboardStack.tsx",
         "drawerNavigator.tsx",
@@ -214,15 +245,33 @@
       "type": "file"
     },
     {
+      "path": "src/hooks/index.ts",
+      "accessCount": 12,
+      "lastAccessed": 1780006266507,
+      "type": "file"
+    },
+    {
+      "path": "src/utils/index.ts",
+      "accessCount": 11,
+      "lastAccessed": 1780006252934,
+      "type": "file"
+    },
+    {
+      "path": "src/types/site.ts",
+      "accessCount": 8,
+      "lastAccessed": 1779811425129,
+      "type": "file"
+    },
+    {
       "path": "App.tsx",
       "accessCount": 7,
       "lastAccessed": 1777380171702,
       "type": "file"
     },
     {
-      "path": "src/hooks/index.ts",
+      "path": "src/types/index.ts",
       "accessCount": 7,
-      "lastAccessed": 1777501573902,
+      "lastAccessed": 1780006197783,
       "type": "file"
     },
     {
@@ -232,15 +281,21 @@
       "type": "file"
     },
     {
-      "path": "src/utils/index.ts",
-      "accessCount": 6,
-      "lastAccessed": 1777392193929,
-      "type": "file"
-    },
-    {
       "path": "src/components/screens/Onboarding/Splash/index.tsx",
       "accessCount": 6,
       "lastAccessed": 1779453229769,
+      "type": "file"
+    },
+    {
+      "path": "src/networking/index.ts",
+      "accessCount": 6,
+      "lastAccessed": 1779796711152,
+      "type": "file"
+    },
+    {
+      "path": "src/networking/config.ts",
+      "accessCount": 6,
+      "lastAccessed": 1779796720568,
       "type": "file"
     },
     {
@@ -262,15 +317,15 @@
       "type": "file"
     },
     {
-      "path": "src/networking/auth/cognito.ts",
-      "accessCount": 4,
-      "lastAccessed": 1777309803160,
+      "path": "src/components/screens/Authenticated/SiteDetail/components/ViewsContent.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1780005540154,
       "type": "file"
     },
     {
-      "path": "src/networking/config.ts",
+      "path": "src/networking/auth/cognito.ts",
       "accessCount": 4,
-      "lastAccessed": 1777309822293,
+      "lastAccessed": 1777309803160,
       "type": "file"
     },
     {
@@ -280,21 +335,15 @@
       "type": "file"
     },
     {
-      "path": "src/networking/index.ts",
-      "accessCount": 4,
-      "lastAccessed": 1777385861477,
-      "type": "file"
-    },
-    {
-      "path": "src/types/index.ts",
-      "accessCount": 4,
-      "lastAccessed": 1777387317430,
-      "type": "file"
-    },
-    {
       "path": "src/assets/icons/index.ts",
       "accessCount": 4,
       "lastAccessed": 1777392422950,
+      "type": "file"
+    },
+    {
+      "path": "package.json",
+      "accessCount": 4,
+      "lastAccessed": 1779815905802,
       "type": "file"
     },
     {
@@ -328,15 +377,9 @@
       "type": "file"
     },
     {
-      "path": "src/types/site.ts",
+      "path": "src/routes/onboardingStack.tsx",
       "accessCount": 3,
-      "lastAccessed": 1777386228741,
-      "type": "file"
-    },
-    {
-      "path": "src/components/screens/Authenticated/SiteDetail/components/ViewsContent.tsx",
-      "accessCount": 3,
-      "lastAccessed": 1777500399137,
+      "lastAccessed": 1779812852732,
       "type": "file"
     },
     {
@@ -376,21 +419,9 @@
       "type": "file"
     },
     {
-      "path": "src/routes/onboardingStack.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1777413304414,
-      "type": "file"
-    },
-    {
       "path": "signin-flow.md",
-      "accessCount": 1,
-      "lastAccessed": 1776201436913,
-      "type": "file"
-    },
-    {
-      "path": "package.json",
-      "accessCount": 1,
-      "lastAccessed": 1776201525986,
+      "accessCount": 2,
+      "lastAccessed": 1780002734369,
       "type": "file"
     },
     {

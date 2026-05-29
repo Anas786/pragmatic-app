@@ -5,3 +5,4 @@ export * from './user';
 export * from './site';
 export * from './config';
 export * from './cards';
+export * from './trends';

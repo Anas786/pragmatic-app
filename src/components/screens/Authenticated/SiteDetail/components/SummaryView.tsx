@@ -47,7 +47,6 @@ import {
   OverlineLabel,
   PulseDot,
 } from 'src/components/common';
-import { IconWell } from 'src/components/common';
 import {
   duration,
   glass,
@@ -68,7 +67,8 @@ import {
   FONT_SIZE_LG,
   FONT_SIZE_XXL,
 } from 'src/utils';
-import { useSiteConfig, useSiteData } from 'src/hooks';
+import { useInteractionReady, useSiteConfig, useSiteData } from 'src/hooks';
+import TabSkeleton from './TabSkeleton';
 import {
   DashboardStackParamList,
   ICardConfig,
@@ -265,8 +265,9 @@ const SummaryView: FC = () => {
   const route = useRoute<SiteDetailRouteProp>();
   const { siteId } = route.params;
   const scheme = useScheme();
-  const { data: liveData } = useSiteData(siteId);
+  const { data: liveData, isLoading } = useSiteData(siteId);
   const { data: siteConfig } = useSiteConfig(siteId);
+  const ready = useInteractionReady();
 
   const [showDiagram, setShowDiagram] = useState(false);
 
@@ -293,6 +294,12 @@ const SummaryView: FC = () => {
   const co2Tons = p24 !== undefined ? p24 * 0.00021233 : undefined;
   const coalTons = p24 !== undefined ? p24 / 2.086 : undefined;
   const treesPlanted = p24 !== undefined ? p24 / 0.88 : undefined;
+
+  // Open instantly → skeleton while the deferred mount settles or the
+  // live payload is still loading from cache/API.
+  if (!ready || (isLoading && !liveData)) {
+    return <TabSkeleton />;
+  }
 
   return (
     <Container>

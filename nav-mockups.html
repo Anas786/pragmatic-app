@@ -1,0 +1,775 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>SiteDetail navigation — option comparison</title>
+  <style>
+    :root {
+      --bg: #f4f5f7;
+      --surface: #ffffff;
+      --surface-muted: #f4f5f7;
+      --text-primary: #111827;
+      --text-secondary: #6b7280;
+      --text-tertiary: #9ca3af;
+      --brand: #10b981;
+      --brand-soft: rgba(16, 185, 129, 0.10);
+      --brand-bold: #059669;
+      --hairline: rgba(17, 24, 39, 0.06);
+      --border: #e5e7eb;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --solar: #84cc16;
+      --wind: #06b6d4;
+      --grid: #3b82f6;
+      --genset: #f97316;
+      --battery: #a855f7;
+      --shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+      background: linear-gradient(180deg, #fafafa 0%, #eef0f4 100%);
+      color: var(--text-primary);
+      padding: 48px 32px 96px;
+      -webkit-font-smoothing: antialiased;
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      margin: 0 0 4px;
+      letter-spacing: -0.01em;
+    }
+    .lede {
+      color: var(--text-secondary);
+      margin: 0 0 36px;
+      font-size: 14px;
+      max-width: 760px;
+      line-height: 1.55;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+      gap: 36px;
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+    .option {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 14px;
+    }
+    .option-title {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.005em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .option-tag {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: var(--brand-soft);
+      color: var(--brand-bold);
+    }
+    .option-tag.alt { background: rgba(99, 102, 241, 0.10); color: #4338ca; }
+    .option-tag.warn { background: rgba(245, 158, 11, 0.10); color: #b45309; }
+    .option-note {
+      color: var(--text-secondary);
+      font-size: 12px;
+      line-height: 1.5;
+      margin: 0;
+    }
+    .frame {
+      width: 100%;
+      max-width: 340px;
+      margin: 0 auto;
+      aspect-ratio: 9 / 19;
+      background: #111827;
+      border-radius: 38px;
+      padding: 8px;
+      box-shadow: var(--shadow);
+      position: relative;
+    }
+    .frame::before {
+      content: '';
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 76px;
+      height: 22px;
+      border-radius: 999px;
+      background: #1f2937;
+      z-index: 2;
+    }
+    .screen {
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      border-radius: 30px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      padding-top: 38px;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--hairline);
+    }
+    .avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      background: var(--surface-muted);
+      border: 1.5px solid var(--brand);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 9px;
+      color: var(--text-secondary);
+    }
+    .topbar-text { flex: 1; min-width: 0; }
+    .topbar-title { font-size: 11px; font-weight: 600; }
+    .topbar-sub { font-size: 9px; color: var(--text-tertiary); }
+    .icon-btn {
+      width: 28px; height: 28px;
+      display: grid; place-items: center;
+      color: var(--text-secondary);
+    }
+    .icon { width: 16px; height: 16px; display: inline-block; }
+
+    /* Top tab strip (used in Option 1 and Option 3) */
+    .top-tabs {
+      display: flex;
+      gap: 6px;
+      padding: 10px 12px;
+      overflow-x: hidden;
+      background: var(--surface);
+      border-bottom: 1px solid var(--hairline);
+      position: relative;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 10px;
+      font-size: 10px;
+      font-weight: 600;
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--text-secondary);
+      border: 1px solid var(--hairline);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .pill.active {
+      background: var(--brand);
+      color: #fff;
+      border-color: var(--brand);
+    }
+    .pill-dot {
+      width: 5px; height: 5px; border-radius: 999px;
+      background: currentColor;
+      opacity: 0.7;
+    }
+
+    /* Body */
+    .body {
+      flex: 1;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      overflow: hidden;
+    }
+    .hero {
+      background: linear-gradient(135deg, #10b981 0%, #059669 50%, #047857 100%);
+      border-radius: 18px;
+      padding: 12px;
+      color: #fff;
+      box-shadow: 0 8px 16px rgba(16, 185, 129, 0.18);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .hero-overline {
+      font-size: 8px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      opacity: 0.85;
+      font-weight: 700;
+    }
+    .hero-value {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    .tile-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+    }
+    .tile {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px;
+      min-height: 64px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 8px;
+      color: var(--text-secondary);
+    }
+    .tile-strong { font-size: 11px; font-weight: 700; color: var(--text-primary); }
+    .bento {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .bento .tile { min-height: 76px; }
+
+    /* Page indicator dots (Option 1) */
+    .page-dots {
+      display: flex;
+      gap: 5px;
+      justify-content: center;
+      padding: 6px 0 10px;
+    }
+    .page-dot {
+      width: 5px; height: 5px; border-radius: 999px;
+      background: var(--text-tertiary);
+      opacity: 0.35;
+    }
+    .page-dot.active { background: var(--brand); opacity: 1; width: 16px; }
+
+    /* Bottom tab bar (Option 2) */
+    .bottom-bar {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      padding: 6px 8px 14px;
+      background: var(--surface);
+      border-top: 1px solid var(--hairline);
+      gap: 4px;
+    }
+    .bottom-tab {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 6px 2px;
+      font-size: 9px;
+      color: var(--text-tertiary);
+      border-radius: 12px;
+    }
+    .bottom-tab .glyph { font-size: 17px; line-height: 1; }
+    .bottom-tab.active {
+      color: var(--brand);
+    }
+    .bottom-tab.active .glyph {
+      filter: drop-shadow(0 2px 6px rgba(16, 185, 129, 0.45));
+    }
+    .bottom-tab.active::before {
+      content: '';
+      width: 14px; height: 3px;
+      border-radius: 999px;
+      background: var(--brand);
+      margin-bottom: 4px;
+    }
+
+    /* Sub-toggle (Option 3) */
+    .sub-toggle {
+      display: inline-flex;
+      align-self: flex-start;
+      padding: 3px;
+      gap: 2px;
+      border-radius: 999px;
+      background: var(--surface-muted);
+      border: 1px solid var(--hairline);
+    }
+    .sub-toggle .seg {
+      font-size: 10px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      color: var(--text-secondary);
+      font-weight: 600;
+    }
+    .sub-toggle .seg.active {
+      background: var(--surface);
+      color: var(--text-primary);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+    }
+
+    .swipe-hint {
+      position: absolute;
+      left: 50%; transform: translateX(-50%);
+      bottom: 78px;
+      background: rgba(17, 24, 39, 0.78);
+      color: #fff;
+      font-size: 10px;
+      padding: 5px 11px;
+      border-radius: 999px;
+      backdrop-filter: blur(8px);
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      pointer-events: none;
+      animation: float 2.5s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%, 100% { transform: translateX(-50%) translateY(0); opacity: 0.85; }
+      50%      { transform: translateX(-50%) translateY(-3px); opacity: 1; }
+    }
+
+    .more-sheet {
+      position: absolute;
+      left: 8px; right: 8px; bottom: 68px;
+      background: var(--surface);
+      border-radius: 20px;
+      padding: 12px;
+      box-shadow: 0 -8px 20px rgba(0,0,0,0.08);
+      display: none;
+      gap: 8px;
+      flex-direction: column;
+    }
+    .more-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 6px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .more-row:hover { background: var(--surface-muted); }
+
+    .pros-cons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+    .pros, .cons {
+      padding: 10px 12px;
+      border-radius: 12px;
+    }
+    .pros { background: rgba(16, 185, 129, 0.08); }
+    .cons { background: rgba(245, 158, 11, 0.10); }
+    .pros strong, .cons strong {
+      display: block;
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+      color: var(--text-secondary);
+    }
+
+    /* SVG icon helper */
+    svg { display: block; }
+
+    /* ─────────── Liquid-morph chips (Option 0) ─────────── */
+    .liquid-tabs {
+      display: flex;
+      gap: 6px;
+      padding: 10px 12px;
+      overflow-x: hidden;
+      background: var(--surface);
+      border-bottom: 1px solid var(--hairline);
+      align-items: center;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      height: 30px;
+      padding: 0 0 0 0;
+      width: 30px;
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--text-secondary);
+      border: 1px solid var(--hairline);
+      font-size: 10px;
+      font-weight: 600;
+      overflow: hidden;
+      flex-shrink: 0;
+      white-space: nowrap;
+      transition: width 480ms cubic-bezier(0.34, 1.56, 0.64, 1),
+                  padding 480ms cubic-bezier(0.34, 1.56, 0.64, 1),
+                  background 220ms ease,
+                  color 220ms ease,
+                  border-color 220ms ease;
+    }
+    .chip .chip-glyph {
+      width: 14px; text-align: center; flex-shrink: 0;
+    }
+    .chip .chip-label {
+      max-width: 0;
+      opacity: 0;
+      transition: max-width 480ms cubic-bezier(0.34, 1.56, 0.64, 1),
+                  opacity 220ms ease;
+    }
+    .chip.active {
+      width: auto;
+      padding: 0 12px 0 10px;
+      background: var(--brand);
+      color: #fff;
+      border-color: var(--brand);
+    }
+    .chip.active .chip-label {
+      max-width: 80px;
+      opacity: 1;
+      margin-left: 4px;
+    }
+
+    .scenario-tag {
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+      padding: 6px 12px;
+      background: var(--surface-muted);
+      border-top: 1px solid var(--hairline);
+    }
+  </style>
+</head>
+<body>
+
+<h1>SiteDetail navigation — three modern alternatives</h1>
+<p class="lede">
+  Side-by-side mock of how each pattern feels. Same content; only the way
+  you switch between the seven sub-sections changes. The active section
+  in each mock is <strong>Summary</strong>.
+</p>
+
+<div class="grid">
+
+  <!-- ─────────── OPTION 0: LIQUID-MORPH CHIPS ─────────── -->
+  <div class="option">
+    <div class="option-title">
+      Option 0 — Liquid-morph chips
+      <span class="option-tag warn">previously crashed</span>
+    </div>
+    <div class="frame">
+      <div class="screen">
+
+        <div class="topbar">
+          <div class="avatar">ZT</div>
+          <div class="topbar-text">
+            <div class="topbar-title">Zahra Textile</div>
+            <div class="topbar-sub">9,750 kW · Capacity</div>
+          </div>
+          <div class="icon-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </div>
+        </div>
+
+        <div class="liquid-tabs" id="liquidTabs">
+          <span class="chip active" data-i="0"><span class="chip-glyph">⌂</span><span class="chip-label">Summary</span></span>
+          <span class="chip" data-i="1"><span class="chip-glyph">▣</span><span class="chip-label">Cards</span></span>
+          <span class="chip" data-i="2"><span class="chip-glyph">⚡</span><span class="chip-label">Live</span></span>
+          <span class="chip" data-i="3"><span class="chip-glyph">⚠</span><span class="chip-label">Alarms</span></span>
+          <span class="chip" data-i="4"><span class="chip-glyph">↗</span><span class="chip-label">Trend</span></span>
+          <span class="chip" data-i="5"><span class="chip-glyph">📊</span><span class="chip-label">Reports</span></span>
+          <span class="chip" data-i="6"><span class="chip-glyph">▤</span><span class="chip-label">Tables</span></span>
+        </div>
+        <div class="scenario-tag">tap a chip — watch the spring morph</div>
+
+        <div class="body">
+          <div class="hero">
+            <span class="hero-overline">⚡ Plant Yield · Today</span>
+            <div class="hero-value">4,628 kWh</div>
+            <div style="font-size:9px;opacity:0.85;">Revenue · USD 14,210</div>
+          </div>
+          <div class="tile-row">
+            <div class="tile"><div class="tile-strong">2.5</div>CO₂</div>
+            <div class="tile"><div class="tile-strong">2.2</div>Coal</div>
+            <div class="tile"><div class="tile-strong">5.3</div>Trees</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <p class="option-note">
+      Inactive tabs collapse to icon-only circles. The active tab expands
+      to icon + label with a spring morph. Same content, far less visual
+      weight on the strip. <strong>This was the v2 TabSelector that
+      crashed</strong> — see safe-path note below.
+    </p>
+
+    <div class="pros-cons">
+      <div class="pros">
+        <strong>Pros</strong>
+        Most visually distinctive. Fits more tabs on screen at once. Strong "what's selected" affordance.
+      </div>
+      <div class="cons">
+        <strong>Cons</strong>
+        Original impl used Reanimated <code>LinearTransition</code> on 7 chips → commit-during-commit SIGABRT. Needs a re-architecture to ship.
+      </div>
+    </div>
+
+    <div style="background:#fff;border:1px solid var(--hairline);border-radius:12px;padding:12px;font-size:11px;line-height:1.55;">
+      <strong style="display:block;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-secondary);margin-bottom:6px;">Safe path to ship</strong>
+      Drop <code>layout=LinearTransition</code> on the chips. Drive a single shared <code>progress</code> shared value from active-tab state; animate a single overlay "blob" that translates + resizes across the strip. Chips themselves stay static — no per-chip Reanimated. One worklet total, not seven.
+    </div>
+  </div>
+
+  <!-- ─────────── OPTION 1: SWIPEABLE PAGER + INDICATOR ─────────── -->
+  <div class="option">
+    <div class="option-title">
+      Option 1 — Swipeable pager
+      <span class="option-tag">my pick</span>
+    </div>
+    <div class="frame">
+      <div class="screen">
+
+        <div class="topbar">
+          <div class="avatar">ZT</div>
+          <div class="topbar-text">
+            <div class="topbar-title">Zahra Textile</div>
+            <div class="topbar-sub">9,750 kW · Capacity</div>
+          </div>
+          <div class="icon-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </div>
+        </div>
+
+        <div class="top-tabs">
+          <span class="pill active"><span class="pill-dot"></span>Summary</span>
+          <span class="pill">Cards</span>
+          <span class="pill">Live</span>
+          <span class="pill">Alarms</span>
+          <span class="pill">Trend</span>
+          <span class="pill">Reports</span>
+          <span class="pill">Tables</span>
+        </div>
+
+        <div class="body">
+          <div class="hero">
+            <span class="hero-overline">⚡ Plant Yield · Today</span>
+            <div class="hero-value">4,628 kWh</div>
+            <div style="font-size:9px;opacity:0.85;">Revenue · USD 14,210</div>
+          </div>
+          <div class="tile-row">
+            <div class="tile"><div class="tile-strong">2.5</div>CO₂</div>
+            <div class="tile"><div class="tile-strong">2.2</div>Coal</div>
+            <div class="tile"><div class="tile-strong">5.3</div>Trees</div>
+          </div>
+          <div class="tile" style="flex:1; min-height: auto;">
+            <div class="tile-strong" style="font-size:9px; letter-spacing:0.1em; color:var(--text-secondary); text-transform:uppercase;">Energy Flow</div>
+            <div style="flex:1; background: repeating-linear-gradient(90deg, var(--brand-soft), var(--brand-soft) 8px, transparent 8px, transparent 18px); border-radius: 8px; min-height: 60px;"></div>
+          </div>
+
+          <div class="page-dots">
+            <span class="page-dot active"></span>
+            <span class="page-dot"></span>
+            <span class="page-dot"></span>
+            <span class="page-dot"></span>
+            <span class="page-dot"></span>
+            <span class="page-dot"></span>
+            <span class="page-dot"></span>
+          </div>
+        </div>
+
+        <div class="swipe-hint">↔ swipe to switch sections</div>
+      </div>
+    </div>
+
+    <p class="option-note">
+      Pill strip stays — pills become a position indicator. You can tap or
+      swipe horizontally to switch. Subtle dot row at the bottom hints at
+      gesture availability. Active tab auto-centers in the strip.
+    </p>
+
+    <div class="pros-cons">
+      <div class="pros">
+        <strong>Pros</strong>
+        Gesture-first, no functionality moves, ~1 day to implement, all tabs stay accessible.
+      </div>
+      <div class="cons">
+        <strong>Cons</strong>
+        Doesn't reduce the "7 things at one level" cognitive load.
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────── OPTION 2: BOTTOM TAB BAR ─────────── -->
+  <div class="option">
+    <div class="option-title">
+      Option 2 — Bottom tabs + sheet
+      <span class="option-tag alt">thumb reach</span>
+    </div>
+    <div class="frame">
+      <div class="screen">
+
+        <div class="topbar">
+          <div class="avatar">ZT</div>
+          <div class="topbar-text">
+            <div class="topbar-title">Zahra Textile</div>
+            <div class="topbar-sub">9,750 kW · Capacity</div>
+          </div>
+          <div class="icon-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </div>
+        </div>
+
+        <div class="body" style="padding-bottom: 0;">
+          <div class="hero">
+            <span class="hero-overline">⚡ Plant Yield · Today</span>
+            <div class="hero-value">4,628 kWh</div>
+            <div style="font-size:9px;opacity:0.85;">Revenue · USD 14,210</div>
+          </div>
+          <div class="tile-row">
+            <div class="tile"><div class="tile-strong">2.5</div>CO₂</div>
+            <div class="tile"><div class="tile-strong">2.2</div>Coal</div>
+            <div class="tile"><div class="tile-strong">5.3</div>Trees</div>
+          </div>
+          <div class="tile" style="flex:1; min-height: auto;">
+            <div class="tile-strong" style="font-size:9px; letter-spacing:0.1em; color:var(--text-secondary); text-transform:uppercase;">Energy Flow</div>
+            <div style="flex:1; background: repeating-linear-gradient(90deg, var(--brand-soft), var(--brand-soft) 8px, transparent 8px, transparent 18px); border-radius: 8px; min-height: 60px;"></div>
+          </div>
+        </div>
+
+        <div class="bottom-bar">
+          <div class="bottom-tab active"><span class="glyph">⌂</span>Summary</div>
+          <div class="bottom-tab"><span class="glyph">⚡</span>Live</div>
+          <div class="bottom-tab"><span class="glyph">⚠</span>Alarms</div>
+          <div class="bottom-tab"><span class="glyph">📊</span>Reports</div>
+          <div class="bottom-tab"><span class="glyph">⋯</span>More</div>
+        </div>
+      </div>
+    </div>
+
+    <p class="option-note">
+      Four primary tabs sit at the thumb zone. <strong>Cards</strong>,
+      <strong>Trend</strong>, and <strong>Tables</strong> live behind a
+      "More" sheet (tap the ⋯ to slide it up).
+    </p>
+
+    <div class="pros-cons">
+      <div class="pros">
+        <strong>Pros</strong>
+        Best thumb reach. Modern app standard. Hierarchy implies "this is the main thing."
+      </div>
+      <div class="cons">
+        <strong>Cons</strong>
+        IA call needed — which 4 are "primary"? Cards/Trend/Tables get demoted.
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────── OPTION 3: MERGED TABS + SUB-TOGGLE ─────────── -->
+  <div class="option">
+    <div class="option-title">
+      Option 3 — Merge, then choose
+      <span class="option-tag warn">IA work</span>
+    </div>
+    <div class="frame">
+      <div class="screen">
+
+        <div class="topbar">
+          <div class="avatar">ZT</div>
+          <div class="topbar-text">
+            <div class="topbar-title">Zahra Textile</div>
+            <div class="topbar-sub">9,750 kW · Capacity</div>
+          </div>
+          <div class="icon-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </div>
+        </div>
+
+        <div class="top-tabs">
+          <span class="pill active"><span class="pill-dot"></span>Summary</span>
+          <span class="pill">Live</span>
+          <span class="pill">Alarms</span>
+          <span class="pill">History</span>
+        </div>
+
+        <div class="body">
+          <div class="hero">
+            <span class="hero-overline">⚡ Plant Yield · Today</span>
+            <div class="hero-value">4,628 kWh</div>
+            <div style="font-size:9px;opacity:0.85;">Revenue · USD 14,210</div>
+          </div>
+
+          <div class="tile-row">
+            <div class="tile"><div class="tile-strong">2.5</div>CO₂</div>
+            <div class="tile"><div class="tile-strong">2.2</div>Coal</div>
+            <div class="tile"><div class="tile-strong">5.3</div>Trees</div>
+          </div>
+
+          <div class="tile" style="flex:1; min-height: auto;">
+            <div class="tile-strong" style="font-size:9px; letter-spacing:0.1em; color:var(--text-secondary); text-transform:uppercase;">Energy Flow</div>
+            <div style="flex:1; background: repeating-linear-gradient(90deg, var(--brand-soft), var(--brand-soft) 8px, transparent 8px, transparent 18px); border-radius: 8px; min-height: 60px;"></div>
+          </div>
+        </div>
+
+        <div style="padding: 0 12px 14px;">
+          <div style="font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 6px;">Inside "Live" tab →</div>
+          <div class="sub-toggle">
+            <span class="seg active">Tiles</span>
+            <span class="seg">List</span>
+          </div>
+          <div style="font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-tertiary); margin: 10px 0 6px;">Inside "History" tab →</div>
+          <div class="sub-toggle">
+            <span class="seg active">Trend</span>
+            <span class="seg">Reports</span>
+            <span class="seg">Tables</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="option-note">
+      Seven tabs collapse to <strong>four</strong> by merging conceptual siblings.
+      <em>Cards</em> + <em>Live</em> become one tab with a Tiles/List
+      sub-toggle. <em>Trend</em> + <em>Reports</em> + <em>Tables</em>
+      collapse into one "History" tab with its own segment control.
+    </p>
+
+    <div class="pros-cons">
+      <div class="pros">
+        <strong>Pros</strong>
+        Real cognitive win. Four tabs fit easily. Combinable with option 1 or 2.
+      </div>
+      <div class="cons">
+        <strong>Cons</strong>
+        Biggest scope. Needs product/UX sign-off on the merges.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Make the liquid-morph chips interactive so the spring morph is
+  // visible on tap. Pure CSS transition handles the animation —
+  // mirrors what a single-shared-value Reanimated impl would do
+  // natively, just running in the browser here for the mock.
+  (function () {
+    var strip = document.getElementById('liquidTabs');
+    if (!strip) return;
+    var chips = strip.querySelectorAll('.chip');
+    chips.forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        chips.forEach(function (c) { c.classList.remove('active'); });
+        chip.classList.add('active');
+      });
+    });
+  })();
+</script>
+</body>
+</html>

@@ -51,6 +51,7 @@ import {
 } from 'src/utils';
 import { resolveLottieIcon } from 'src/assets/gif';
 import { useInteractionReady, useSiteConfig, useSiteData } from 'src/hooks';
+import TabSkeleton from './TabSkeleton';
 import { DashboardStackParamList } from 'src/types';
 import { BoltIcon } from 'src/assets/icons';
 import SourceTile, { ResolvedCard, SourceToken } from './CardsView/SourceTile';
@@ -86,11 +87,11 @@ const CardsView: FC = () => {
   const route = useRoute<SiteDetailRouteProp>();
   const { siteId } = route.params;
 
-  const { data: siteConfig } = useSiteConfig(siteId);
-  const { data: liveData } = useSiteData(siteId);
+  const { data: siteConfig, isLoading: configLoading } = useSiteConfig(siteId);
+  const { data: liveData, isLoading: dataLoading } = useSiteData(siteId);
   // Defer the SourceTile grid (each tile mounts a Lottie animation,
-  // which is expensive when many sources are configured) so the
-  // header + LIVE chip can commit first on a cold tab visit.
+  // which is expensive when many sources are configured) so the tab
+  // opens instantly with a skeleton on a cold visit.
   const ready = useInteractionReady();
 
   const resolved: ResolvedCard[] = useMemo(() => {
@@ -132,6 +133,12 @@ const CardsView: FC = () => {
   );
 
   const liveCount = resolved.length;
+
+  // Open instantly → skeleton while the deferred mount settles or data
+  // is still loading from cache/API.
+  if (!ready || ((configLoading || dataLoading) && liveCount === 0)) {
+    return <TabSkeleton />;
+  }
 
   if (liveCount === 0) {
     return (

@@ -9,6 +9,7 @@ export * from "./logger";
 export * from "./site";
 export * from "./cards";
 export * from "./reports";
+export * from "./trends";
 export * from "./sources";
 export * from "./dates";
 export * from "./parsers";

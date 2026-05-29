@@ -41,6 +41,12 @@ interface DateRangePickerModalProps {
   startDate: Date;
   endDate: Date;
   onApply: (start: Date, end: Date) => void;
+  /**
+   * Extra days allowed AFTER the start day → inclusive span is
+   * `maxRangeDays + 1`. Defaults to the report cap (14 → 15-day span).
+   * Trends pass a tighter cap (2 → 3-day span).
+   */
+  maxRangeDays?: number;
 }
 
 /**
@@ -414,6 +420,7 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
   startDate,
   endDate,
   onApply,
+  maxRangeDays = MAX_RANGE_DAYS,
 }) => {
   const scheme = useScheme();
   const themed = useThemedStyles(createStyles);
@@ -440,8 +447,22 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
 
   const today = useMemo(() => new Date(), []);
   const maxAllowed = useMemo(
-    () => (tempStart ? addDays(tempStart, MAX_RANGE_DAYS) : null),
-    [tempStart],
+    () => (tempStart ? addDays(tempStart, maxRangeDays) : null),
+    [tempStart, maxRangeDays],
+  );
+
+  // Only surface presets whose inclusive span fits within the cap —
+  // a preset that overflows would silently clamp on apply.
+  const availablePresets = useMemo(
+    () =>
+      PRESETS.filter(p => {
+        const { start, end } = p.build();
+        const spanDays = Math.round(
+          (startOfDay(end).getTime() - startOfDay(start).getTime()) / 86400000,
+        );
+        return spanDays <= maxRangeDays;
+      }),
+    [maxRangeDays],
   );
 
   const handleDayPress = (d: Date) => {
@@ -453,7 +474,7 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
       return;
     }
     // Second tap: complete the range (clamp to MAX cap)
-    const cap = addDays(tempStart, MAX_RANGE_DAYS);
+    const cap = addDays(tempStart, maxRangeDays);
     if (day > cap) {
       setTempEnd(startOfDay(cap));
       return;
@@ -506,7 +527,7 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
       onApply={handleApply}
       applyDisabled={!tempStart}>
       <PresetRow>
-        {PRESETS.map(p => (
+        {availablePresets.map(p => (
           <PressableScale
             key={p.label}
             onPress={() => handlePreset(p)}
@@ -553,7 +574,7 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
       </View>
 
       <AppText fontSize={FONT_SIZE_XXS} color={scheme.textTertiary} center>
-        Max range: 15 days
+        Max range: {maxRangeDays + 1} days
       </AppText>
     </PickerSheet>
   );

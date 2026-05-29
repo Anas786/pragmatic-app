@@ -1,4 +1,4 @@
-import { ISiteAllData, ISiteConfig } from 'src/types';
+import { ISiteAllData, ISiteConfig, TrendDataResponse } from 'src/types';
 import { display, inspectError } from 'src/utils';
 import { appAxios } from '../config';
 
@@ -221,6 +221,54 @@ export const getEnergyReport = async (
     };
   } catch (err) {
     display('site.getEnergyReport FAILED', inspectError(err));
+    throw err;
+  }
+};
+
+/* ─────────────── trends ─────────────── */
+
+/**
+ * Time/range args for the trends data endpoint. `start`/`end` are
+ * SQL-ish expressions (NOT epoch-ms like the report endpoints):
+ *   - presets → `now() - INTERVAL 24 HOUR` … `end = now()`
+ *   - custom  → quoted absolute literals `'YYYY-MM-DD HH:MM:SS'`
+ * `tz` is an IANA zone (e.g. `Asia/Karachi`) so the backend buckets in
+ * the device's local time.
+ */
+export interface TrendDataArgs {
+  start: string;
+  end: string;
+  tz: string;
+}
+
+/**
+ * GET /protected/data/v2/trends/{siteId}?idx&start&end&tz
+ *
+ * Time-series for one trend section. `idx` is the 0-based index into
+ * `siteConfig.siteComponents.trends[]` (1:1 mapping). Each response row
+ * is one time bucket keyed by `time` (unix-ms) plus one key per the
+ * section's aggregation `param`s.
+ *
+ * Auth: Bearer idToken — attached automatically by the axios request
+ * interceptor.
+ */
+export const getTrendData = async (
+  siteId: string,
+  idx: number,
+  args: TrendDataArgs,
+): Promise<TrendDataResponse> => {
+  if (!siteId) throw new Error('getTrendData: siteId is required');
+  try {
+    const { data } = await appAxios.get<TrendDataResponse>(
+      `/protected/data/v2/trends/${encodeURIComponent(siteId)}`,
+      { params: { idx, start: args.start, end: args.end, tz: args.tz } },
+    );
+    return {
+      metadata: data?.metadata,
+      data: Array.isArray(data?.data) ? data.data : [],
+    };
+  } catch (err) {
+    display('site.getTrendData FAILED', inspectError(err));
     throw err;
   }
 };

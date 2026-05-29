@@ -105,7 +105,30 @@
       "Bash(awk 'NR>=100 && NR<=130' /Users/muhammadanas/Documents/Projects/pragmatic-app-updated/src/components/screens/Authenticated/SiteDetail/components/LiveParameterView.tsx)",
       "Bash(git checkout *)",
       "Bash(node -e \"const p=require\\('./package.json'\\); const d={...p.dependencies}; ['react-native-reanimated','react-native-linear-gradient','lottie-react-native','react-native-svg','@react-native-masked-view/masked-view','react-native-safe-area-context'].forEach\\(k=>console.log\\(k, d[k]||'NOT INSTALLED'\\)\\)\")",
-      "Bash(open \"/Users/muhammadanas/Documents/Projects/pragmatic-app-updated/splash-preview.html\")"
+      "Bash(open \"/Users/muhammadanas/Documents/Projects/pragmatic-app-updated/splash-preview.html\")",
+      "Bash(yarn lint *)",
+      "Bash(grep -E \"\\\\.\\(tsx?|jsx?\\)$\")",
+      "Bash(git -C /Users/muhammadanas/Documents/Projects/pragmatic-app-updated log --oneline -8)",
+      "Bash(awk '/export \\(type|interface\\) DataSet/{flag=1} flag{print} flag&&/}/{if\\(++c>0 && /^}/\\)exit}' node_modules/gifted-charts-core/dist/LineChart/types.d.ts)",
+      "Bash(awk '/lineDataItem/{flag=1} flag{print} /^};?$/{if\\(flag\\)exit}' node_modules/gifted-charts-core/dist/LineChart/types.d.ts)",
+      "Bash(awk '/export \\(type|interface\\) DataSet[ =]/{flag=1} flag{print; if\\(/};/\\) exit}' node_modules/gifted-charts-core/dist/utils/types.d.ts)",
+      "Bash(awk '/export \\(type|interface\\) lineDataItem[ =]/{flag=1} flag{print; if\\(/};/\\) exit}' node_modules/gifted-charts-core/dist/utils/types.d.ts)",
+      "Bash(cd /Users/muhammadanas/Documents/Projects/pragmatic-app-updated; npx tsc --noEmit > /tmp/tsc-out.txt 2>&1; echo \"exit=$?\"; echo \"--- output \\(first 60 lines\\) ---\"; head -60 /tmp/tsc-out.txt; echo \"--- total lines ---\"; wc -l < /tmp/tsc-out.txt)",
+      "Bash(echo \"=== eslint exit: $? ===\")",
+      "Bash(echo \"tsc exit=$?\")",
+      "Bash(node -e \"const p=require\\('react-native-echarts-pro/package.json'\\); console.log\\('main:',p.main,'| types:',p.types||p.typings,'| rn:',p['react-native']\\)\")",
+      "Bash(node -e \"const p=require\\('react-native-echarts-pro/package.json'\\); console.log\\('deps:',JSON.stringify\\(p.dependencies||{},null,1\\)\\); console.log\\('peer:',JSON.stringify\\(p.peerDependencies||{},null,1\\)\\)\")",
+      "Bash(node -e \"console.log\\('webview', require\\('react-native-webview/package.json'\\).version\\)\")",
+      "Bash(sed -n '1,80p' node_modules/react-native-echarts-pro/README.md)",
+      "Bash(echo \"=== eslint exit=$? ===\")",
+      "Bash(echo \"eslint exit=$?\")",
+      "Bash([ -d \"node_modules/$p\" ])",
+      "Bash(node -e \"console.log\\('react-native-share', require\\('react-native-share/package.json'\\).version\\)\")",
+      "Bash(npx pod-install *)",
+      "mcp__plugin_oh-my-claudecode_t__project_memory_add_note",
+      "Bash(node -e \"console.log\\('react-native', require\\('react-native/package.json'\\).version\\)\")",
+      "Bash(grep -nA15 \"getExtensionFromBase64\" node_modules/react-native-share/ios/RNShareUtils.m)",
+      "Bash(grep -nA20 \"getPathFromFilename\" node_modules/react-native-share/ios/RNShareUtils.m)"
     ]
   }
 }
