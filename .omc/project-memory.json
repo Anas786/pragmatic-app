@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1780002331065,
+  "lastScanned": 1780089995808,
   "projectRoot": "/Users/muhammadanas/Documents/Projects/pragmatic-app-updated",
   "techStack": {
     "languages": [
@@ -108,6 +108,18 @@
       "source": "manual",
       "category": "architecture",
       "content": "CHARTING — fully migrated to echarts (react-native-echarts-pro, WebView). `react-native-gifted-charts` has been REMOVED from package.json (it was pure-JS; react-native-svg stays for icons, so no rebuild needed for the removal). Updates the earlier trends note: there is NO gifted/echarts split anymore — ALL trend sections use TrendComboChart (echarts combo), and the Reports tab (PerformanceReportCard) pie donut + stacked bar are now echarts too via PerformanceReport/echartsReportOption.ts (buildReportPieOption + buildReportStackBarOption). Pie slice tap → RNEChartsPro onPress(params.dataIndex) → setSelectedIndex (highlights source row). Stacked bar uses echarts dataZoom slider for zoom/scroll (replaced the manual ZoomControls). echarts click events route to onPress only when type==='click'. NOTE: `@wuba/react-native-echarts` (3.0.1) is still in package.json but UNUSED (unmet zrender peer) — safe to remove as cleanup; we use react-native-echarts-pro exclusively."
+    },
+    {
+      "timestamp": 1780073033027,
+      "source": "manual",
+      "category": "architecture",
+      "content": "PERF PATTERNS (SiteDetail). (1) INSTANT-TAB pattern: every SiteDetail tab opens instantly (ViewsContent already splits chip-morph synchronous vs body deferred one rAF) then shows a skeleton then fills from react-query cache/API. Shared src/.../SiteDetail/components/TabSkeleton.tsx (hero + card blocks). Each data tab gates: `if (!ready (useInteractionReady) || (isLoading && empty)) return <TabSkeleton/>`. Applied to Summary/Cards/Alarms; Live/Trend/Reports/Tables already had tailored skeletons. (2) CHART LAZY-MOUNT: heavy echarts WebViews mount only when scrolled into view. src/.../SiteDetail/components/ChartViewport.tsx — `useChartViewportEmitter()` gives a ref-based onScroll (NO re-render) wired to the SiteDetail BodyScroll ScrollView + a ChartViewportContext.Provider around ViewsContent; consumers call `useInViewport()` → attach returned ref to a wrapper View + onLayout={recheck}, mount the WebView only when `visible` (measureInWindow within ~0.6 screen, mount-once, skeleton placeholder until then). Used by TrendComboChart (each trend section) + PerformanceReportCard (pie+bar). For the pie, add `pieVisible` to the dispatchAction(select) effect deps so selection re-applies on lazy mount. DEAD-DEP CLEANUP done: removed @wuba/react-native-echarts (unused, JS-only no podspec) + react-native-render-html (unused); trimmed PerformanceReport/helpers.ts (gifted-era PIE_/BAR_/zoom consts, SOURCES, formatYAxis) and utils/trends.ts (splitAggregations/isLineType; kept isBarType). DEFERRED: site-logo image caching (Avatar uses plain RN <Image> across 350-site list) — needs expo-image (Expo modules setup) or a New-Arch fast-image fork + rebuild; New Arch is ON."
+    },
+    {
+      "timestamp": 1780073868897,
+      "source": "manual",
+      "category": "architecture",
+      "content": "CRASH (CRITICAL, learned): Scroll-driven lazy-mounting of echarts WebViews on the Trends/Reports tabs CRASHES on New Architecture (newArchEnabled=true, Reanimated 3.16.7, RN 0.77). Signature: EXC_CRASH SIGABRT, abort in facebook::react::ShadowTree::commit (ShadowTree.cpp:254 assert) via reanimated::ReanimatedMountHook::shadowTreeDidMount → re-entrant commit; JS thread deep in reanimated::cloneShadowTreeWithNewPropsRecursive (30+ levels) + setNativeProps_DEPRECATED from a timer-driven Set/Map.forEach (Reanimated animation tick). ROOT CAUSE: the `ChartViewport`/`useInViewport` optimization called setVisible(true) from the scroll/measureInWindow callback, mounting WebViews DURING active scroll; those mid-scroll Fabric commits collided re-entrantly with Reanimated's animation-tick commits (FadeInDown entrances + PulseDot loops) → commit-during-commit assert. Also caused intermittent blank/empty WebViews. FIX APPLIED: fully REVERTED the lazy-mount (deleted ChartViewport.tsx; charts now mount once after useInteractionReady — the stable pre-optimization behavior). This matches the project's known Reanimated commit-during-commit fragility (see old nav-mockups LinearTransition SIGABRT note). DO NOT reintroduce scroll-triggered setState that mounts/unmounts views while Reanimated layout animations (entering/exiting/layout) or PulseDot loops are active on New Arch. If chart-memory optimization is needed later, prefer approaches that don't commit during scroll (e.g., mount-once after a one-shot timer, or remove the entering animations from the lazily-mounted subtree first). The OTHER optimizations from that pass are FINE and kept: dead-dep removal (@wuba, react-native-render-html, gifted-charts), dead-code trims, instant-tab TabSkeleton gating (Summary/Cards/Alarms), and the Dashboard SiteCard memo fix (dropped onPress from comparator + wrapped `cards` in useMemo)."
     }
   ],
   "directoryMap": {
@@ -115,7 +127,7 @@
       "path": "__tests__",
       "purpose": "Test files",
       "fileCount": 1,
-      "lastAccessed": 1780002331018,
+      "lastAccessed": 1780089995762,
       "keyFiles": [
         "App.test.tsx"
       ]
@@ -124,7 +136,7 @@
       "path": "android",
       "purpose": null,
       "fileCount": 5,
-      "lastAccessed": 1780002331023,
+      "lastAccessed": 1780089995776,
       "keyFiles": [
         "build.gradle",
         "gradle.properties",
@@ -137,14 +149,14 @@
       "path": "assets",
       "purpose": "Static assets",
       "fileCount": 0,
-      "lastAccessed": 1780002331024,
+      "lastAccessed": 1780089995777,
       "keyFiles": []
     },
     "ios": {
       "path": "ios",
       "purpose": null,
       "fileCount": 5,
-      "lastAccessed": 1780002331024,
+      "lastAccessed": 1780089995777,
       "keyFiles": [
         "Podfile",
         "Podfile.lock"
@@ -154,7 +166,7 @@
       "path": "src",
       "purpose": "Source code",
       "fileCount": 2,
-      "lastAccessed": 1780002331024,
+      "lastAccessed": 1780089995786,
       "keyFiles": [
         "react-app-env.d.ts"
       ]
@@ -163,7 +175,7 @@
       "path": "android/app",
       "purpose": "Application code",
       "fileCount": 3,
-      "lastAccessed": 1780002331025,
+      "lastAccessed": 1780089995788,
       "keyFiles": [
         "build.gradle",
         "debug.keystore",
@@ -174,21 +186,21 @@
       "path": "android/build",
       "purpose": "Build output",
       "fileCount": 0,
-      "lastAccessed": 1780002331025,
+      "lastAccessed": 1780089995789,
       "keyFiles": []
     },
     "ios/build": {
       "path": "ios/build",
       "purpose": "Build output",
       "fileCount": 0,
-      "lastAccessed": 1780002331025,
+      "lastAccessed": 1780089995790,
       "keyFiles": []
     },
     "src/assets": {
       "path": "src/assets",
       "purpose": "Static assets",
       "fileCount": 2,
-      "lastAccessed": 1780002331026,
+      "lastAccessed": 1780089995791,
       "keyFiles": [
         "index.ts"
       ]
@@ -197,7 +209,7 @@
       "path": "src/components",
       "purpose": "UI components",
       "fileCount": 1,
-      "lastAccessed": 1780002331026,
+      "lastAccessed": 1780089995791,
       "keyFiles": [
         "index.ts"
       ]
@@ -206,7 +218,7 @@
       "path": "src/config",
       "purpose": "Configuration files",
       "fileCount": 2,
-      "lastAccessed": 1780002331026,
+      "lastAccessed": 1780089995791,
       "keyFiles": [
         "amplify.ts",
         "index.ts"
@@ -216,14 +228,14 @@
       "path": "src/data",
       "purpose": "Data files",
       "fileCount": 0,
-      "lastAccessed": 1780002331027,
+      "lastAccessed": 1780089995793,
       "keyFiles": []
     },
     "src/routes": {
       "path": "src/routes",
       "purpose": "Route handlers",
       "fileCount": 4,
-      "lastAccessed": 1780002331027,
+      "lastAccessed": 1780089995793,
       "keyFiles": [
         "dashboardStack.tsx",
         "drawerNavigator.tsx",
@@ -234,14 +246,20 @@
   "hotPaths": [
     {
       "path": "src/components/screens/Authenticated/Dashboard/index.tsx",
-      "accessCount": 30,
-      "lastAccessed": 1777386402556,
+      "accessCount": 31,
+      "lastAccessed": 1780073210543,
       "type": "file"
     },
     {
       "path": "src/components/screens/Authenticated/SiteDetail/index.tsx",
-      "accessCount": 15,
-      "lastAccessed": 1777386901516,
+      "accessCount": 26,
+      "lastAccessed": 1780073828422,
+      "type": "file"
+    },
+    {
+      "path": "src/utils/index.ts",
+      "accessCount": 13,
+      "lastAccessed": 1780077878391,
       "type": "file"
     },
     {
@@ -251,9 +269,15 @@
       "type": "file"
     },
     {
-      "path": "src/utils/index.ts",
-      "accessCount": 11,
-      "lastAccessed": 1780006252934,
+      "path": "src/components/screens/Onboarding/Login/index.tsx",
+      "accessCount": 10,
+      "lastAccessed": 1780088298007,
+      "type": "file"
+    },
+    {
+      "path": "src/types/index.ts",
+      "accessCount": 9,
+      "lastAccessed": 1780076456008,
       "type": "file"
     },
     {
@@ -264,20 +288,8 @@
     },
     {
       "path": "App.tsx",
-      "accessCount": 7,
-      "lastAccessed": 1777380171702,
-      "type": "file"
-    },
-    {
-      "path": "src/types/index.ts",
-      "accessCount": 7,
-      "lastAccessed": 1780006197783,
-      "type": "file"
-    },
-    {
-      "path": "src/components/screens/Onboarding/Login/index.tsx",
-      "accessCount": 6,
-      "lastAccessed": 1777309481600,
+      "accessCount": 8,
+      "lastAccessed": 1780080377977,
       "type": "file"
     },
     {
@@ -383,6 +395,12 @@
       "type": "file"
     },
     {
+      "path": "src/assets/icons/PasswordIcon/index.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1780088282928,
+      "type": "file"
+    },
+    {
       "path": "src/types/auth.ts",
       "accessCount": 2,
       "lastAccessed": 1776201717529,
@@ -425,6 +443,12 @@
       "type": "file"
     },
     {
+      "path": "src/types/app.ts",
+      "accessCount": 2,
+      "lastAccessed": 1780076428709,
+      "type": "file"
+    },
+    {
       "path": "tsconfig.json",
       "accessCount": 1,
       "lastAccessed": 1776201531734,
@@ -455,12 +479,6 @@
       "type": "directory"
     },
     {
-      "path": "src/types/app.ts",
-      "accessCount": 1,
-      "lastAccessed": 1776201559343,
-      "type": "file"
-    },
-    {
       "path": "src/config/index.ts",
       "accessCount": 1,
       "lastAccessed": 1776201646078,
@@ -482,12 +500,6 @@
       "path": "src/routes/drawerNavigator.tsx",
       "accessCount": 1,
       "lastAccessed": 1777309263152,
-      "type": "file"
-    },
-    {
-      "path": "src/assets/icons/PasswordIcon/index.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1777309404914,
       "type": "file"
     },
     {

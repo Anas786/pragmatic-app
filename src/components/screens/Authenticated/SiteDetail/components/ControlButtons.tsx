@@ -9,32 +9,50 @@ import {
   Minus,
   NodeExpandIcon,
   Plus,
+  RefreshIcon,
 } from 'src/assets/icons';
 
 interface ControlButtonsProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
+  onFit: () => void;
   onToggleLock: () => void;
   onFullscreen: () => void;
   isLocked: boolean;
   currentZoom: number;
+  minZoom: number;
+  maxZoom: number;
+  insetLeft?: number;
+  insetBottom?: number;
 }
 
 const ControlButtons: FC<ControlButtonsProps> = ({
   onZoomIn,
   onZoomOut,
+  onFit,
   onToggleLock,
   onFullscreen,
   isLocked,
   currentZoom,
+  minZoom,
+  maxZoom,
+  insetLeft = 0,
+  insetBottom = 0,
 }) => {
   const scheme = useScheme();
   const styles = useMemo(() => createStyles(scheme), [scheme]);
-  const isZoomInDisabled = isLocked || currentZoom >= 3 - 0.001;
-  const isZoomOutDisabled = isLocked || currentZoom <= 0.5 + 0.001;
+  const isZoomInDisabled = isLocked || currentZoom >= maxZoom - 0.001;
+  const isZoomOutDisabled = isLocked || currentZoom <= minZoom + 0.001;
+  const containerStyle = useMemo(
+    () => [
+      styles.container,
+      { left: space.lg + insetLeft, bottom: space.lg + insetBottom },
+    ],
+    [styles.container, insetLeft, insetBottom],
+  );
 
   return (
-    <View style={styles.container}>
+    <View style={containerStyle}>
       <PressableScale
         disabled={isZoomInDisabled}
         style={styles.button}
@@ -54,6 +72,12 @@ const ControlButtons: FC<ControlButtonsProps> = ({
           size={ICON_SIZE_MD}
           color={isZoomOutDisabled ? scheme.textSecondary : scheme.textPrimary}
         />
+      </PressableScale>
+      <PressableScale
+        style={styles.button}
+        onPress={onFit}
+        accessibilityLabel="Fit diagram">
+        <RefreshIcon size={ICON_SIZE_MD} color={scheme.textPrimary} />
       </PressableScale>
       <PressableScale
         style={styles.button}

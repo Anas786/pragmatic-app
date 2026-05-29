@@ -128,7 +128,13 @@
       "mcp__plugin_oh-my-claudecode_t__project_memory_add_note",
       "Bash(node -e \"console.log\\('react-native', require\\('react-native/package.json'\\).version\\)\")",
       "Bash(grep -nA15 \"getExtensionFromBase64\" node_modules/react-native-share/ios/RNShareUtils.m)",
-      "Bash(grep -nA20 \"getPathFromFilename\" node_modules/react-native-share/ios/RNShareUtils.m)"
+      "Bash(grep -nA20 \"getPathFromFilename\" node_modules/react-native-share/ios/RNShareUtils.m)",
+      "Bash(yarn remove *)",
+      "mcp__plugin_oh-my-claudecode_t__lsp_servers",
+      "mcp__plugin_oh-my-claudecode_t__lsp_diagnostics",
+      "Bash(sed -n '1,60p' src/components/common/ScreenContainer/index.tsx)",
+      "Bash(sed -n '1,60p' src/components/common/TopBar/index.tsx)",
+      "Bash(grep -rn \"#[0-9A-Fa-f]\\\\{3,8\\\\}\\\\|WHITE\\\\|BLACK\\\\|rgba\\(\\\\|'white'\\\\|'black'\\\\|backgroundColor\" src/components/screens/Onboarding)"
     ]
   }
 }

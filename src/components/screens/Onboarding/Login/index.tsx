@@ -35,15 +35,15 @@ import {
   PasswordIcon,
 } from 'src/assets/icons';
 
-const EmailIcon: FC = () => (
+const EmailIcon: FC<{ color: string }> = ({ color }) => (
   <View style={styles.iconContainer}>
-    <EmailPlainIcon size={ICON_SIZE_MD} />
+    <EmailPlainIcon size={ICON_SIZE_MD} color={color} />
   </View>
 );
 
-const LockIcon: FC = () => (
+const LockIcon: FC<{ color: string }> = ({ color }) => (
   <View style={styles.iconContainer}>
-    <PasswordIcon size={ICON_SIZE_MD} />
+    <PasswordIcon size={ICON_SIZE_MD} color={color} />
   </View>
 );
 
@@ -131,7 +131,7 @@ const Login: FC = () => {
                       name="email"
                       render={({ field: { onChange, onBlur, value } }) => (
                         <View style={themed.inputWrapper}>
-                          <EmailIcon />
+                          <EmailIcon color={scheme.textSecondary} />
                           <AppTextInput
                             style={styles.input}
                             placeholder="Email or Phone"
@@ -152,7 +152,7 @@ const Login: FC = () => {
                       name="password"
                       render={({ field: { onChange, onBlur, value } }) => (
                         <View style={themed.inputWrapper}>
-                          <LockIcon />
+                          <LockIcon color={scheme.textSecondary} />
                           <AppTextInput
                             style={styles.input}
                             placeholder="Password"
@@ -204,7 +204,7 @@ const Login: FC = () => {
                       name="newPassword"
                       render={({ field: { onChange, onBlur, value } }) => (
                         <View style={themed.inputWrapper}>
-                          <LockIcon />
+                          <LockIcon color={scheme.textSecondary} />
                           <AppTextInput
                             style={styles.input}
                             placeholder="New password"

@@ -217,7 +217,9 @@ export const SiteCard: FC<SiteCardProps> = memo(
     const [logoFailed, setLogoFailed] = useState(false);
     const [expanded, setExpanded] = useState(false);
     const logoUrl = !logoFailed ? buildSiteLogoUrl(site) : null;
-    const cards = site.cards ?? [];
+    // Stable identity (the `?? []` would otherwise be a new array each
+    // render) so the heroCard/satellites memos below don't recompute.
+    const cards = useMemo(() => site.cards ?? [], [site.cards]);
     const isOnline = (site.state ?? '').toLowerCase() === 'online';
 
     const heroCard = useMemo(() => findHeroCard(cards), [cards]);
@@ -391,7 +393,13 @@ export const SiteCard: FC<SiteCardProps> = memo(
       </Animated.View>
     );
   },
-  (a, b) => a.site === b.site && a.index === b.index && a.onPress === b.onPress,
+  // NOTE: `onPress` is intentionally NOT compared. The list passes a
+  // fresh inline closure per render (`() => handleCardPress(item)`), so
+  // comparing it would defeat the memo and re-render every visible card
+  // on any Dashboard re-render (search, pagination, theme…). When
+  // `site` + `index` are unchanged the retained closure still points at
+  // the same row, so it navigates correctly.
+  (a, b) => a.site === b.site && a.index === b.index,
 );
 SiteCard.displayName = 'SiteCard';
 

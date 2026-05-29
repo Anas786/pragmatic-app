@@ -11,6 +11,7 @@ export * from "./cards";
 export * from "./reports";
 export * from "./trends";
 export * from "./sources";
+export * from "./sld";
 export * from "./dates";
 export * from "./parsers";
 export * from "./colors";

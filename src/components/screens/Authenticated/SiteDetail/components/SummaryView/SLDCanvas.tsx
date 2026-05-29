@@ -1,112 +1,69 @@
-import React, { FC, useMemo } from 'react';
-import {
-  Animated as RNAnimated,
-  StyleSheet,
-  View,
-} from 'react-native';
-import Svg, { Circle, Path } from 'react-native-svg';
+import React, { FC, memo, useMemo } from 'react';
+import { Animated as RNAnimated, StyleSheet, View } from 'react-native';
+import Svg, { Circle, Defs, Path, Pattern, Rect } from 'react-native-svg';
 import { AppText } from 'src/components/common';
+import { GifImage, resolveLottieIcon } from 'src/assets/gif';
+import { useScheme, useThemedStyles, Scheme } from 'src/theme';
 import {
-  radius as radiusTokens,
-  useScheme,
-  useThemedStyles,
-  Scheme,
-} from 'src/theme';
-import {
-  FONT_SIZE_MICRO,
-  FONT_SIZE_SM,
-  FONT_SIZE_XS,
-  FONT_SIZE_XXS,
-  normalizeHeight,
-  normalizeWidth,
+  buildEdgeGeometry,
+  edgeColor,
+  evalAnimation,
+  formatSldValue,
+  handlePoint,
+  isLogoNode,
+  nodeRectInBounds,
+  SLDBounds,
 } from 'src/utils';
-import { sldCenter, sldSources, SLDSourceNode } from 'src/data/mock';
-import { FactoryGif } from 'src/assets/gif';
+import { SLDNode, SLDValueResolver, SLDGraph } from 'src/types';
 
 const RNAnimatedPath = RNAnimated.createAnimatedComponent(Path);
 
-/* ─────────── layout constants ─────────── */
+/* ─────────── canvas constants (graph-space units) ─────────── */
 
-export const PAD = normalizeWidth(8);
-export const CW = normalizeWidth(152);
-export const CH = normalizeHeight(118);
-export const CD = normalizeWidth(90);
-export const DOT_SPACING = 50;
-const ACCENT_GREEN_OPACITY = 0.2;
+const DOT_SPACING = 64;
+const DOT_RADIUS = 2;
+const DOT_OPACITY = 0.18;
+const ICON_SIZE = 42;
+const LOGO_ICON_SIZE = 38;
 
-/* ─────────── geometry helpers ─────────── */
-
-export const getPositions = (vw: number, vh: number) => ({
-  dg: { x: PAD, y: PAD },
-  grid: { x: vw - CW - PAD, y: PAD },
-  solar: { x: PAD, y: vh - CH - PAD },
-  bess: { x: vw - CW - PAD, y: vh - CH - PAD },
-});
-
-export const getLinePath = (idx: number, vw: number, vh: number) => {
-  const pos = getPositions(vw, vh);
-  const keys = ['dg', 'grid', 'solar', 'bess'] as const;
-  const p = pos[keys[idx]];
-  const isTop = idx < 2;
-  const isLeft = idx % 2 === 0;
-  const sx = p.x + CW / 2;
-  const sy = isTop ? p.y + CH : p.y;
-  const ex = vw / 2 + (isLeft ? -CD / 3 : CD / 3);
-  const ey = vh / 2 + (isTop ? -CD / 3 : CD / 3);
-  const cx = sx;
-  const cy = (sy + ey) / 2;
-  return { path: `M ${sx} ${sy} Q ${cx} ${cy} ${ex} ${ey}`, cx, cy, ex, ey };
-};
-
-export const getArrowPath = (
-  ctrlX: number,
-  ctrlY: number,
-  endX: number,
-  endY: number,
-) => {
-  const angle = Math.atan2(endY - ctrlY, endX - ctrlX);
-  const len = 10;
-  const spread = Math.PI / 6;
-  const lx = endX - len * Math.cos(angle - spread);
-  const ly = endY - len * Math.sin(angle - spread);
-  const rx = endX - len * Math.cos(angle + spread);
-  const ry = endY - len * Math.sin(angle + spread);
-  return `M ${endX} ${endY} L ${lx} ${ly} L ${rx} ${ry} Z`;
-};
-
-export const makeGridDots = (vw: number, vh: number) => {
-  const dots: Array<{ cx: number; cy: number }> = [];
-  for (let y = 25; y < vh; y += DOT_SPACING) {
-    for (let x = 25; x < vw; x += DOT_SPACING) {
-      dots.push({ cx: x, cy: y });
-    }
-  }
-  return dots;
-};
-
-/* ─────────── styles ─────────── */
+/* ─────────── static styles ─────────── */
 
 const styles = StyleSheet.create({
-  cardContent: {
+  cardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: normalizeWidth(8),
+    gap: 8,
+  },
+  headerTitle: {
+    flex: 1,
   },
   metricsCol: {
-    flex: 1,
-    gap: normalizeHeight(2),
+    marginTop: 6,
+    gap: 3,
   },
   metricRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    gap: normalizeWidth(4),
+    gap: 6,
   },
   metricLabel: {
-    width: normalizeWidth(26),
+    width: 32,
+  },
+  metricValueWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'flex-end',
+    gap: 4,
   },
   metricValue: {
-    flex: 1,
+    flexShrink: 1,
     textAlign: 'right',
+  },
+  logoInner: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
   },
 });
 
@@ -117,217 +74,265 @@ const createCanvasStyles = (scheme: Scheme) =>
       backgroundColor: scheme.surface,
       borderWidth: 1,
       borderColor: scheme.border,
-      borderRadius: normalizeWidth(12),
-      padding: normalizeWidth(10),
-      gap: normalizeHeight(6),
+      borderRadius: 14,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      overflow: 'hidden',
     },
-    centerNode: {
+    logoNode: {
       position: 'absolute',
       backgroundColor: scheme.surface,
-      borderWidth: 2,
+      borderWidth: 3,
       borderColor: scheme.brand,
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: normalizeHeight(2),
     },
   });
 
-/* ─────────── FlowLine ─────────── */
+/* ─────────── edges ─────────── */
 
-interface FlowLineProps {
-  d: string;
+interface EdgeLineProps {
+  path: string;
+  arrowPath: string;
   color: string;
+  animated: boolean;
   dashAnim: RNAnimated.Value;
 }
 
-export const FlowLine: FC<FlowLineProps> = ({ d, color, dashAnim }) => (
-  <RNAnimatedPath
-    d={d}
-    stroke={color}
-    strokeWidth={2}
-    strokeDasharray="8,6"
-    strokeDashoffset={dashAnim}
-    fill="none"
-  />
-);
+const EdgeLine: FC<EdgeLineProps> = ({
+  path,
+  arrowPath,
+  color,
+  animated,
+  dashAnim,
+}) =>
+  animated ? (
+    <>
+      <RNAnimatedPath
+        d={path}
+        stroke={color}
+        strokeWidth={2.5}
+        strokeDasharray="10,8"
+        strokeDashoffset={dashAnim}
+        fill="none"
+      />
+      <Path d={arrowPath} fill={color} />
+    </>
+  ) : (
+    <>
+      <Path d={path} stroke={color} strokeWidth={2} fill="none" opacity={0.55} />
+      <Path d={arrowPath} fill={color} opacity={0.55} />
+    </>
+  );
 
-/* ─────────── SolidLine ─────────── */
+/* ─────────── source node card ─────────── */
 
-interface SolidLineProps {
-  d: string;
-  arrowD: string;
-  color: string;
+interface NodeCardProps {
+  node: SLDNode;
+  rect: { x: number; y: number; w: number; h: number };
+  resolve: SLDValueResolver;
 }
 
-export const SolidLine: FC<SolidLineProps> = ({ d, arrowD, color }) => (
-  <>
-    <Path d={d} stroke={color} strokeWidth={2} fill="none" />
-    <Path d={arrowD} fill={color} />
-  </>
-);
-
-/* ─────────── SourceCard ─────────── */
-
-interface SourceCardProps {
-  source: SLDSourceNode;
-  x: number;
-  y: number;
-}
-
-export const SourceCard: FC<SourceCardProps> = ({ source, x, y }) => {
+const SourceNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
   const scheme = useScheme();
   const themed = useThemedStyles(createCanvasStyles);
-  const posStyle = useMemo(
+  const icon = resolveLottieIcon(node.data.icon.name);
+
+  const cardStyle = useMemo(
     () =>
       StyleSheet.flatten([
         themed.sourceCard,
-        { left: x, top: y, width: CW, height: CH },
+        { left: rect.x, top: rect.y, width: rect.w, height: rect.h },
       ]),
-    [themed.sourceCard, x, y],
+    [themed.sourceCard, rect.x, rect.y, rect.w, rect.h],
   );
 
   return (
-    <View style={posStyle}>
-      <AppText
-        fontSize={FONT_SIZE_SM}
-        bold
-        color={scheme.textPrimary}
-        numberOfLines={1}>
-        {source.title}
-      </AppText>
-      <View style={styles.cardContent}>
-        <source.iconName size={normalizeWidth(34)} />
-        <View style={styles.metricsCol}>
-          {source.metrics.map((m, i) => (
-            <View key={i} style={styles.metricRow}>
+    <View style={cardStyle}>
+      <View style={styles.cardHeaderRow}>
+        {icon ? <GifImage source={icon.path} size={ICON_SIZE} /> : null}
+        <AppText
+          fontSize={16}
+          bold
+          color={scheme.textPrimary}
+          numberOfLines={1}
+          style={styles.headerTitle}>
+          {node.data.heading}
+        </AppText>
+      </View>
+      <View style={styles.metricsCol}>
+        {node.data.keys.map((k, i) => (
+          <View key={i} style={styles.metricRow}>
+            <AppText
+              fontSize={13}
+              bold
+              color={scheme.textSecondary}
+              style={styles.metricLabel}>
+              {k.label}
+            </AppText>
+            <View style={styles.metricValueWrap}>
               <AppText
-                fontSize={FONT_SIZE_XS}
+                fontSize={14}
                 bold
                 color={scheme.textPrimary}
-                style={styles.metricLabel}>
-                {m.label}
-              </AppText>
-              <AppText
-                fontSize={FONT_SIZE_XS}
-                bold
-                color={scheme.textPrimary}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
                 style={styles.metricValue}>
-                {m.value}
+                {formatSldValue(resolve(k.param))}
               </AppText>
-              {m.unit ? (
-                <AppText fontSize={FONT_SIZE_XXS} color={scheme.textSecondary}>
-                  {m.unit}
+              {k.unit ? (
+                <AppText fontSize={11} color={scheme.textTertiary}>
+                  {k.unit}
                 </AppText>
               ) : null}
             </View>
-          ))}
-        </View>
+          </View>
+        ))}
       </View>
     </View>
   );
-};
+});
+SourceNodeCard.displayName = 'SourceNodeCard';
 
-/* ─────────── CenterNode ─────────── */
+/* ─────────── central logo node ─────────── */
 
-interface CenterNodeProps {
-  vw: number;
-  vh: number;
-}
-
-export const CenterNode: FC<CenterNodeProps> = ({ vw, vh }) => {
+const LogoNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
   const scheme = useScheme();
   const themed = useThemedStyles(createCanvasStyles);
-  const centerStyle = useMemo(
+  const icon = resolveLottieIcon(node.data.icon.name);
+  const primary = node.data.keys[0];
+
+  const logoStyle = useMemo(
     () =>
       StyleSheet.flatten([
-        themed.centerNode,
+        themed.logoNode,
         {
-          left: (vw - CD) / 2,
-          top: (vh - CD) / 2,
-          width: CD,
-          height: CD,
-          borderRadius: CD / 2,
+          left: rect.x,
+          top: rect.y,
+          width: rect.w,
+          height: rect.h,
+          borderRadius: rect.w / 2,
         },
       ]),
-    [themed.centerNode, vw, vh],
+    [themed.logoNode, rect.x, rect.y, rect.w, rect.h],
   );
 
   return (
-    <View style={centerStyle}>
-      <FactoryGif size={normalizeWidth(24)} />
-      <AppText fontSize={FONT_SIZE_XS} bold color={scheme.textPrimary}>
-        {sldCenter.title}
-      </AppText>
-      <AppText fontSize={FONT_SIZE_MICRO} color={scheme.textSecondary}>
-        Load = {sldCenter.loadValue}
-      </AppText>
+    <View style={logoStyle}>
+      <View style={styles.logoInner}>
+        {icon ? <GifImage source={icon.path} size={LOGO_ICON_SIZE} /> : null}
+        <AppText fontSize={13} bold color={scheme.textPrimary} numberOfLines={1}>
+          {node.data.heading}
+        </AppText>
+        {primary ? (
+          <AppText fontSize={11} color={scheme.textSecondary} numberOfLines={1}>
+            {formatSldValue(resolve(primary.param))}
+            {primary.unit ? ` ${primary.unit}` : ''}
+          </AppText>
+        ) : null}
+      </View>
     </View>
   );
-};
+});
+LogoNodeCard.displayName = 'LogoNodeCard';
 
 /* ─────────── DiagramCanvas ─────────── */
 
 interface DiagramCanvasProps {
-  vw: number;
-  vh: number;
+  graph: SLDGraph;
+  bounds: SLDBounds;
+  resolve: SLDValueResolver;
   dashAnim: RNAnimated.Value;
   dotColor: string;
 }
 
-export const DiagramCanvas: FC<DiagramCanvasProps> = ({
-  vw,
-  vh,
+const DiagramCanvasBase: FC<DiagramCanvasProps> = ({
+  graph,
+  bounds,
+  resolve,
   dashAnim,
   dotColor,
 }) => {
-  const positions = getPositions(vw, vh);
-  const keys = ['dg', 'grid', 'solar', 'bess'] as const;
-  const dots = makeGridDots(vw, vh);
+  const { width, height } = bounds;
+
+  const nodeById = useMemo(
+    () => new Map(graph.nodes.map(n => [n.id, n])),
+    [graph.nodes],
+  );
+
+  const edges = useMemo(
+    () =>
+      graph.edges
+        .map(edge => {
+          const s = nodeById.get(edge.source);
+          const t = nodeById.get(edge.target);
+          if (!s || !t) return null;
+          const sr = nodeRectInBounds(s, bounds);
+          const tr = nodeRectInBounds(t, bounds);
+          const from = handlePoint(sr, edge.sourceHandle);
+          const to = handlePoint(tr, edge.targetHandle);
+          const geo = buildEdgeGeometry(from, edge.sourceHandle, to, edge.targetHandle);
+          return {
+            id: edge.id,
+            color: edgeColor(edge),
+            animated: evalAnimation(s.data.animation, resolve),
+            ...geo,
+          };
+        })
+        .filter((e): e is NonNullable<typeof e> => e !== null),
+    [graph.edges, nodeById, bounds, resolve],
+  );
+
+  const nodes = useMemo(
+    () =>
+      graph.nodes.map(node => ({
+        node,
+        rect: nodeRectInBounds(node, bounds),
+        logo: isLogoNode(node),
+      })),
+    [graph.nodes, bounds],
+  );
 
   return (
     <>
-      <Svg style={StyleSheet.absoluteFill} width={vw} height={vh}>
-        {dots.map((dot, i) => (
-          <Circle
-            key={i}
-            cx={dot.cx}
-            cy={dot.cy}
-            r={1.5}
-            fill={dotColor}
-            opacity={ACCENT_GREEN_OPACITY}
+      <Svg width={width} height={height} style={StyleSheet.absoluteFill}>
+        <Defs>
+          <Pattern
+            id="sldDots"
+            width={DOT_SPACING}
+            height={DOT_SPACING}
+            patternUnits="userSpaceOnUse">
+            <Circle
+              cx={DOT_SPACING / 2}
+              cy={DOT_SPACING / 2}
+              r={DOT_RADIUS}
+              fill={dotColor}
+              opacity={DOT_OPACITY}
+            />
+          </Pattern>
+        </Defs>
+        <Rect x={0} y={0} width={width} height={height} fill="url(#sldDots)" />
+        {edges.map(e => (
+          <EdgeLine
+            key={e.id}
+            path={e.path}
+            arrowPath={e.arrowPath}
+            color={e.color}
+            animated={e.animated}
+            dashAnim={dashAnim}
           />
         ))}
-        {sldSources.map((source, idx) => {
-          const line = getLinePath(idx, vw, vh);
-          if (source.lineStyle === 'animated') {
-            return (
-              <FlowLine
-                key={source.id}
-                d={line.path}
-                color={source.lineColor}
-                dashAnim={dashAnim}
-              />
-            );
-          }
-          return (
-            <SolidLine
-              key={source.id}
-              d={line.path}
-              arrowD={getArrowPath(line.cx, line.cy, line.ex, line.ey)}
-              color={source.lineColor}
-            />
-          );
-        })}
       </Svg>
 
-      {sldSources.map((source, idx) => {
-        const pos = positions[keys[idx]];
-        return (
-          <SourceCard key={source.id} source={source} x={pos.x} y={pos.y} />
-        );
-      })}
-
-      <CenterNode vw={vw} vh={vh} />
+      {nodes.map(({ node, rect, logo }) =>
+        logo ? (
+          <LogoNodeCard key={node.id} node={node} rect={rect} resolve={resolve} />
+        ) : (
+          <SourceNodeCard key={node.id} node={node} rect={rect} resolve={resolve} />
+        ),
+      )}
     </>
   );
 };
+
+export const DiagramCanvas = memo(DiagramCanvasBase);
+DiagramCanvas.displayName = 'DiagramCanvas';

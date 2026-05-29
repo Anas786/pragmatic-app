@@ -130,22 +130,9 @@ export const formatTrendPeriodLabel = (
 
 /* ─────────────── aggregation helpers ─────────────── */
 
+/** `bar` ≡ `column`; anything else (`line`/`area`) is a line-family series. */
 export const isBarType = (t: TrendAggType): boolean =>
   t === 'bar' || t === 'column';
-export const isLineType = (t: TrendAggType): boolean =>
-  t === 'line' || t === 'area';
-
-/**
- * Split a section's aggregations into the two chart frames:
- *   - `lineArea` → one merged line/area chart
- *   - `bar`      → one grouped bar chart (`bar` ≡ `column`)
- */
-export const splitAggregations = (
-  aggregations: TrendAggregation[],
-): { lineArea: TrendAggregation[]; bar: TrendAggregation[] } => ({
-  lineArea: aggregations.filter(a => isLineType(a.type)),
-  bar: aggregations.filter(a => isBarType(a.type)),
-});
 
 /* ─────────────── config selection ─────────────── */
 
