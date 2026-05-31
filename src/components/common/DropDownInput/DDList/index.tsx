@@ -1,12 +1,19 @@
-import React, { FC } from "react";
+import React, { FC, useEffect, useState } from "react";
 import {
+  Dimensions,
   FlatList,
+  Modal,
   Pressable,
   StyleSheet,
-  TouchableWithoutFeedback,
   View,
 } from "react-native";
-import Modal from "react-native-modal";
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
+import { duration as durationTokens } from "src/theme";
 import { HEIGHT, WHITE, WIDTH } from "src/utils";
 import { AppText, Divider } from "../..";
 
@@ -21,6 +28,16 @@ interface DDListProps {
   valueKey?: string;
 }
 
+const SCREEN_H = Dimensions.get("window").height;
+
+const ListSeparator: FC = () => <Divider width={"90%"} />;
+
+/**
+ * Bottom-sheet dropdown list. Built on RN's **core** `Modal` + a
+ * Reanimated slide/fade (NOT `react-native-modal`, which double-presents
+ * under the New Architecture). Stays mounted through the exit animation
+ * so the close still animates.
+ */
 const DDList: FC<DDListProps> = ({
   visible,
   onHide,
@@ -32,7 +49,6 @@ const DDList: FC<DDListProps> = ({
   valueKey,
 }) => {
   const {
-    container,
     innerContainer,
     headingContainer,
     headingText,
@@ -41,58 +57,106 @@ const DDList: FC<DDListProps> = ({
     optionText,
   } = styles;
 
+  // Keep the Modal mounted through the slide-out so the exit animates.
+  const [mounted, setMounted] = useState(visible);
+  const [sheetH, setSheetH] = useState(0);
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      progress.value = withTiming(1, { duration: durationTokens.base });
+    } else {
+      progress.value = withTiming(
+        0,
+        { duration: durationTokens.base },
+        finished => {
+          if (finished) runOnJS(setMounted)(false);
+        },
+      );
+    }
+    // progress is a stable shared value; only react to `visible`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  const backdropStyle = useAnimatedStyle(() => ({
+    opacity: progress.value,
+  }));
+
+  const sheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: (1 - progress.value) * (sheetH || SCREEN_H) }],
+  }));
+
   const handleSelection = (option: any) => {
     onSelect(option);
     onHide();
   };
 
+  if (!mounted) return null;
+
   return (
-    <Modal isVisible={visible} style={{ margin: 0 }}>
-      <TouchableWithoutFeedback onPress={onHide}>
-        <View style={container}>
-          <TouchableWithoutFeedback>
-            <View style={innerContainer}>
-              <View style={headingContainer}>
-                <AppText style={headingText} fontSize={20} bold>
-                  {heading}
-                </AppText>
-              </View>
-              <Divider width={"90%"} />
-              <View style={listContainer}>
-                <FlatList
-                  data={list}
-                  removeClippedSubviews={false}
-                  renderItem={({ item }) => (
-                    <Pressable
-                      style={itemContainer}
-                      onPress={() =>
-                        handleSelection(valueKey ? item[valueKey] : item)
-                      }>
-                      <AppText style={optionText} fontSize={18}>
-                        {nameKey
-                          ? `${item[nameKey]}${
-                              secondKey ? ` -- ${item[secondKey]}` : ""
-                            }`
-                          : item}
-                      </AppText>
-                    </Pressable>
-                  )}
-                  ItemSeparatorComponent={() => <Divider width={"90%"} />}
-                />
-              </View>
-            </View>
-          </TouchableWithoutFeedback>
-        </View>
-      </TouchableWithoutFeedback>
+    <Modal
+      transparent
+      visible
+      animationType="none"
+      statusBarTranslucent
+      onRequestClose={onHide}>
+      <View style={styles.root}>
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onHide}
+          accessibilityRole="button"
+          accessibilityLabel="Close list">
+          <Animated.View
+            style={[StyleSheet.absoluteFill, styles.scrim, backdropStyle]}
+          />
+        </Pressable>
+
+        <Animated.View
+          style={[innerContainer, sheetStyle]}
+          onLayout={e => setSheetH(e.nativeEvent.layout.height)}>
+          <View style={headingContainer}>
+            <AppText style={headingText} fontSize={20} bold>
+              {heading}
+            </AppText>
+          </View>
+          <Divider width={"90%"} />
+          <View style={listContainer}>
+            <FlatList
+              data={list}
+              removeClippedSubviews={false}
+              renderItem={({ item }) => (
+                <Pressable
+                  style={itemContainer}
+                  onPress={() =>
+                    handleSelection(valueKey ? item[valueKey] : item)
+                  }>
+                  <AppText style={optionText} fontSize={18}>
+                    {nameKey
+                      ? `${item[nameKey]}${
+                          secondKey ? ` -- ${item[secondKey]}` : ""
+                        }`
+                      : item}
+                  </AppText>
+                </Pressable>
+              )}
+              ItemSeparatorComponent={ListSeparator}
+            />
+          </View>
+        </Animated.View>
+      </View>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
     justifyContent: "flex-end",
     alignItems: "center",
+  },
+  scrim: {
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
   },
   innerContainer: {
     backgroundColor: WHITE,

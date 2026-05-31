@@ -73,8 +73,15 @@ const TrendSection: FC<TrendSectionProps> = ({ siteId, idx, trend }) => {
   const rows = data?.data ?? [];
 
   const handleSelectPeriod = (next: TrendPeriod) => {
+    // For "Custom", just open the picker — defer switching the active
+    // period (and the fetch it triggers) until the user actually applies
+    // a range in `handleApplyCustom`. Committing `period='Custom'` here
+    // would fire a request against the stale/default custom range first.
+    if (next === 'Custom') {
+      setShowPicker(true);
+      return;
+    }
     setPeriod(next);
-    if (next === 'Custom') setShowPicker(true);
   };
 
   const handleApplyCustom = (start: Date, end: Date) => {

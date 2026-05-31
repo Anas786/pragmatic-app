@@ -228,10 +228,10 @@ export const getEnergyReport = async (
 /* ─────────────── trends ─────────────── */
 
 /**
- * Time/range args for the trends data endpoint. `start`/`end` are
- * SQL-ish expressions (NOT epoch-ms like the report endpoints):
+ * Time/range args for the trends data endpoint. `start`/`end` are either
+ * relative SQL expressions (presets) or absolute epoch-ms (custom):
  *   - presets → `now() - INTERVAL 24 HOUR` … `end = now()`
- *   - custom  → quoted absolute literals `'YYYY-MM-DD HH:MM:SS'`
+ *   - custom  → epoch-ms strings, e.g. `1779822000000` … `1780081199999`
  * `tz` is an IANA zone (e.g. `Asia/Karachi`) so the backend buckets in
  * the device's local time.
  */

@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1780089995808,
+  "lastScanned": 1780180527559,
   "projectRoot": "/Users/muhammadanas/Documents/Projects/pragmatic-app-updated",
   "techStack": {
     "languages": [
@@ -127,7 +127,7 @@
       "path": "__tests__",
       "purpose": "Test files",
       "fileCount": 1,
-      "lastAccessed": 1780089995762,
+      "lastAccessed": 1780180527545,
       "keyFiles": [
         "App.test.tsx"
       ]
@@ -136,7 +136,7 @@
       "path": "android",
       "purpose": null,
       "fileCount": 5,
-      "lastAccessed": 1780089995776,
+      "lastAccessed": 1780180527545,
       "keyFiles": [
         "build.gradle",
         "gradle.properties",
@@ -149,14 +149,14 @@
       "path": "assets",
       "purpose": "Static assets",
       "fileCount": 0,
-      "lastAccessed": 1780089995777,
+      "lastAccessed": 1780180527547,
       "keyFiles": []
     },
     "ios": {
       "path": "ios",
       "purpose": null,
       "fileCount": 5,
-      "lastAccessed": 1780089995777,
+      "lastAccessed": 1780180527547,
       "keyFiles": [
         "Podfile",
         "Podfile.lock"
@@ -166,7 +166,7 @@
       "path": "src",
       "purpose": "Source code",
       "fileCount": 2,
-      "lastAccessed": 1780089995786,
+      "lastAccessed": 1780180527548,
       "keyFiles": [
         "react-app-env.d.ts"
       ]
@@ -175,7 +175,7 @@
       "path": "android/app",
       "purpose": "Application code",
       "fileCount": 3,
-      "lastAccessed": 1780089995788,
+      "lastAccessed": 1780180527549,
       "keyFiles": [
         "build.gradle",
         "debug.keystore",
@@ -186,21 +186,21 @@
       "path": "android/build",
       "purpose": "Build output",
       "fileCount": 0,
-      "lastAccessed": 1780089995789,
+      "lastAccessed": 1780180527549,
       "keyFiles": []
     },
     "ios/build": {
       "path": "ios/build",
       "purpose": "Build output",
       "fileCount": 0,
-      "lastAccessed": 1780089995790,
+      "lastAccessed": 1780180527550,
       "keyFiles": []
     },
     "src/assets": {
       "path": "src/assets",
       "purpose": "Static assets",
       "fileCount": 2,
-      "lastAccessed": 1780089995791,
+      "lastAccessed": 1780180527550,
       "keyFiles": [
         "index.ts"
       ]
@@ -209,7 +209,7 @@
       "path": "src/components",
       "purpose": "UI components",
       "fileCount": 1,
-      "lastAccessed": 1780089995791,
+      "lastAccessed": 1780180527550,
       "keyFiles": [
         "index.ts"
       ]
@@ -218,7 +218,7 @@
       "path": "src/config",
       "purpose": "Configuration files",
       "fileCount": 2,
-      "lastAccessed": 1780089995791,
+      "lastAccessed": 1780180527550,
       "keyFiles": [
         "amplify.ts",
         "index.ts"
@@ -228,14 +228,14 @@
       "path": "src/data",
       "purpose": "Data files",
       "fileCount": 0,
-      "lastAccessed": 1780089995793,
+      "lastAccessed": 1780180527550,
       "keyFiles": []
     },
     "src/routes": {
       "path": "src/routes",
       "purpose": "Route handlers",
       "fileCount": 4,
-      "lastAccessed": 1780089995793,
+      "lastAccessed": 1780180527551,
       "keyFiles": [
         "dashboardStack.tsx",
         "drawerNavigator.tsx",
@@ -311,6 +311,12 @@
       "type": "file"
     },
     {
+      "path": "src/components/screens/Authenticated/SiteDetail/components/ViewsContent.tsx",
+      "accessCount": 6,
+      "lastAccessed": 1780241981431,
+      "type": "file"
+    },
+    {
       "path": "src/hooks/useLogin.ts",
       "accessCount": 5,
       "lastAccessed": 1777308184429,
@@ -326,12 +332,6 @@
       "path": "src/hooks/useLogout.ts",
       "accessCount": 5,
       "lastAccessed": 1777386420475,
-      "type": "file"
-    },
-    {
-      "path": "src/components/screens/Authenticated/SiteDetail/components/ViewsContent.tsx",
-      "accessCount": 5,
-      "lastAccessed": 1780005540154,
       "type": "file"
     },
     {

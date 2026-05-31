@@ -34,19 +34,12 @@ const PRESET_HOURS: Record<Exclude<TrendPeriod, 'Custom'>, number> = {
   '72H': 72,
 };
 
-/** Format a Date as a quoted SQL datetime literal in local wall-clock time. */
-const sqlLiteral = (d: Date): string => {
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `'${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(
-    d.getHours(),
-  )}:${p(d.getMinutes())}:${p(d.getSeconds())}'`;
-};
-
 /**
- * Translate a period selection into the `{ start, end }` SQL expressions
- * the trends endpoint expects.
- *   - presets → `now() - INTERVAL N HOUR` … `now()`
- *   - custom  → quoted absolute literals clamped to whole days
+ * Translate a period selection into the `{ start, end }` values the
+ * trends endpoint expects.
+ *   - presets → relative SQL expressions `now() - INTERVAL N HOUR` … `now()`
+ *   - custom  → absolute epoch-ms (same as the report endpoints),
+ *     day-clamped: start 00:00:00.000, end 23:59:59.999
  */
 export const buildTrendRange = (
   period: TrendPeriod,
@@ -54,11 +47,10 @@ export const buildTrendRange = (
   endDate: Date,
 ): TrendRange => {
   if (period === 'Custom') {
-    const s = new Date(startDate);
-    s.setHours(0, 0, 0, 0);
-    const e = new Date(endDate);
-    e.setHours(23, 59, 59, 0);
-    return { start: sqlLiteral(s), end: sqlLiteral(e) };
+    return {
+      start: String(startOfDayMs(startDate)),
+      end: String(endOfDayMs(endDate)),
+    };
   }
   return {
     start: `now() - INTERVAL ${PRESET_HOURS[period]} HOUR`,

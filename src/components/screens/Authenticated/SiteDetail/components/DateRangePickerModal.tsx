@@ -390,8 +390,12 @@ const CalendarGrid: FC<CalendarGridProps> = ({
           const isEnd = !!end && sameDay(date, end);
           const inRange = !!start && !!end && isBetween(date, start, end);
           const isToday = sameDay(date, today);
+          const dayMs = startOfDay(date).getTime();
+          // Never allow future dates (no data exists yet), and never past
+          // the per-start range cap once a start is picked.
           const disabled =
-            !!maxAllowed && startOfDay(date).getTime() > startOfDay(maxAllowed).getTime();
+            dayMs > startOfDay(today).getTime() ||
+            (!!maxAllowed && dayMs > startOfDay(maxAllowed).getTime());
           return (
             <DayCell
               key={date.toISOString()}
@@ -446,9 +450,13 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
   wasVisibleRef.current = visible;
 
   const today = useMemo(() => new Date(), []);
+  // The range cap only constrains the *second* tap (picking an end after a
+  // start). While a complete range is showing — e.g. the sheet just
+  // reopened with the previously-applied range — leave every day up to
+  // today enabled so the user can begin a fresh selection anywhere.
   const maxAllowed = useMemo(
-    () => (tempStart ? addDays(tempStart, maxRangeDays) : null),
-    [tempStart, maxRangeDays],
+    () => (tempStart && !tempEnd ? addDays(tempStart, maxRangeDays) : null),
+    [tempStart, tempEnd, maxRangeDays],
   );
 
   // Only surface presets whose inclusive span fits within the cap —

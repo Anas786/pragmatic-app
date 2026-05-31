@@ -1,8 +1,21 @@
-import React, { FC } from 'react';
-import { StyleSheet, View, TouchableOpacity } from 'react-native';
-import Modal from 'react-native-modal';
+import React, { FC, useEffect, useState } from 'react';
+import {
+  Dimensions,
+  Modal,
+  Pressable,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { AppText, Spacer } from 'src/components/common';
+import { duration as durationTokens } from 'src/theme';
 import { normalizeHeight, normalizeWidth, BLUE, WHITE, BACKGROUND } from 'src/utils';
 
 interface ImagePickerBottomSheetProps {
@@ -12,78 +25,124 @@ interface ImagePickerBottomSheetProps {
   onSelectLibrary: () => void;
 }
 
+const SCREEN_H = Dimensions.get('window').height;
+
+/**
+ * Bottom sheet for choosing an image source. Built on RN's **core**
+ * `Modal` + a Reanimated slide/fade (NOT `react-native-modal`, which
+ * double-presents under the New Architecture). Stays mounted through the
+ * exit animation so the close still animates.
+ */
 const ImagePickerBottomSheet: FC<ImagePickerBottomSheetProps> = ({
   visible,
   onHide,
   onSelectCamera,
   onSelectLibrary,
 }) => {
-  const handleCameraPress = () => {
-    onSelectCamera();
-  };
+  // Keep the Modal mounted through the slide-out so the exit animates.
+  const [mounted, setMounted] = useState(visible);
+  const [sheetH, setSheetH] = useState(0);
+  const progress = useSharedValue(0);
 
-  const handleLibraryPress = () => {
-    onSelectLibrary();
-  };
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      progress.value = withTiming(1, { duration: durationTokens.base });
+    } else {
+      progress.value = withTiming(
+        0,
+        { duration: durationTokens.base },
+        finished => {
+          if (finished) runOnJS(setMounted)(false);
+        },
+      );
+    }
+    // progress is a stable shared value; only react to `visible`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  const backdropStyle = useAnimatedStyle(() => ({
+    opacity: progress.value,
+  }));
+
+  const sheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: (1 - progress.value) * (sheetH || SCREEN_H) }],
+  }));
+
+  if (!mounted) return null;
 
   return (
     <Modal
-      isVisible={visible}
-      onBackdropPress={onHide}
-      onSwipeComplete={onHide}
-      swipeDirection={['down']}
-      style={styles.modal}
-      animationIn="slideInUp"
-      animationOut="slideOutDown"
-    >
-      <View style={styles.container}>
-        <View style={styles.handle} />
-        <Spacer mt={20} />
+      transparent
+      visible
+      animationType="none"
+      statusBarTranslucent
+      onRequestClose={onHide}>
+      <View style={styles.root}>
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onHide}
+          accessibilityRole="button"
+          accessibilityLabel="Close image source picker">
+          <Animated.View
+            style={[StyleSheet.absoluteFill, styles.scrim, backdropStyle]}
+          />
+        </Pressable>
 
-        <AppText fontSize={18} semi_bold style={styles.title}>
-          Select Image Source
-        </AppText>
+        <Animated.View
+          style={[styles.container, sheetStyle]}
+          onLayout={e => setSheetH(e.nativeEvent.layout.height)}>
+          <View style={styles.handle} />
+          <Spacer mt={20} />
 
-        <Spacer mt={30} />
-
-        <TouchableOpacity style={styles.option} onPress={handleCameraPress}>
-          <View style={styles.iconContainer}>
-            <Icon name="camera-alt" size={24} color={BLUE} />
-          </View>
-          <AppText fontSize={16} style={styles.optionText}>
-            Take Photo
+          <AppText fontSize={18} semi_bold style={styles.title}>
+            Select Image Source
           </AppText>
-          <Icon name="chevron-right" size={20} color="#999" />
-        </TouchableOpacity>
 
-        <TouchableOpacity style={styles.option} onPress={handleLibraryPress}>
-          <View style={styles.iconContainer}>
-            <Icon name="photo-library" size={24} color={BLUE} />
-          </View>
-          <AppText fontSize={16} style={styles.optionText}>
-            Choose from Library
-          </AppText>
-          <Icon name="chevron-right" size={20} color="#999" />
-        </TouchableOpacity>
+          <Spacer mt={30} />
 
-        <Spacer mt={30} />
+          <TouchableOpacity style={styles.option} onPress={onSelectCamera}>
+            <View style={styles.iconContainer}>
+              <Icon name="camera-alt" size={24} color={BLUE} />
+            </View>
+            <AppText fontSize={16} style={styles.optionText}>
+              Take Photo
+            </AppText>
+            <Icon name="chevron-right" size={20} color="#999" />
+          </TouchableOpacity>
 
-        <TouchableOpacity style={styles.cancelButton} onPress={onHide}>
-          <AppText fontSize={16} color="#666">
-            Cancel
-          </AppText>
-        </TouchableOpacity>
+          <TouchableOpacity style={styles.option} onPress={onSelectLibrary}>
+            <View style={styles.iconContainer}>
+              <Icon name="photo-library" size={24} color={BLUE} />
+            </View>
+            <AppText fontSize={16} style={styles.optionText}>
+              Choose from Library
+            </AppText>
+            <Icon name="chevron-right" size={20} color="#999" />
+          </TouchableOpacity>
 
-        <Spacer mt={20} />
+          <Spacer mt={30} />
+
+          <TouchableOpacity style={styles.cancelButton} onPress={onHide}>
+            <AppText fontSize={16} color="#666">
+              Cancel
+            </AppText>
+          </TouchableOpacity>
+
+          <Spacer mt={20} />
+        </Animated.View>
       </View>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  modal: {
+  root: {
+    flex: 1,
     justifyContent: 'flex-end',
-    margin: 0,
+  },
+  scrim: {
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
   },
   container: {
     backgroundColor: BACKGROUND,

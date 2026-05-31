@@ -40,7 +40,6 @@ import {
 import { FONT_SIZE_XS, ICON_SIZE_SM, WIDTH } from 'src/utils';
 import { IconProps } from 'src/types';
 import {
-  AlarmsTabIcon,
   BoltIcon,
   CardsTabIcon,
   ChartIcon,
@@ -72,7 +71,9 @@ const tabs: TabConfig[] = [
   { name: 'Summary', Icon: SummaryTabIcon },
   { name: 'Cards', Icon: CardsTabIcon },
   { name: 'Live', Icon: BoltIcon },
-  { name: 'Alarms', Icon: AlarmsTabIcon },
+  // Alarms tab hidden for now — re-add `{ name: 'Alarms', Icon: AlarmsTabIcon }`
+  // (and its import) to restore it. The 'Alarms' TabOption + ViewsContent
+  // case are intentionally left in place.
   { name: 'Trend', Icon: TrendTabIcon },
   { name: 'Reports', Icon: ChartIcon },
   { name: 'Tables', Icon: GridIcon },

@@ -134,7 +134,8 @@
       "mcp__plugin_oh-my-claudecode_t__lsp_diagnostics",
       "Bash(sed -n '1,60p' src/components/common/ScreenContainer/index.tsx)",
       "Bash(sed -n '1,60p' src/components/common/TopBar/index.tsx)",
-      "Bash(grep -rn \"#[0-9A-Fa-f]\\\\{3,8\\\\}\\\\|WHITE\\\\|BLACK\\\\|rgba\\(\\\\|'white'\\\\|'black'\\\\|backgroundColor\" src/components/screens/Onboarding)"
+      "Bash(grep -rn \"#[0-9A-Fa-f]\\\\{3,8\\\\}\\\\|WHITE\\\\|BLACK\\\\|rgba\\(\\\\|'white'\\\\|'black'\\\\|backgroundColor\" src/components/screens/Onboarding)",
+      "Bash(echo \"exit:$?\")"
     ]
   }
 }

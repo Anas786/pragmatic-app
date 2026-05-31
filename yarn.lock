@@ -7618,13 +7618,6 @@ react-is@^19.1.0:
   resolved "https://registry.npmjs.org/react-is/-/react-is-19.2.4.tgz"
   integrity sha512-W+EWGn2v0ApPKgKKCy/7s7WHXkboGcsrXE+2joLyVxkbyVQfO3MUEaUQDHoSmb8TFFrSKYa9mw64WZHNHSDzYA==
 
-react-native-animatable@1.4.0:
-  version "1.4.0"
-  resolved "https://registry.npmjs.org/react-native-animatable/-/react-native-animatable-1.4.0.tgz"
-  integrity sha512-DZwaDVWm2NBvBxf7I0wXKXLKb/TxDnkV53sWhCvei1pRyTX3MVFpkvdYBknNBqPrxYuAIlPxEp7gJOidIauUkw==
-  dependencies:
-    prop-types "^15.8.1"
-
 react-native-bootsplash@^6.3.2:
   version "6.3.12"
   resolved "https://registry.npmjs.org/react-native-bootsplash/-/react-native-bootsplash-6.3.12.tgz"
@@ -7708,13 +7701,6 @@ react-native-linear-gradient@^2.8.3:
   version "2.8.3"
   resolved "https://registry.npmjs.org/react-native-linear-gradient/-/react-native-linear-gradient-2.8.3.tgz"
   integrity sha512-KflAXZcEg54PXkLyflaSZQ3PJp4uC4whM7nT/Uot9m0e/qxFV3p6uor1983D1YOBJbJN7rrWdqIjq0T42jOJyA==
-
-react-native-modal@^14.0.0-rc.1:
-  version "14.0.0-rc.1"
-  resolved "https://registry.npmjs.org/react-native-modal/-/react-native-modal-14.0.0-rc.1.tgz"
-  integrity sha512-v5pvGyx1FlmBzdHyPqBsYQyS2mIJhVmuXyNo5EarIzxicKhuoul6XasXMviGcXboEUT0dTYWs88/VendojPiVw==
-  dependencies:
-    react-native-animatable "1.4.0"
 
 react-native-orientation-locker@^1.7.0:
   version "1.7.0"
