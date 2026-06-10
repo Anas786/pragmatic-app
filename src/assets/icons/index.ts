@@ -47,6 +47,7 @@ export { default as AlertIconCircle } from "./AlertIconCircle";
 export { default as BellIcon } from "./BellIcon";
 export { default as MessageAlertIcon } from "./MessageAlertIcon";
 export { default as RefreshIcon } from "./RefreshIcon";
+export { default as FitOverviewIcon } from "./FitOverviewIcon";
 export { default as CalendarIcon } from "./CalendarIcon";
 export { default as LockIconOpen } from "./LockIconOpen";
 export { default as EyeIcon } from "./EyeIcon";

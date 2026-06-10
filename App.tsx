@@ -25,6 +25,7 @@ import {
 } from '@react-navigation/native';
 import React, { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import Orientation from 'react-native-orientation-locker';
 import RNBootSplash from 'react-native-bootsplash';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Routes } from 'src/routes';
@@ -50,6 +51,15 @@ function App(): React.JSX.Element {
       background: colors.splashBg,
     },
   };
+
+  // Portrait-only app. Landscape is never an OS orientation — the SLD
+  // full-screen view fakes landscape with a 90° transform instead, because an
+  // actual device rotation re-layout collides with Reanimated's Fabric commit
+  // hooks and crashes. Locking portrait app-wide also stops a physical rotate
+  // from fighting that transform.
+  useEffect(() => {
+    Orientation.lockToPortrait();
+  }, []);
 
   useEffect(() => {
     initializeApp();

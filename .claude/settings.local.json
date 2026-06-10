@@ -135,7 +135,21 @@
       "Bash(sed -n '1,60p' src/components/common/ScreenContainer/index.tsx)",
       "Bash(sed -n '1,60p' src/components/common/TopBar/index.tsx)",
       "Bash(grep -rn \"#[0-9A-Fa-f]\\\\{3,8\\\\}\\\\|WHITE\\\\|BLACK\\\\|rgba\\(\\\\|'white'\\\\|'black'\\\\|backgroundColor\" src/components/screens/Onboarding)",
-      "Bash(echo \"exit:$?\")"
+      "Bash(echo \"exit:$?\")",
+      "Bash(sed -n '1,60p' src/components/common/Skeleton/index.tsx)",
+      "Bash(sed -n '175,195p' src/components/screens/Onboarding/Splash/index.tsx)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "mcp__Claude_in_Chrome__list_connected_browsers",
+      "mcp__Claude_in_Chrome__select_browser",
+      "mcp__Claude_in_Chrome__browser_batch",
+      "mcp__Claude_in_Chrome__navigate",
+      "mcp__Claude_in_Chrome__javascript_tool",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/react-native/package.json'\\).version\\)\")",
+      "Bash(echo \"RN: $\\(node -e \"console.log\\(require\\('./node_modules/react-native/package.json'\\).version\\)\"\\)\")",
+      "Bash(node -e \"console.log\\('react', require\\('./node_modules/react/package.json'\\).version\\)\")",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/@shopify/react-native-skia/package.json'\\).version\\)\")",
+      "Bash(pod install *)",
+      "Bash(node -e \"const s=require\\('@shopify/react-native-skia'\\); console.log\\('exports present:', ['Canvas','Circle','Path','Group','DashPathEffect','Skia','useClock'].map\\(k=>k+'='+\\(typeof s[k]!=='undefined'\\)\\).join\\(', '\\)\\);\")"
     ]
   }
 }

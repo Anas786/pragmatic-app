@@ -32,4 +32,8 @@ export type DashboardStackParamList = {
      */
     siteimage: string | null;
   };
+  /** Energy-flow diagram, presented full-screen in landscape. */
+  SLDFullscreen: {
+    siteId: string;
+  };
 };

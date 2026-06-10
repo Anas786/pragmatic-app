@@ -41,6 +41,14 @@ export const lottiePathGif: Record<string, LottieIcon> = {
     path: require('./raw/factory.gif'),
     name: 'iconoir:industry',
   },
+  busbar: {
+    path: require('./raw/factory.gif'),
+    name: 'mdi:busbar',
+  },
+  building: {
+    path: require('./raw/hospital.gif'),
+    name: 'mdi:office-building',
+  },
   towerLg: {
     path: require('./raw/tower.gif'),
     name: 'mdi:transmission-tower',

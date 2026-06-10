@@ -1,5 +1,5 @@
 import React, { FC, useEffect, useRef } from 'react';
-import { Animated, DimensionValue, StyleSheet, View } from 'react-native';
+import { Animated, DimensionValue, StyleSheet } from 'react-native';
 import { radius as radiusTokens, useScheme } from 'src/theme';
 
 type RadiusKey = keyof typeof radiusTokens;
@@ -19,26 +19,31 @@ const Skeleton: FC<SkeletonProps> = ({ width, height, radius = 'sm' }) => {
   const anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // Pulse opacity (native-driver capable) rather than interpolating
+    // backgroundColor (which forces useNativeDriver:false → a JS-thread
+    // loop per skeleton). Many skeletons mount at once during load — the
+    // exact moment the JS thread is already busy — so keep this on the
+    // UI thread.
     Animated.loop(
       Animated.sequence([
         Animated.timing(anim, {
           toValue: 1,
           duration: 900,
-          useNativeDriver: false,
+          useNativeDriver: true,
         }),
         Animated.timing(anim, {
           toValue: 0,
           duration: 900,
-          useNativeDriver: false,
+          useNativeDriver: true,
         }),
       ]),
     ).start();
     return () => anim.stopAnimation();
   }, [anim]);
 
-  const bg = anim.interpolate({
+  const opacity = anim.interpolate({
     inputRange: [0, 1],
-    outputRange: [scheme.skeletonBase, scheme.skeletonHighlight],
+    outputRange: [0.5, 1],
   });
 
   const borderRadius =
@@ -48,7 +53,13 @@ const Skeleton: FC<SkeletonProps> = ({ width, height, radius = 'sm' }) => {
     <Animated.View
       style={[
         styles.base,
-        { width, height, borderRadius, backgroundColor: bg },
+        {
+          width,
+          height,
+          borderRadius,
+          backgroundColor: scheme.skeletonHighlight,
+          opacity,
+        },
       ]}
     />
   );

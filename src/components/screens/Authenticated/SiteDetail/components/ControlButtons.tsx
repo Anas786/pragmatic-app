@@ -4,18 +4,21 @@ import { PressableScale } from 'src/components/common';
 import { ICON_SIZE_MD, normalizeWidth } from 'src/utils';
 import { radius as radiusTokens, space, useScheme } from 'src/theme';
 import {
+  FitOverviewIcon,
   LockIcon,
   LockIconOpen,
   Minus,
   NodeExpandIcon,
   Plus,
-  RefreshIcon,
 } from 'src/assets/icons';
 
 interface ControlButtonsProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
-  onFit: () => void;
+  /** Toggle edge routing between curved bezier and straight orthogonal. */
+  onToggleRouting: () => void;
+  /** True when edges are in straight/orthogonal mode (highlights the button). */
+  routingOrthogonal: boolean;
   onToggleLock: () => void;
   onFullscreen: () => void;
   isLocked: boolean;
@@ -29,7 +32,8 @@ interface ControlButtonsProps {
 const ControlButtons: FC<ControlButtonsProps> = ({
   onZoomIn,
   onZoomOut,
-  onFit,
+  onToggleRouting,
+  routingOrthogonal,
   onToggleLock,
   onFullscreen,
   isLocked,
@@ -75,9 +79,14 @@ const ControlButtons: FC<ControlButtonsProps> = ({
       </PressableScale>
       <PressableScale
         style={styles.button}
-        onPress={onFit}
-        accessibilityLabel="Fit diagram">
-        <RefreshIcon size={ICON_SIZE_MD} color={scheme.textPrimary} />
+        onPress={onToggleRouting}
+        accessibilityLabel={
+          routingOrthogonal ? 'Use curved lines' : 'Use straight lines'
+        }>
+        <FitOverviewIcon
+          size={ICON_SIZE_MD}
+          color={routingOrthogonal ? scheme.brand : scheme.textPrimary}
+        />
       </PressableScale>
       <PressableScale
         style={styles.button}

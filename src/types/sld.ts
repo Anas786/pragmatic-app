@@ -89,6 +89,12 @@ export interface SLDEdge {
   style: { stroke: string };
   markerEnd: SLDEdgeMarker;
   selected?: boolean;
+  /**
+   * Edge-level flow hint. `mode: "flow"` animates the edge; `"idle"` keeps
+   * it solid. Used as the animation driver when the source node has no live
+   * `animation` condition of its own.
+   */
+  data?: { type?: string; mode?: 'flow' | 'idle' };
 }
 
 export interface SLDGraph {
