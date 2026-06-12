@@ -1,4 +1,13 @@
-import React, { FC, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  FC,
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { StyleSheet, View } from 'react-native';
 import RNEChartsPro from 'react-native-echarts-pro';
 import { useRoute, RouteProp } from '@react-navigation/native';
@@ -69,6 +78,49 @@ type SiteDetailRouteProp = RouteProp<DashboardStackParamList, 'SiteDetail'>;
 const PIE_HEIGHT = 240;
 const BAR_HEIGHT = 280;
 
+// react-native-echarts-pro hardcodes androidHardwareAccelerationDisabled
+// on its WebView but spreads `webViewSettings` AFTER it — so this
+// override wins and re-enables GPU compositing on Android. Module-level
+// so the prop reference stays stable across renders.
+const WEBVIEW_SETTINGS = { androidHardwareAccelerationDisabled: false };
+
+/** Ref handle exposed by react-native-echarts-pro that we rely on. */
+interface ReportChartHandle {
+  dispatchAction: (action: object) => void;
+}
+
+interface ReportChartProps {
+  option: object;
+  height: number;
+  onPress?: (result: string) => void;
+}
+
+/**
+ * Memoized RNEChartsPro host. The library rebuilds its injected JS +
+ * inline-HTML source (~2MB of throwaway strings, embedding the full
+ * echarts bundle) on EVERY render — so selection taps / modal toggles
+ * in the parent must not reach it. `option` is already memoized
+ * upstream and `onPress` is useCallback'd, so this wrapper bails out
+ * unless the chart actually changes. The ref forwards straight to the
+ * library handle, keeping `dispatchAction` slice-sync working.
+ */
+const ReportChart = memo(
+  forwardRef<ReportChartHandle, ReportChartProps>(
+    ({ option, height, onPress }, ref) => (
+      <RNEChartsPro
+        ref={ref as never}
+        height={height}
+        option={option}
+        backgroundColor="transparent"
+        enableParseStringFunction
+        webViewSettings={WEBVIEW_SETTINGS}
+        onPress={onPress}
+      />
+    ),
+  ),
+);
+ReportChart.displayName = 'ReportChart';
+
 const PerformanceReportCard: FC = () => {
   const scheme = useScheme();
   const route = useRoute<SiteDetailRouteProp>();
@@ -87,7 +139,7 @@ const PerformanceReportCard: FC = () => {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [activeFilter, setActiveFilter] = useState<InverterFilterOption>('Custom');
   const [barFullscreen, setBarFullscreen] = useState(false);
-  const pieRef = useRef<{ dispatchAction: (action: object) => void } | null>(null);
+  const pieRef = useRef<ReportChartHandle | null>(null);
 
   const reportFilter = useMemo(
     () => buildReportFilter(activeFilter, startDate, endDate, selectedMonth, selectedYear),
@@ -189,12 +241,14 @@ const PerformanceReportCard: FC = () => {
   }, [safeSelectedIndex, pieOption, grandTotal]);
 
   // Tapping a pie slice selects that source (highlights its row).
-  const handlePiePress = (result: any) => {
+  // Stable identity (useCallback) so the memoized ReportChart wrapper
+  // bails out on selection re-renders.
+  const handlePiePress = useCallback((result: any) => {
     const params = typeof result === 'string' ? JSON.parse(result) : result;
     if (params && typeof params.dataIndex === 'number') {
       setSelectedIndex(params.dataIndex);
     }
-  };
+  }, []);
 
   const handleDateApply = (start: Date, end: Date) => {
     setStartDate(start);
@@ -315,12 +369,10 @@ const PerformanceReportCard: FC = () => {
             </AppText>
           </View>
           <View style={styles.chartContainer}>
-            <RNEChartsPro
-              ref={pieRef as never}
+            <ReportChart
+              ref={pieRef}
               height={PIE_HEIGHT}
               option={pieOption}
-              backgroundColor="transparent"
-              enableParseStringFunction
               onPress={handlePiePress}
             />
           </View>
@@ -369,12 +421,7 @@ const PerformanceReportCard: FC = () => {
             </PressableScale>
           </View>
           <View style={styles.barContainer}>
-            <RNEChartsPro
-              height={BAR_HEIGHT}
-              option={stackBarOption}
-              backgroundColor="transparent"
-              enableParseStringFunction
-            />
+            <ReportChart height={BAR_HEIGHT} option={stackBarOption} />
           </View>
         </SectionCard>
       </Animated.View>

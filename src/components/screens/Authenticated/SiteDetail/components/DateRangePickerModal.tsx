@@ -15,7 +15,14 @@
  * month) let the user pick common ranges in one tap.
  */
 
-import React, { FC, ReactNode, useMemo, useState } from 'react';
+import React, {
+  FC,
+  memo,
+  ReactNode,
+  useCallback,
+  useMemo,
+  useState,
+} from 'react';
 import { StyleSheet, View } from 'react-native';
 import { AppText, PressableScale } from 'src/components/common';
 import {
@@ -271,7 +278,8 @@ MonthPicker.displayName = 'MonthPicker';
 
 /* ─────────────── day cell ─────────────── */
 
-const DayCell: FC<{
+interface DayCellProps {
+  /** Referentially stable per cursor month — the grid's cells are memoized. */
   date: Date;
   inMonth: boolean;
   isStart: boolean;
@@ -279,8 +287,20 @@ const DayCell: FC<{
   inRange: boolean;
   isToday: boolean;
   disabled: boolean;
+  /** Must be useCallback'd by the owner so the memo bail-out holds. */
   onPress: (d: Date) => void;
-}> = ({ date, inMonth, isStart, isEnd, inRange, isToday, disabled, onPress }) => {
+}
+
+const DayCellComponent: FC<DayCellProps> = ({
+  date,
+  inMonth,
+  isStart,
+  isEnd,
+  inRange,
+  isToday,
+  disabled,
+  onPress,
+}) => {
   const scheme = useScheme();
   const themed = useThemedStyles(createStyles);
 
@@ -332,7 +352,12 @@ const DayCell: FC<{
     </PressableScale>
   );
 };
-DayCell.displayName = 'DayCell';
+DayCellComponent.displayName = 'DayCell';
+
+// Memoized — every day tap re-renders the modal, and without the memo
+// all 42 cells (each hosting a Reanimated PressableScale) re-render.
+// Props are primitives/stable refs so only the affected cells repaint.
+const DayCell = memo(DayCellComponent);
 
 /* ─────────────── calendar grid ─────────────── */
 
@@ -429,8 +454,15 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
   const scheme = useScheme();
   const themed = useThemedStyles(createStyles);
 
-  const [tempStart, setTempStart] = useState<Date | null>(startDate);
-  const [tempEnd, setTempEnd] = useState<Date | null>(endDate);
+  // Draft range under construction. One state object (not two separate
+  // start/end states) so `handleDayPress` can update via a functional
+  // setter and keep a stable identity across taps — which is what lets
+  // the memoized DayCells bail out instead of all 42 re-rendering.
+  const [draftRange, setDraftRange] = useState<{
+    start: Date | null;
+    end: Date | null;
+  }>(() => ({ start: startDate, end: endDate }));
+  const { start: tempStart, end: tempEnd } = draftRange;
   // Cursor controls which calendar month is rendered.
   const [cursor, setCursor] = useState<Date>(() => new Date(startDate));
   // Inline view-mode: 'days' shows the day grid, 'months' shows the
@@ -442,8 +474,7 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
   // cancelled session doesn't bleed into the next open.
   const wasVisibleRef = React.useRef(visible);
   if (visible && !wasVisibleRef.current) {
-    setTempStart(startDate);
-    setTempEnd(endDate);
+    setDraftRange({ start: startDate, end: endDate });
     setCursor(new Date(startDate));
     setView('days');
   }
@@ -473,27 +504,30 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
     [maxRangeDays],
   );
 
-  const handleDayPress = (d: Date) => {
-    const day = startOfDay(d);
-    // First tap or restart-before-start
-    if (!tempStart || (tempStart && tempEnd) || day < startOfDay(tempStart)) {
-      setTempStart(day);
-      setTempEnd(null);
-      return;
-    }
-    // Second tap: complete the range (clamp to MAX cap)
-    const cap = addDays(tempStart, maxRangeDays);
-    if (day > cap) {
-      setTempEnd(startOfDay(cap));
-      return;
-    }
-    setTempEnd(day);
-  };
+  // Stable across taps (functional updater + constant `maxRangeDays`)
+  // so the memoized DayCells' `onPress` prop never changes identity.
+  const handleDayPress = useCallback(
+    (d: Date) => {
+      const day = startOfDay(d);
+      setDraftRange(prev => {
+        // First tap or restart-before-start
+        if (!prev.start || (prev.start && prev.end) || day < startOfDay(prev.start)) {
+          return { start: day, end: null };
+        }
+        // Second tap: complete the range (clamp to MAX cap)
+        const cap = addDays(prev.start, maxRangeDays);
+        if (day > cap) {
+          return { start: prev.start, end: startOfDay(cap) };
+        }
+        return { start: prev.start, end: day };
+      });
+    },
+    [maxRangeDays],
+  );
 
   const handlePreset = (preset: Preset) => {
     const { start, end } = preset.build();
-    setTempStart(startOfDay(start));
-    setTempEnd(startOfDay(end));
+    setDraftRange({ start: startOfDay(start), end: startOfDay(end) });
     setCursor(new Date(start));
   };
 

@@ -310,8 +310,11 @@ const AlarmsView: FC = () => {
       ) : (
         <List>
           {filtered.map(({ alarm, severity }, i) => (
+            // Keyed by alarm identity (title + raised time), NOT the
+            // filtered-array index — index keys remount every row on a
+            // filter switch and replay all entrance animations.
             <AlarmRow
-              key={`${alarm.title}-${i}`}
+              key={`${alarm.title}-${alarm.time}`}
               data={alarm}
               severity={severity}
               index={i}

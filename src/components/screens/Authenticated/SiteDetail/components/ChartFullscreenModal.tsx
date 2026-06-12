@@ -21,6 +21,12 @@ const NOTCH_INSET = 40;
 // Smaller inset on the right so the right-hand y-axis labels don't clip.
 const RIGHT_INSET = 20;
 
+// react-native-echarts-pro hardcodes androidHardwareAccelerationDisabled
+// on its WebView but spreads `webViewSettings` AFTER it — so this
+// override wins and re-enables GPU compositing on Android. Module-level
+// so the prop reference stays stable across renders.
+const WEBVIEW_SETTINGS = { androidHardwareAccelerationDisabled: false };
+
 interface ChartFullscreenModalProps {
   visible: boolean;
   onClose: () => void;
@@ -139,6 +145,7 @@ const ChartFullscreenModal: FC<ChartFullscreenModalProps> = ({
               option={option}
               backgroundColor="transparent"
               enableParseStringFunction
+              webViewSettings={WEBVIEW_SETTINGS}
             />
           ) : null}
         </View>

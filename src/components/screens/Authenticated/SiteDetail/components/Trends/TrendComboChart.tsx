@@ -11,6 +11,16 @@ import { buildTrendComboOption } from './echartsOption';
 
 const COMBO_CHART_HEIGHT = 300;
 
+// react-native-echarts-pro hardcodes androidHardwareAccelerationDisabled
+// on its WebView but spreads `webViewSettings` AFTER it — so this
+// override wins and re-enables GPU compositing on Android. Module-level
+// so the prop reference stays stable across renders.
+const WEBVIEW_SETTINGS = { androidHardwareAccelerationDisabled: false };
+
+// Placeholder fed to the (closed) fullscreen modal while the detailed
+// option hasn't been built yet — its chart only mounts when visible.
+const EMPTY_CHART_OPTION = {};
+
 interface TrendComboChartProps {
   rows: TrendDataRow[];
   aggregations: TrendAggregation[];
@@ -59,23 +69,28 @@ const TrendComboChart: FC<TrendComboChartProps> = ({
   );
 
   // Detailed (per-series axes + every x label) — for the full-screen view.
+  // Built lazily: gated on `fullscreen` so the expensive detailed option
+  // isn't rebuilt on every render when the modal was never opened.
   const detailedOption = useMemo(
     () =>
-      buildTrendComboOption(
-        rows,
-        aggregations,
-        windowMs,
-        {
-          textPrimary: scheme.textPrimary,
-          textSecondary: scheme.textSecondary,
-          textTertiary: scheme.textTertiary,
-          border: scheme.border,
-          surface: scheme.surfaceRaised,
-          isDark: scheme.isDark,
-        },
-        { detailed: true },
-      ),
+      fullscreen
+        ? buildTrendComboOption(
+            rows,
+            aggregations,
+            windowMs,
+            {
+              textPrimary: scheme.textPrimary,
+              textSecondary: scheme.textSecondary,
+              textTertiary: scheme.textTertiary,
+              border: scheme.border,
+              surface: scheme.surfaceRaised,
+              isDark: scheme.isDark,
+            },
+            { detailed: true },
+          )
+        : null,
     [
+      fullscreen,
       rows,
       aggregations,
       windowMs,
@@ -115,6 +130,7 @@ const TrendComboChart: FC<TrendComboChartProps> = ({
           option={option}
           backgroundColor="transparent"
           enableParseStringFunction
+          webViewSettings={WEBVIEW_SETTINGS}
         />
       </View>
 
@@ -122,7 +138,7 @@ const TrendComboChart: FC<TrendComboChartProps> = ({
         visible={fullscreen}
         onClose={() => setFullscreen(false)}
         title={title}
-        option={detailedOption}
+        option={detailedOption ?? EMPTY_CHART_OPTION}
         hint="Tap a series in the legend to show or hide it"
       />
     </SectionCard>
@@ -151,4 +167,6 @@ const styles = StyleSheet.create({
   },
 });
 
-export default TrendComboChart;
+// Memoized: re-renders rebuild the chart WebView's ~1MB injected source,
+// so parent renders with unchanged props must bail out here.
+export default React.memo(TrendComboChart);

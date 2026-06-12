@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { EmptyStateCard, Skeleton } from 'src/components/common';
 import { duration, radius as radiusTokens, space, useScheme } from 'src/theme';
-import { TrendConfig } from 'src/types';
+import { TrendConfig, TrendDataRow } from 'src/types';
 import {
   buildTrendRange,
   daysAgo,
@@ -21,6 +21,10 @@ import DateRangePickerModal from '../DateRangePickerModal';
 import ReportFilterPill from '../PerformanceReport/ReportFilterPill';
 import TrendComboChart from './TrendComboChart';
 import { TREND_CHART_HEIGHT } from './helpers';
+
+// Stable fallback while the query has no data yet — a fresh `[]` per
+// render would defeat TrendComboChart's React.memo bail-out.
+const EMPTY_ROWS: TrendDataRow[] = [];
 
 interface TrendSectionProps {
   siteId: string;
@@ -70,7 +74,7 @@ const TrendSection: FC<TrendSectionProps> = ({ siteId, idx, trend }) => {
   // Defer chart mount until the tab transition settles; stagger by index.
   const ready = useInteractionReady(140 + idx * 70);
 
-  const rows = data?.data ?? [];
+  const rows = data?.data ?? EMPTY_ROWS;
 
   const handleSelectPeriod = (next: TrendPeriod) => {
     // For "Custom", just open the picker — defer switching the active

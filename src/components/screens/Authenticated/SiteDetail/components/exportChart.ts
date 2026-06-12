@@ -28,18 +28,28 @@ export const exportChartImage = async (
   backgroundColor: string,
 ): Promise<void> => {
   if (!ref?.getInstance) return;
+  // Tracked outside the race so EVERY exit path (success, no-image,
+  // share, error) clears it — a fire-and-forget setTimeout would keep
+  // the JS timer (and its closure) alive after the export resolves.
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
-    // Race against a timeout — getInstance polls the WebView forever if
-    // the bridge never answers; don't leave the button hanging.
+    // Race against a timeout — the library's getInstance polls the
+    // WebView on a 50ms interval forever if the bridge never answers;
+    // don't leave the button hanging. (That interval lives inside
+    // react-native-echarts-pro and can't be cleared from here — the
+    // timeout only bounds OUR wait.)
     const dataURL = await Promise.race([
       ref.getInstance('getDataURL', {
         type: 'png',
         pixelRatio: 2,
         backgroundColor,
       }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('getDataURL timed out')), 6000),
-      ),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error('getDataURL timed out')),
+          6000,
+        );
+      }),
     ]);
 
     if (typeof dataURL !== 'string' || !dataURL.startsWith('data:image')) {
@@ -57,5 +67,9 @@ export const exportChartImage = async (
   } catch (err) {
     // User-cancelled shares also reject; swallow quietly.
     display('exportChartImage FAILED', String(err));
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
   }
 };
