@@ -12,6 +12,9 @@ import { getValidIdToken } from './auth/session';
 
 export const appAxios = axios.create({
   baseURL: BASE_URL,
+  // Fail fast instead of hanging forever on a dead connection — React Query
+  // surfaces the error and retries per its own policy.
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json',
@@ -38,16 +41,30 @@ export const setGlobalLogout = (logoutFn: () => void) => {
   globalLogout = logoutFn;
 };
 
-export const executeLogout = async () => {
-  try {
-    await cognitoSignOut();
-  } catch (err) {
-    display('executeLogout cognitoSignOut FAILED', inspectError(err));
-  } finally {
-    deleteToken();
-    useUserStore.getState().removeUser();
-    globalLogout?.();
-  }
+// In-flight dedup: N parallel 401 cascades collapse into a single logout, and
+// the executeLogout → globalLogout → executeLogout mutual recursion (useAuth's
+// logout calls back into us) short-circuits on the re-entrant call instead of
+// looping.
+let logoutInFlight: Promise<void> | null = null;
+
+export const executeLogout = (): Promise<void> => {
+  if (logoutInFlight) return logoutInFlight;
+
+  logoutInFlight = (async () => {
+    try {
+      await cognitoSignOut();
+    } catch (err) {
+      display('executeLogout cognitoSignOut FAILED', inspectError(err));
+    } finally {
+      deleteToken();
+      useUserStore.getState().removeUser();
+      globalLogout?.();
+    }
+  })().finally(() => {
+    logoutInFlight = null;
+  });
+
+  return logoutInFlight;
 };
 
 /* -------------------- Request interceptor ----------------------- */

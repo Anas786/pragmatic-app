@@ -1,7 +1,10 @@
 import React, { ReactElement } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { DashboardStackParamList } from 'src/types';
-import { Dashboard, SiteDetail } from 'src/components/screens';
+// Direct file imports — the screens barrel's export-star chain synchronously
+// evaluates the entire Authenticated tree, defeating Metro's inlineRequires.
+import Dashboard from 'src/components/screens/Authenticated/Dashboard';
+import SiteDetail from 'src/components/screens/Authenticated/SiteDetail';
 import SLDFullscreenScreen from 'src/components/screens/Authenticated/SiteDetail/components/SLDFullscreenScreen';
 
 const Stack = createNativeStackNavigator<DashboardStackParamList>();

@@ -36,8 +36,12 @@ export const display = (
   preview?: string,
   important = false,
 ) => {
-  // eslint-disable-next-line no-console
-  console.log(`[${name}]`, preview ?? '', value);
+  // Dev-only: serializing full payloads to console in release builds costs
+  // real CPU time on Hermes (Reactotron is already dev-only via the tron ref).
+  if (__DEV__) {
+    // eslint-disable-next-line no-console
+    console.log(`[${name}]`, preview ?? '', value);
+  }
   tron()?.display?.({
     name,
     preview: preview ?? (typeof value === 'string' ? value : undefined),

@@ -11,6 +11,14 @@ export const siteDataQueryKey = (siteId: string) =>
   ['site', 'all', siteId] as const;
 
 /**
+ * Tabs unmount on switch (ViewsContent), so each switch re-mounts a
+ * subscriber. Keep staleTime generous so switching tabs serves cache instead
+ * of refiring the large /protected/data/all payload mid-transition. Must stay
+ * below gcTime (5 min) or the entry would be collected while still fresh.
+ */
+const SITE_DATA_STALE_TIME = 1000 * 60 * 3;
+
+/**
  * Subscribes the calling component to /protected/data/all/{siteId}.
  *
  * React Query gives us the "store everywhere" property the requirement
@@ -21,8 +29,10 @@ export const siteDataQueryKey = (siteId: string) =>
  *
  * - `enabled` short-circuits when no siteId is supplied (avoids an
  *   accidental fetch on first mount before navigation params arrive).
- * - 30 s `staleTime` matches "live" data semantics — we don't refetch on
- *   every tab switch but we do on screen re-focus past the threshold.
+ * - 3 min `staleTime` — tabs unmount on switch, so a short staleTime made
+ *   every tab switch past the threshold refetch the full payload
+ *   mid-transition. 3 minutes keeps tab switches cache-served while still
+ *   refreshing on screen re-focus past the threshold.
  * - 401s are intentionally not retried at the React Query layer; the axios
  *   response interceptor already does a single refresh-and-retry before
  *   logging the user out, so a layered retry would be redundant.
@@ -32,7 +42,7 @@ export const useSiteData = (siteId: string | undefined | null) =>
     queryKey: siteDataQueryKey(siteId ?? ''),
     queryFn: () => getSiteAllData(siteId as string),
     enabled: !!siteId,
-    staleTime: 1000 * 30,
+    staleTime: SITE_DATA_STALE_TIME,
     gcTime: 1000 * 60 * 5,
     retry: (failureCount, error: any) => {
       const status = error?.response?.status;
@@ -56,7 +66,7 @@ export const usePrefetchSiteData = () => {
     queryClient.prefetchQuery({
       queryKey: siteDataQueryKey(siteId),
       queryFn: () => getSiteAllData(siteId),
-      staleTime: 1000 * 30,
+      staleTime: SITE_DATA_STALE_TIME,
     });
   };
 };

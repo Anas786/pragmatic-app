@@ -23,19 +23,34 @@ import {
   DefaultTheme,
   NavigationContainer,
 } from '@react-navigation/native';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Orientation from 'react-native-orientation-locker';
 import RNBootSplash from 'react-native-bootsplash';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import NetInfo from '@react-native-community/netinfo';
+import {
+  QueryClient,
+  QueryClientProvider,
+  focusManager,
+  onlineManager,
+} from '@tanstack/react-query';
 import { Routes } from 'src/routes';
 import { useBootstrap, useThemeStore } from 'src/hooks';
 import FlashMessage from 'react-native-flash-message';
 
 const queryClient = new QueryClient();
 
+// React Query ships with browser-oriented online detection; on React Native
+// it must be fed from NetInfo so queries pause while offline and refetch on
+// reconnect. Module scope — registered once for the app's lifetime.
+onlineManager.setEventListener((setOnline) =>
+  NetInfo.addEventListener((state) => {
+    setOnline(!!state.isConnected);
+  }),
+);
+
 function App(): React.JSX.Element {
-  const [isReady, setIsReady] = useState(false);
   const { isDark, colors } = useThemeStore();
 
   // Cold-start bootstrap: fetch /public/config/params-mapping (and any
@@ -61,24 +76,18 @@ function App(): React.JSX.Element {
     Orientation.lockToPortrait();
   }, []);
 
+  // React Query's focusManager has no native notion of "window focus" — wire
+  // it to AppState so backgrounding pauses refetch-on-focus and foregrounding
+  // re-triggers it (the RN equivalent of the browser visibility event).
   useEffect(() => {
-    initializeApp();
+    const subscription = AppState.addEventListener(
+      'change',
+      (status: AppStateStatus) => {
+        focusManager.setFocused(status === 'active');
+      },
+    );
+    return () => subscription.remove();
   }, []);
-
-  const initializeApp = async () => {
-    try {
-      setIsReady(true);
-    } catch (error) {
-      console.error('Error initializing app:', error);
-      // Continue with default settings if initialization fails
-      setIsReady(true);
-    }
-  };
-
-  // Don't render until initialization is complete
-  if (!isReady) {
-    return <></>;
-  }
 
   return (
     <GestureHandlerRootView style={{flex: 1}}>

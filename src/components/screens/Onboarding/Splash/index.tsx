@@ -1,4 +1,4 @@
-import React, { FC, useEffect } from 'react';
+import React, { FC, useEffect, useRef } from 'react';
 import { Image, StatusBar, StyleSheet, View } from 'react-native';
 import { CommonActions, useNavigation } from '@react-navigation/native';
 import LinearGradient from 'react-native-linear-gradient';
@@ -142,6 +142,10 @@ const Splash: FC = () => {
   const navigation = useNavigation<any>();
   const { status } = useAuth();
 
+  // Anchor the minimum splash duration to MOUNT, not to auth resolution —
+  // otherwise every cold start pays auth time + the full MIN_SPLASH_MS.
+  const mountedAtRef = useRef(Date.now());
+
   // Entrance + ambient drivers
   const logoScale = useSharedValue(0.7);
   const logoOpacity = useSharedValue(0);
@@ -177,6 +181,11 @@ const Splash: FC = () => {
   useEffect(() => {
     if (status === 'loading') return;
 
+    // Auth resolution already consumed part of the splash window — only wait
+    // for whatever remains of MIN_SPLASH_MS since mount.
+    const elapsed = Date.now() - mountedAtRef.current;
+    const remaining = Math.max(0, MIN_SPLASH_MS - elapsed);
+
     const timer = setTimeout(() => {
       if (status === 'authenticated') {
         navigation.dispatch(
@@ -190,7 +199,7 @@ const Splash: FC = () => {
           }),
         );
       }
-    }, MIN_SPLASH_MS);
+    }, remaining);
 
     return () => clearTimeout(timer);
   }, [navigation, status]);

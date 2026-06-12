@@ -1,5 +1,5 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
-import { decodeJwt, isTokenExpired } from 'src/utils/jwt';
+import { decodeJwt } from 'src/utils/jwt';
 import { display, inspectError } from 'src/utils/logger';
 
 /**
@@ -43,8 +43,13 @@ const EXPIRY_BUFFER_SECONDS = 60;
 let cached: SessionTokens | null = null;
 let inflight: Promise<SessionTokens | null> | null = null;
 
+// Freshness check against the expiry we decoded ONCE when the token was
+// cached (fetchAndCache) — avoids a full base64 JWT decode on every
+// authenticated request. `expiresAt` is keyed to `idToken` by construction:
+// both are only ever written together. expiresAt=0 (decode failure) is never
+// fresh, so we fall through to fetchAuthSession, same as before.
 const isFresh = (tokens: SessionTokens): boolean =>
-  !isTokenExpired(tokens.idToken, EXPIRY_BUFFER_SECONDS);
+  Date.now() < (tokens.expiresAt - EXPIRY_BUFFER_SECONDS) * 1000;
 
 const fetchAndCache = async (
   forceRefresh: boolean,

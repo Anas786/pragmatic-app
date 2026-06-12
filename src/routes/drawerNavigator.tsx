@@ -10,12 +10,12 @@ import { useLogout } from 'src/hooks/useLogout';
 import { useUserStore } from 'src/hooks/useUserStore';
 import { useThemeStore } from 'src/hooks/useThemeStore';
 import { DrawerParamList, IconProps } from 'src/types';
-import {
-  AboutUs,
-  ContactUs,
-  Profile,
-  TermsAndConditions,
-} from 'src/components/screens';
+// Direct file imports — the screens barrel's export-star chain synchronously
+// evaluates the entire Authenticated tree, defeating Metro's inlineRequires.
+import AboutUs from 'src/components/screens/Authenticated/AboutUs';
+import ContactUs from 'src/components/screens/Authenticated/ContactUs';
+import Profile from 'src/components/screens/Authenticated/Profile';
+import TermsAndConditions from 'src/components/screens/Authenticated/TermsAndConditions';
 import { DashboardStack } from './dashboardStack';
 import {
   ACCENT_GREEN,
