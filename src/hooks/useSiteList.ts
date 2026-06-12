@@ -1,5 +1,9 @@
-import { useInfiniteQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import {
+  InfiniteData,
+  useInfiniteQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+import { useCallback, useMemo } from 'react';
 import {
   DEFAULT_SITE_LIST_PAGE_SIZE,
   getSiteList,
@@ -35,6 +39,13 @@ interface UseSiteListResult {
   error: Error | null;
   fetchNextPage: () => void;
   refetch: () => void;
+  /**
+   * Pull-to-refresh path. Unlike `refetch()` — which refetches EVERY
+   * cached page sequentially (7 pages deep = 7 serial round-trips) —
+   * this prunes the cache down to page one first, so only a single
+   * request fires. Deeper pages reload lazily as the user scrolls.
+   */
+  refresh: () => void;
 }
 
 /**
@@ -50,6 +61,7 @@ export const useSiteList = (
   options: UseSiteListOptions = {},
 ): UseSiteListResult => {
   const { pageSize = DEFAULT_SITE_LIST_PAGE_SIZE, q } = options;
+  const queryClient = useQueryClient();
   // Normalise once so the cache key is stable across whitespace-only
   // changes ("foo " vs "foo" hit the same cache entry).
   const trimmedQ = q?.trim() ?? '';
@@ -80,6 +92,26 @@ export const useSiteList = (
     },
   });
 
+  const { refetch } = query;
+
+  // Pull-to-refresh: drop every cached page beyond the first, THEN refetch.
+  // The remaining page keeps the list rendered (no skeleton flash) and the
+  // refetch only fires a single page-1 request instead of replaying the
+  // whole pagination history serially.
+  const refresh = useCallback(() => {
+    queryClient.setQueryData<InfiniteData<ISiteListResponse, number>>(
+      [...SITE_LIST_BASE_KEY, searchKey, pageSize],
+      data =>
+        data && data.pages.length > 1
+          ? {
+              pages: data.pages.slice(0, 1),
+              pageParams: data.pageParams.slice(0, 1),
+            }
+          : data,
+    );
+    refetch();
+  }, [queryClient, searchKey, pageSize, refetch]);
+
   // Flatten loaded pages into a single array for the FlatList. Memoised
   // so the array reference is stable across unrelated re-renders, which
   // keeps the FlatList's per-row memo cells from re-evaluating.
@@ -109,5 +141,6 @@ export const useSiteList = (
       }
     },
     refetch: query.refetch,
+    refresh,
   };
 };

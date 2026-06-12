@@ -50,6 +50,10 @@ import { DownArrow, UpArrow } from 'src/assets/icons';
 
 const STAGGER_MS = 60;
 const STAGGER_CAP = 6;
+// Only the first ANIM_LIMIT rows get the entrance animation — rows that
+// mount later during scroll (window recycling) render as plain Views.
+// Matches STAGGER_CAP so every animated row also gets a staggered delay.
+const ANIM_LIMIT = 6;
 
 const resolveSourceColor = (card: ISiteCard): string =>
   energyPalette[sourceTokenFromName(card.name) ?? 'solar'] ?? card.color;
@@ -216,6 +220,11 @@ export const SiteCard: FC<SiteCardProps> = memo(
     const themed = useThemedStyles(createCardStyles);
     const [logoFailed, setLogoFailed] = useState(false);
     const [expanded, setExpanded] = useState(false);
+    // Frozen at first mount: if `index` later crosses the ANIM_LIMIT
+    // boundary (search narrowing, refresh pruning), the wrapper element
+    // type must not flip — that would remount the card and drop
+    // `expanded`/`logoFailed` state.
+    const [animateEntrance] = useState(() => index < ANIM_LIMIT);
     const logoUrl = !logoFailed ? buildSiteLogoUrl(site) : null;
     // Stable identity (the `?? []` would otherwise be a new array each
     // render) so the heroCard/satellites memos below don't recompute.
@@ -239,159 +248,169 @@ export const SiteCard: FC<SiteCardProps> = memo(
       ? shortSourceLabel(heroCard.name).toUpperCase()
       : '';
 
-    return (
-      <Animated.View
-        entering={FadeInDown.duration(duration.slow)
-          .delay(Math.min(index, STAGGER_CAP) * STAGGER_MS)
-          .springify()
-          .damping(22)
-          .mass(1)}>
-        <PressableScale
-          onPress={onPress}
-          accessibilityLabel={`Open ${site.name}`}
-          haptic="select">
-          <Surface
-            elevation="md"
-            radius="xl"
-            background={scheme.surface}
-            padding={space.lg}
-            style={styles.card}>
-            <CardHeader>
-              <SiteAvatarRing online={isOnline}>
-                <SiteAvatar>
-                  {logoUrl ? (
-                    <Image
-                      source={{ uri: logoUrl }}
-                      style={styles.avatarImage}
-                      onError={() => setLogoFailed(true)}
-                    />
-                  ) : (
-                    <AppText
-                      fontSize={FONT_SIZE_SM}
-                      bold
-                      color={scheme.textSecondary}>
-                      {site.name.substring(0, 2).toUpperCase()}
-                    </AppText>
-                  )}
-                </SiteAvatar>
-              </SiteAvatarRing>
-
-              <CardHeaderText>
-                <AppText
-                  fontSize={FONT_SIZE_SM}
-                  semi_bold
-                  color={scheme.textPrimary}
-                  numberOfLines={1}>
-                  {site.name}
-                </AppText>
-                <StatusRow>
-                  <Dot
-                    color={isOnline ? scheme.brand : scheme.textTertiary}
-                    size={6}
+    const body = (
+      <PressableScale
+        onPress={onPress}
+        accessibilityLabel={`Open ${site.name}`}
+        haptic="select">
+        <Surface
+          elevation="md"
+          radius="xl"
+          background={scheme.surface}
+          padding={space.lg}
+          style={styles.card}>
+          <CardHeader>
+            <SiteAvatarRing online={isOnline}>
+              <SiteAvatar>
+                {logoUrl ? (
+                  <Image
+                    source={{ uri: logoUrl }}
+                    style={styles.avatarImage}
+                    onError={() => setLogoFailed(true)}
                   />
+                ) : (
                   <AppText
-                    fontSize={FONT_SIZE_XXS}
-                    color={scheme.textSecondary}
-                    numberOfLines={1}>
-                    {isOnline ? 'Online' : site.state ?? 'Unknown'}
-                    {' · '}
-                    {formatRelativeTime(site.dataLastUpdate)}
-                  </AppText>
-                </StatusRow>
-              </CardHeaderText>
-
-              {site.controller ? (
-                <TintedPill
-                  color={scheme.accentGold}
-                  alpha="22"
-                  paddingX={space.sm}
-                  paddingY={4}>
-                  <AppText
-                    fontSize={FONT_SIZE_XXS}
-                    semi_bold
-                    color={scheme.accentGold}>
-                    PRO
-                  </AppText>
-                </TintedPill>
-              ) : null}
-            </CardHeader>
-
-            {heroCard ? (
-              <HeroBlock heroColor={heroColor}>
-                <HeroTopRow>
-                  <HeroLiveBadge>
-                    <PulseDot color={heroColor} size={8} />
-                    <OverlineLabel color={heroColor}>
-                      LIVE · {heroLabel}
-                    </OverlineLabel>
-                  </HeroLiveBadge>
-                  <HeroSparkline color={heroColor} id={site.id} />
-                </HeroTopRow>
-                <HeroValueRow>
-                  <AppText
-                    fontSize={FONT_SIZE_HUGE}
+                    fontSize={FONT_SIZE_SM}
                     bold
-                    color={heroColor}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.7}>
-                    {formatCompact(heroCard.value)}
-                  </AppText>
-                  <AppText
-                    fontSize={FONT_SIZE_XS}
                     color={scheme.textSecondary}>
-                    {heroCard.unit}
+                    {site.name.substring(0, 2).toUpperCase()}
                   </AppText>
-                </HeroValueRow>
-              </HeroBlock>
-            ) : (
-              <NoTelemetry>
-                <AppText fontSize={FONT_SIZE_XXS} color={scheme.textTertiary}>
-                  No live telemetry
-                </AppText>
-              </NoTelemetry>
-            )}
+                )}
+              </SiteAvatar>
+            </SiteAvatarRing>
 
-            {visibleSatellites.length > 0 ? (
-              <SatellitesContainer>
-                {visibleSatellites.map((card, i) => (
-                  <MetricChip
-                    key={`${site.id}-sat-${i}`}
-                    card={card}
-                    surfaceColor={scheme.surfaceMuted}
-                    textPrimary={scheme.textPrimary}
-                    textSecondary={scheme.textSecondary}
-                    textTertiary={scheme.textTertiary}
-                  />
-                ))}
-              </SatellitesContainer>
-            ) : null}
-
-            {hasOverflow ? (
-              <PressableScale
-                onPress={() => setExpanded(prev => !prev)}
-                haptic="select"
-                accessibilityLabel={
-                  expanded ? 'Collapse metric list' : 'Expand metric list'
-                }
-                style={themed.expandToggle}>
+            <CardHeaderText>
+              <AppText
+                fontSize={FONT_SIZE_SM}
+                semi_bold
+                color={scheme.textPrimary}
+                numberOfLines={1}>
+                {site.name}
+              </AppText>
+              <StatusRow>
+                <Dot
+                  color={isOnline ? scheme.brand : scheme.textTertiary}
+                  size={6}
+                />
                 <AppText
                   fontSize={FONT_SIZE_XXS}
-                  medium
-                  color={scheme.textSecondary}>
-                  {expanded ? 'Show less' : `Show all ${satellites.length}`}
+                  color={scheme.textSecondary}
+                  numberOfLines={1}>
+                  {isOnline ? 'Online' : site.state ?? 'Unknown'}
+                  {' · '}
+                  {formatRelativeTime(site.dataLastUpdate)}
                 </AppText>
-                {expanded ? (
-                  <UpArrow size={ICON_SIZE_MD} color={scheme.textSecondary} />
-                ) : (
-                  <DownArrow size={ICON_SIZE_MD} color={scheme.textSecondary} />
-                )}
-              </PressableScale>
+              </StatusRow>
+            </CardHeaderText>
+
+            {site.controller ? (
+              <TintedPill
+                color={scheme.accentGold}
+                alpha="22"
+                paddingX={space.sm}
+                paddingY={4}>
+                <AppText
+                  fontSize={FONT_SIZE_XXS}
+                  semi_bold
+                  color={scheme.accentGold}>
+                  PRO
+                </AppText>
+              </TintedPill>
             ) : null}
-          </Surface>
-        </PressableScale>
-      </Animated.View>
+          </CardHeader>
+
+          {heroCard ? (
+            <HeroBlock heroColor={heroColor}>
+              <HeroTopRow>
+                <HeroLiveBadge>
+                  <PulseDot color={heroColor} size={8} />
+                  <OverlineLabel color={heroColor}>
+                    LIVE · {heroLabel}
+                  </OverlineLabel>
+                </HeroLiveBadge>
+                <HeroSparkline color={heroColor} id={site.id} />
+              </HeroTopRow>
+              <HeroValueRow>
+                <AppText
+                  fontSize={FONT_SIZE_HUGE}
+                  bold
+                  color={heroColor}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.7}>
+                  {formatCompact(heroCard.value)}
+                </AppText>
+                <AppText
+                  fontSize={FONT_SIZE_XS}
+                  color={scheme.textSecondary}>
+                  {heroCard.unit}
+                </AppText>
+              </HeroValueRow>
+            </HeroBlock>
+          ) : (
+            <NoTelemetry>
+              <AppText fontSize={FONT_SIZE_XXS} color={scheme.textTertiary}>
+                No live telemetry
+              </AppText>
+            </NoTelemetry>
+          )}
+
+          {visibleSatellites.length > 0 ? (
+            <SatellitesContainer>
+              {visibleSatellites.map((card, i) => (
+                <MetricChip
+                  key={`${site.id}-sat-${i}`}
+                  card={card}
+                  surfaceColor={scheme.surfaceMuted}
+                  textPrimary={scheme.textPrimary}
+                  textSecondary={scheme.textSecondary}
+                  textTertiary={scheme.textTertiary}
+                />
+              ))}
+            </SatellitesContainer>
+          ) : null}
+
+          {hasOverflow ? (
+            <PressableScale
+              onPress={() => setExpanded(prev => !prev)}
+              haptic="select"
+              accessibilityLabel={
+                expanded ? 'Collapse metric list' : 'Expand metric list'
+              }
+              style={themed.expandToggle}>
+              <AppText
+                fontSize={FONT_SIZE_XXS}
+                medium
+                color={scheme.textSecondary}>
+                {expanded ? 'Show less' : `Show all ${satellites.length}`}
+              </AppText>
+              {expanded ? (
+                <UpArrow size={ICON_SIZE_MD} color={scheme.textSecondary} />
+              ) : (
+                <DownArrow size={ICON_SIZE_MD} color={scheme.textSecondary} />
+              )}
+            </PressableScale>
+          ) : null}
+        </Surface>
+      </PressableScale>
     );
+
+    // Cap the entrance animation to ANIM_LIMIT — same convention as
+    // InverterCard / AlarmRow. Beyond the cap, FadeInDown would replay a
+    // ~320ms springified entrance on every row mounted mid-scroll.
+    if (animateEntrance) {
+      return (
+        <Animated.View
+          entering={FadeInDown.duration(duration.slow)
+            .delay(Math.min(index, STAGGER_CAP) * STAGGER_MS)
+            .springify()
+            .damping(22)
+            .mass(1)}>
+          {body}
+        </Animated.View>
+      );
+    }
+    return <View>{body}</View>;
   },
   // NOTE: `onPress` is intentionally NOT compared. The list passes a
   // fresh inline closure per render (`() => handleCardPress(item)`), so

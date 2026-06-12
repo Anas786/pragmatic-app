@@ -7,25 +7,28 @@ import React, {
   useState,
 } from 'react';
 import {
-  Animated as RNAnimated,
   FlatList,
   Image,
   Keyboard,
   ListRenderItem,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
   RefreshControl,
   StatusBar,
   StyleSheet,
   View,
 } from 'react-native';
+import Animated, {
+  SharedValue,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { DrawerActions, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
   ActionBtn,
   AppText,
   Fab,
-  FabWrap,
   FooterLoader,
   HamburgerIcon,
   IconButton,
@@ -98,17 +101,32 @@ const Separator: FC = () => <View style={styles.separator} />;
 
 interface ScrollToTopFabProps {
   onPress: () => void;
-  opacity: RNAnimated.Value;
+  scrollY: SharedValue<number>;
 }
 
-const ScrollToTopFab: FC<ScrollToTopFabProps> = ({ onPress, opacity }) => {
+/** Permanently mounted — visibility is derived from the list's scroll offset
+ *  entirely on the UI thread (no per-frame setState / React commit while the
+ *  user is mid-gesture). `pointerEvents` flips with visibility so the hidden
+ *  FAB never swallows taps. */
+const ScrollToTopFab: FC<ScrollToTopFabProps> = ({ onPress, scrollY }) => {
   const scheme = useScheme();
+  const animatedStyle = useAnimatedStyle(() => {
+    const visible = scrollY.value > SCROLL_TO_TOP_THRESHOLD;
+    return {
+      opacity: withTiming(visible ? 1 : 0, { duration: duration.fast }),
+      transform: [
+        { translateY: withTiming(visible ? 0 : 16, { duration: duration.fast }) },
+        { scale: withTiming(visible ? 1 : 0.9, { duration: duration.fast }) },
+      ],
+      pointerEvents: visible ? 'auto' : 'none',
+    };
+  });
   return (
-    <FabWrap opacity={opacity}>
+    <Animated.View style={[styles.fabWrap, animatedStyle]}>
       <Fab onPress={onPress} accessibilityLabel="Scroll to top" haptic="tap">
         <UpArrow size={ICON_SIZE_LG} color={scheme.textOnBrand} />
       </Fab>
-    </FabWrap>
+    </Animated.View>
   );
 };
 
@@ -125,28 +143,16 @@ const Dashboard: FC = () => {
   const scheme = useScheme();
 
   const listRef = useRef<FlatList<SiteRow>>(null);
-  const fabOpacity = useRef(new RNAnimated.Value(0)).current;
-  const [fabVisible, setFabVisible] = useState(false);
+  const scrollY = useSharedValue(0);
 
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const searchBarRef = useRef<SearchBarHandle>(null);
 
-  const handleScroll = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const y = event.nativeEvent.contentOffset.y;
-      const shouldShow = y > SCROLL_TO_TOP_THRESHOLD;
-      setFabVisible(prev => {
-        if (prev === shouldShow) return prev;
-        RNAnimated.timing(fabOpacity, {
-          toValue: shouldShow ? 1 : 0,
-          duration: duration.fast,
-          useNativeDriver: true,
-        }).start();
-        return shouldShow;
-      });
-    },
-    [fabOpacity],
-  );
+  // UI-thread scroll tracking — the FAB reads this shared value directly,
+  // so scrolling never triggers a React commit.
+  const scrollHandler = useAnimatedScrollHandler(event => {
+    scrollY.value = event.contentOffset.y;
+  });
 
   const scrollToTop = useCallback(() => {
     listRef.current?.scrollToOffset({ offset: 0, animated: true });
@@ -161,6 +167,7 @@ const Dashboard: FC = () => {
     hasNextPage,
     fetchNextPage,
     refetch,
+    refresh,
     error,
   } = useSiteList({ q: debouncedQuery });
 
@@ -211,7 +218,10 @@ const Dashboard: FC = () => {
     if (hasNextPage && !isFetchingNextPage) fetchNextPage();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const ListFooter = useCallback(() => {
+  // Memoised ELEMENTS (not component functions) — a fresh component identity
+  // passed to ListFooterComponent/ListEmptyComponent remounts the whole
+  // subtree on every Dashboard render, restarting skeleton shimmer loops.
+  const ListFooter = useMemo(() => {
     if (isFetchingNextPage) {
       return (
         <FooterLoader>
@@ -253,7 +263,7 @@ const Dashboard: FC = () => {
     [total, scheme.textTertiary],
   );
 
-  const ListEmpty = useCallback(() => {
+  const ListEmpty = useMemo(() => {
     if (isLoading) {
       return (
         <SkeletonStack>
@@ -315,7 +325,16 @@ const Dashboard: FC = () => {
         </AppText>
       </StatusContainer>
     );
-  }, [isLoading, error, debouncedQuery, clearSearch, scheme, refetch]);
+  }, [
+    isLoading,
+    error,
+    debouncedQuery,
+    clearSearch,
+    refetch,
+    scheme.textPrimary,
+    scheme.textSecondary,
+    scheme.textOnBrand,
+  ]);
 
   return (
     <ScreenContainer>
@@ -352,7 +371,7 @@ const Dashboard: FC = () => {
         />
       </SearchPinned>
 
-      <FlatList
+      <Animated.FlatList
         ref={listRef}
         data={rows}
         keyExtractor={keyExtractor}
@@ -368,12 +387,12 @@ const Dashboard: FC = () => {
         refreshControl={
           <RefreshControl
             refreshing={!isLoading && isFetching && !isFetchingNextPage}
-            onRefresh={refetch}
+            onRefresh={refresh}
             tintColor={scheme.brand}
             colors={[scheme.brand]}
           />
         }
-        onScroll={handleScroll}
+        onScroll={scrollHandler}
         scrollEventThrottle={16}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
@@ -383,9 +402,7 @@ const Dashboard: FC = () => {
         removeClippedSubviews
       />
 
-      {fabVisible && (
-        <ScrollToTopFab onPress={scrollToTop} opacity={fabOpacity} />
-      )}
+      <ScrollToTopFab onPress={scrollToTop} scrollY={scrollY} />
     </ScreenContainer>
   );
 };
@@ -408,6 +425,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingTop: space.md,
     paddingBottom: space.sm,
+  },
+  // Mirrors the positioning the shared FabWrap used to provide — kept local
+  // because the FAB is now driven by a Reanimated shared value, not an
+  // RN Animated.Value.
+  fabWrap: {
+    position: 'absolute',
+    right: space.lg,
+    bottom: space.xl,
   },
 });
 
