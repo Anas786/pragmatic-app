@@ -1,5 +1,5 @@
 /**
- * LiveParameterView — v4 (modern bento, crash-safe).
+ * LiveParameterView — v5 (modern bento, crash-safe, render-cheap).
  *
  * Lessons baked in from previous iterations that crashed:
  *   - No per-tile `Animated.View` / `FadeInDown`. At 100+ tiles the
@@ -20,6 +20,25 @@
  *     press, not on mount/scroll, so it's bounded.
  *   - Single file. Prior subdirectory split made it hard to reason
  *     about which pieces were animated.
+ *
+ * v5 additions (re-render + commit-size budget):
+ *   - `ParamTile` is `React.memo`'d and receives only referentially
+ *     stable props (`param`, `themed`); scheme colors come from its own
+ *     `useScheme()` call. Keystrokes / pill taps / sort taps no longer
+ *     re-render every mounted tile.
+ *   - Display strings (`displayValue` / `displayTime`) and the per-tile
+ *     gradient color pair are precomputed once per fetch inside
+ *     `extractLiveParams` against ONE module-level `Intl.NumberFormat`.
+ *     Hermes builds a fresh collator per `toLocaleString` call, so doing
+ *     that inside 142 tile renders was pure waste — tiles now render
+ *     plain strings with zero `Intl`/`Date` work.
+ *   - The search `TextInput` stays instantly controlled, but the value
+ *     that feeds `filtered` is a ~200 ms debounced copy — filtering
+ *     142 params per keystroke is gone.
+ *   - Tiles mount progressively: after `useInteractionReady`, a
+ *     `requestAnimationFrame` counter reveals ~20 tiles per frame until
+ *     all are shown, so no single React commit exceeds ~20 tiles. The
+ *     counter resets when the category / search changes.
  *
  *  ┌────────────────────────────────────────────────┐
  *  │ ● LIVE METRICS · 142          [⟳]              │
@@ -42,6 +61,7 @@ import React, {
   FC,
   ReactNode,
   useCallback,
+  useEffect,
   useMemo,
   useState,
 } from 'react';
@@ -114,6 +134,12 @@ interface LiveParameter {
   category: CategoryKey;
   categoryColor: string;
   categoryLabel: string;
+  /** Precomputed in `extractLiveParams` — tiles render this verbatim. */
+  displayValue: string;
+  /** Precomputed in `extractLiveParams` — tiles render this verbatim. */
+  displayTime: string;
+  /** Precomputed `[tint, transparent]` pair for the tile's gradient sweep. */
+  gradientColors: [string, string];
 }
 
 const SORT_LABELS: Record<SortKey, string> = {
@@ -124,6 +150,23 @@ const SORT_LABELS: Record<SortKey, string> = {
 
 const GRADIENT_TL = { x: 0, y: 0 } as const;
 const GRADIENT_BR = { x: 1, y: 1 } as const;
+
+/** Debounce window between a search keystroke and the filter pass. */
+const SEARCH_DEBOUNCE_MS = 200;
+
+/** Max tiles added per frame during the progressive reveal (task 4). */
+const MOUNT_CHUNK = 20;
+
+/**
+ * ONE shared formatter. On Hermes, `value.toLocaleString(undefined, opts)`
+ * constructs a fresh `Intl.NumberFormat` per call — fine once, brutal
+ * inside 142 tile renders. Hoisted to module scope and reused for every
+ * parameter during extraction.
+ */
+const VALUE_FORMATTER = new Intl.NumberFormat(undefined, {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
 /**
  * Section-level entrance animation. Five wrappers max (header, search,
@@ -164,17 +207,14 @@ const resolveParamName = (
   return undefined;
 };
 
+/** Called once per parameter during extraction — never from render. */
 const formatValue = (value: LiveParameter['value']): string => {
   if (value === null || value === undefined || value === '') return '—';
-  if (typeof value === 'number') {
-    return value.toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-  }
+  if (typeof value === 'number') return VALUE_FORMATTER.format(value);
   return String(value);
 };
 
+/** Called once per parameter during extraction — never from render. */
 const formatClockTime = (ms: number | undefined): string => {
   if (!ms || !Number.isFinite(ms) || ms <= 0) return '—';
   const d = new Date(ms);
@@ -239,6 +279,11 @@ const extractLiveParams = (
       category: cat.key,
       categoryColor: cat.color,
       categoryLabel: cat.label,
+      // Bake the display strings + gradient pair here, once per fetch,
+      // so the (memoised) tiles do zero Intl/Date/concat work in render.
+      displayValue: formatValue(value),
+      displayTime: formatClockTime(updateAt),
+      gradientColors: [cat.color + '22', cat.color + '00'],
     });
   }
   return out;
@@ -248,45 +293,54 @@ const extractLiveParams = (
 
 interface ParamTileProps {
   param: LiveParameter;
-  scheme: Scheme;
   themed: ReturnType<typeof useThemedStyles<ReturnType<typeof createStyles>>>;
 }
 
-const ParamTile: FC<ParamTileProps> = ({ param, scheme, themed }) => (
-  <View style={themed.tile}>
-    <LinearGradient
-      colors={[param.categoryColor + '22', param.categoryColor + '00']}
-      start={GRADIENT_TL}
-      end={GRADIENT_BR}
-      style={StyleSheet.absoluteFillObject}
-      pointerEvents="none"
-    />
-    <TintedPill color={param.categoryColor} alpha="24" row paddingY={3}>
-      <Dot color={param.categoryColor} size={6} />
-      <AppText fontSize={FONT_SIZE_XXS} bold color={param.categoryColor}>
-        {param.categoryLabel.toUpperCase()}
+/**
+ * Memoised — both props are referentially stable (`param` objects survive
+ * filter/sort re-shuffles; `themed` is a memoised StyleSheet), so search
+ * keystrokes and pill/sort taps skip every already-mounted tile. Scheme
+ * colors are read via the tile's own `useScheme()` (stable frozen object)
+ * instead of a prop, so the memo doesn't depend on the parent's scheme.
+ */
+const ParamTile: FC<ParamTileProps> = React.memo(({ param, themed }) => {
+  const scheme = useScheme();
+  return (
+    <View style={themed.tile}>
+      <LinearGradient
+        colors={param.gradientColors}
+        start={GRADIENT_TL}
+        end={GRADIENT_BR}
+        style={StyleSheet.absoluteFillObject}
+        pointerEvents="none"
+      />
+      <TintedPill color={param.categoryColor} alpha="24" row paddingY={3}>
+        <Dot color={param.categoryColor} size={6} />
+        <AppText fontSize={FONT_SIZE_XXS} bold color={param.categoryColor}>
+          {param.categoryLabel.toUpperCase()}
+        </AppText>
+      </TintedPill>
+      <AppText
+        fontSize={FONT_SIZE_XXS}
+        medium
+        color={scheme.textTertiary}
+        numberOfLines={2}
+        style={styles.tileName}>
+        {param.name}
       </AppText>
-    </TintedPill>
-    <AppText
-      fontSize={FONT_SIZE_XXS}
-      medium
-      color={scheme.textTertiary}
-      numberOfLines={2}
-      style={styles.tileName}>
-      {param.name}
-    </AppText>
-    <AppText
-      fontSize={FONT_SIZE_LG}
-      bold
-      color={scheme.textPrimary}
-      numberOfLines={1}>
-      {formatValue(param.value)}
-    </AppText>
-    <AppText fontSize={FONT_SIZE_XXS} color={scheme.textSecondary}>
-      {formatClockTime(param.updateAt)}
-    </AppText>
-  </View>
-);
+      <AppText
+        fontSize={FONT_SIZE_LG}
+        bold
+        color={scheme.textPrimary}
+        numberOfLines={1}>
+        {param.displayValue}
+      </AppText>
+      <AppText fontSize={FONT_SIZE_XXS} color={scheme.textSecondary}>
+        {param.displayTime}
+      </AppText>
+    </View>
+  );
+});
 
 interface SkeletonTileProps {
   themed: ReturnType<typeof useThemedStyles<ReturnType<typeof createStyles>>>;
@@ -391,13 +445,23 @@ const LiveParameterView: FC = () => {
   const paramsMapping = useParamsMapping();
   // Defer the tile-grid mount so the tab-switch animation and the
   // (cheap) header always commit first. On first visit the user sees
-  // the header + skeleton instantly, and the 100+ tiles arrive
-  // ~120 ms later instead of blocking the JS thread mid-morph.
+  // the header + skeleton instantly; once interactions settle the
+  // tiles stream in MOUNT_CHUNK per frame (see the chunked progressive
+  // mount block below) instead of landing as one 100+-tile commit.
   const ready = useInteractionReady();
 
   const [query, setQuery] = useState('');
+  // Debounced copy of `query` — the TextInput stays instantly controlled
+  // while the (filter + sort over 100+ params) pass runs at most once per
+  // SEARCH_DEBOUNCE_MS instead of per keystroke.
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [activeCategory, setActiveCategory] = useState<CategoryKey>('all');
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [query]);
 
   const categories: CategoryDef[] = useMemo(
     () => [
@@ -479,7 +543,7 @@ const LiveParameterView: FC = () => {
   );
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = debouncedQuery.trim().toLowerCase();
     let list =
       activeCategory === 'all'
         ? params
@@ -503,9 +567,44 @@ const LiveParameterView: FC = () => {
       return (b.updateAt ?? 0) - (a.updateAt ?? 0);
     });
     return sorted;
-  }, [params, query, sortKey, activeCategory]);
+  }, [params, debouncedQuery, sortKey, activeCategory]);
 
   const clearSearch = useCallback(() => setQuery(''), []);
+
+  /* ── chunked progressive mount ─────────────────────────────────
+   * A nested FlatList can't virtualise inside the parent SiteDetail
+   * ScrollView (same orientation), so ALL filtered tiles used to land
+   * in one commit. Instead, reveal them MOUNT_CHUNK at a time: the
+   * counter advances one chunk per frame via requestAnimationFrame
+   * until everything is mounted. Keyed on category + search so a
+   * filter change resets the window synchronously (state-from-render
+   * pattern) — no oversized intermediate commit. Sort changes keep
+   * the window: tiles are already mounted, React just reorders them. */
+  const revealKey = `${activeCategory}|${debouncedQuery}`;
+  const [reveal, setReveal] = useState({ key: revealKey, count: MOUNT_CHUNK });
+  if (reveal.key !== revealKey) {
+    setReveal({ key: revealKey, count: MOUNT_CHUNK });
+  }
+
+  useEffect(() => {
+    if (!ready || reveal.count >= filtered.length) return;
+    const frame = requestAnimationFrame(() => {
+      setReveal(s =>
+        s.count >= filtered.length
+          ? s
+          : { ...s, count: Math.min(s.count + MOUNT_CHUNK, filtered.length) },
+      );
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [ready, reveal, filtered.length]);
+
+  const visibleTiles = useMemo(
+    () =>
+      filtered.length > reveal.count
+        ? filtered.slice(0, reveal.count)
+        : filtered,
+    [filtered, reveal.count],
+  );
 
   /* ── render branches ───────────────────────────────────────── */
 
@@ -534,8 +633,8 @@ const LiveParameterView: FC = () => {
     body = (
       <View style={styles.statusBlock}>
         <AppText fontSize={FONT_SIZE_XS} color={scheme.textSecondary} center>
-          {query
-            ? `No parameters match "${query}".`
+          {debouncedQuery
+            ? `No parameters match "${debouncedQuery}".`
             : 'Nothing in this category.'}
         </AppText>
       </View>
@@ -543,8 +642,8 @@ const LiveParameterView: FC = () => {
   } else {
     body = (
       <View style={styles.grid}>
-        {filtered.map(p => (
-          <ParamTile key={p.code} param={p} scheme={scheme} themed={themed} />
+        {visibleTiles.map(p => (
+          <ParamTile key={p.code} param={p} themed={themed} />
         ))}
       </View>
     );
