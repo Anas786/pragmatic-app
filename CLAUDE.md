@@ -154,6 +154,11 @@ scheme.isDark           // boolean for any branching
 work — `src/utils/theme/colors.ts` is a compat shim that re-derives from the
 scheme tokens — but new code should pull from `useScheme()`.
 
+**Referential stability (perf pass)**: `useScheme()` returns one of two
+module-level singletons (light/dark) — the reference only changes on theme
+flip. It is therefore safe in `useMemo`/`useCallback` deps and as a prop to
+`React.memo` children. Never mutate the returned object (it's shared app-wide).
+
 ### 4.3 Shared primitives — `src/components/common/`
 
 Pulled out as part of the refactor. **Use these instead of hand-rolling.**
@@ -230,11 +235,11 @@ src/
 ├── assets/
 │   ├── icons/              (SVG components — generic UI icons)
 │   ├── gif/
-│   │   ├── raw/            (flat .gif files for the Cards-tab map)
-│   │   └── lottie-icons.ts (lottiePathGif map + optional `lottieSource` for vector variants)
-│   ├── lottie/             (Lottie JSON animations — Summary tab + recolor sources)
-│   ├── lottie-gif/         (additional animated GIFs)
-│   ├── lotties-icons/      (alt animated icons)
+│   │   ├── raw/            (flat .gif files for the Cards-tab map — re-encoded to 128×128, perf pass)
+│   │   ├── lottie-icons.ts (lottiePathGif map + optional `lottieSource` for vector variants)
+│   │   ├── GifImage/       (plain <Image> GIF wrapper)
+│   │   └── index.ts        (barrel — exports ONLY GifImage + lottie-icons; legacy wrappers deleted)
+│   ├── lottie/             (Lottie JSON animations — only the 5 referenced files remain)
 │   ├── device-icons/       (SLD device-state SVGs)
 │   ├── images/             (static images)
 │   └── svg/                (misc SVG)
@@ -331,7 +336,8 @@ Single source of truth = **Amplify**. We never store tokens manually.
 - Tokens persist via `@aws-amplify/react-native` (AsyncStorage adapter). Survives app restarts.
 - **Every axios request** runs through the request interceptor → `getValidIdToken()` → either returns the cached idToken or calls `fetchAuthSession()` to refresh. 60-s expiry buffer, in-flight dedup, in-memory cache (`session.ts`).
 - **401 retry**: response interceptor force-refreshes once, retries, then calls `executeLogout()` if still 401.
-- `executeLogout` clears React Query (`queryClient.clear()`), Cognito session, in-memory user, and `resetActiveSite()`.
+- `executeLogout` clears React Query (`queryClient.clear()`), Cognito session, in-memory user, and `resetActiveSite()`. It is **deduped via a module-scope in-flight promise** — concurrent 401 cascades (and the `executeLogout ↔ globalLogout` mutual recursion) collapse into one sign-out.
+- All requests have a **15 s axios timeout**; `isFresh` compares against the expiry decoded **once per token** (no per-request JWT decode).
 - `/public/*` paths skip the Authorization header attachment automatically.
 
 ---
@@ -482,8 +488,14 @@ compact-K via `formatCompact` for hero / chip contexts.
 - **Deferred render** via `InteractionManager.runAfterInteractions` — the tile
   grid only mounts after the tab transition finishes (the legacy "all params
   mount on tab tap" pattern caused noticeable jank with 100+ entries).
-- **Animation cap**: only the first `ANIM_LIMIT=12` tiles get `FadeInDown`;
-  the rest render as plain Views.
+- **v5 perf pass**: `ParamTile` is `React.memo`'d (props: stable `param` +
+  `themed` only — it reads `useScheme()` itself); search input keeps instant
+  local state but feeds a **200 ms debounced** copy into the filter memo;
+  `displayValue`/`displayTime`/gradient colors are **precomputed once per fetch**
+  in `extractLiveParams` (one module-level `Intl.NumberFormat`); tiles mount in
+  **chunks of 20 per frame** (rAF counter, reset on category/search change) so
+  no single commit exceeds ~20 tiles. NO per-tile `entering` animations — they
+  caused a ShadowTree commit SIGABRT at 100+ tiles (see file header).
 
 ---
 
@@ -594,3 +606,64 @@ were all removed — Dashboard and Summary now drive off real backend data.
 Use whatever you've been signing in with — credentials aren't stored in this
 repo. Default flow expects email + password, handles `NEW_PASSWORD_REQUIRED`
 for first-login users with temporary passwords.
+
+---
+
+## 19. v3 performance pass (June 2026, branch `perf/app-optimizations`)
+
+A full multi-agent perf audit + fix pass. Invariants that future code must
+respect:
+
+- **`useScheme()` returns stable singletons** (§4.2) — safe in deps/memo props.
+- **`AppText` composes styles via array** and is `React.memo`'d. Caller
+  `style` arrays now actually apply (the old object-spread silently dropped
+  them — MetricCard's title band re-appeared because of this fix).
+- **Poppins fonts are now actually linked** (they never were!) — `npx
+  react-native-asset` wired ios pbxproj/Info.plist + android assets/fonts;
+  `link-assets-manifest.json` (both platforms) is committed. iOS Info.plist
+  registers `MaterialIcons.ttf` (NOT MaterialCommunityIcons).
+- **GIF icons are 128×128** (re-encoded from 400×400; ~3× smaller files, ~10×
+  less decode work). Source GIFs for re-encoding live in git history. Don't add
+  full-res animated GIFs — prefer Lottie JSON or ≤128px assets.
+- **`PulseDot` pauses when its screen is unfocused**; loops are cancelled on
+  unmount. Don't add uncancelled infinite Reanimated loops.
+- **Entrance-animation cap convention**: `entering` only for `index <
+  ANIM_LIMIT`, and the wrapper-type decision is frozen at first mount
+  (`useState(() => ...)`) so list reordering can't remount rows (SiteCard).
+- **ECharts WebViews**: always pass `webViewSettings={{
+  androidHardwareAccelerationDisabled: false }}` (the lib defaults to software
+  rendering) and wrap `RNEChartsPro` in a memo so parent state changes don't
+  rebuild its ~1MB inline-HTML props (see `ReportChart` in
+  PerformanceReportCard, memoized `TrendComboChart`).
+- **SLD**: the Skia `Canvas` is viewport-sized (`DiagramSkiaLayer`) with
+  pan/zoom replayed as a Skia Group matrix from the viewport's shared values;
+  node cards live in `DiagramNodeLayer` inside the old transformed
+  Animated.View. The dot grid is ONE SkPath. Manual device pass recommended
+  after touching SLD transform code (inline + fullscreen rotated mode).
+- **Routes import screens directly** — never import screens from the
+  `src/components` root barrel (it drags the whole Authenticated tree into the
+  splash render; Metro can't defer `export *` re-exports).
+- **Cold start**: `MIN_SPLASH_MS` is a floor anchored to mount time, not
+  additive to auth. App.tsx wires react-query `focusManager` (AppState) +
+  `onlineManager` (NetInfo).
+- **`useSiteData` staleTime = 3 min** (tabs unmount on switch; 30s caused a
+  full refetch mid tab-transition). Pull-to-refresh on Dashboard resets the
+  infinite query to page 1 instead of serially refetching every cached page.
+- **Android release**: R8 + `shrinkResources` ON (`proguard-rules.pro` has
+  per-library keep rules), vector-icons ships only `MaterialIcons.ttf`.
+  ⚠️ First release build needs a smoke test (Amplify sign-in, charts, SLD,
+  GIFs, bootsplash). ⚠️ Release still signs with the **debug keystore** —
+  must fix before store submission.
+- **Removed deps** (zero imports): lodash, @reduxjs/toolkit, i18next,
+  @react-navigation/bottom-tabs, react-native-otp-entry,
+  react-native-sticky-range-slider, @react-native-community/geolocation,
+  sharp. **Keep `@react-native-community/netinfo`** — required by
+  @aws-amplify/react-native AND used by onlineManager.
+- **Deleted assets**: `src/assets/lotties-icons/`, `src/assets/lottie-gif/`,
+  legacy GIF wrapper components, `summary-icons.ts`, 19 unreferenced Lottie
+  JSONs (§4.6's meter.json runtime-recolor note refers to that era; only 5
+  Lottie JSONs remain: electric, revenue, co2, coal, treePlant).
+- **`display()` logs to console only in `__DEV__`** (Reactotron unchanged).
+- Still pending (unchanged from §16): AlarmsView/Trend real-data wiring, MQTT,
+  real haptics — plus a recommended future migration of charts from
+  react-native-echarts-pro (WebView) to `@wuba/react-native-echarts` (Skia).
