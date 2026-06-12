@@ -1,5 +1,5 @@
-import React, { FC, memo, useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, { FC, memo, useCallback, useMemo, useState } from 'react';
+import { LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import {
   Canvas,
   Circle as SkiaCircle,
@@ -8,6 +8,7 @@ import {
   Path as SkiaPath,
   Skia,
   useClock,
+  vec,
   type SkPath,
 } from '@shopify/react-native-skia';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
@@ -366,26 +367,46 @@ const LogoNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
 });
 LogoNodeCard.displayName = 'LogoNodeCard';
 
-/* ─────────── DiagramCanvas ─────────── */
+/* ─────────── diagram layers ─────────── */
 
-interface DiagramCanvasProps {
+interface DiagramLayerBaseProps {
   graph: SLDGraph;
   bounds: SLDBounds;
   resolve: SLDValueResolver;
+}
+
+interface DiagramSkiaLayerProps extends DiagramLayerBaseProps {
   dotColor: string;
   /** Route edges as right-angle Manhattan steps instead of bezier curves. */
   orthogonal: boolean;
   /** Dark theme → use raw source colours; light → darken bright ones. */
   isDark: boolean;
+  /** Viewport pan/zoom shared values — owned by `SLDViewport`, replayed here
+   *  as a Skia group matrix so the Canvas can stay viewport-sized. */
+  translateX: SharedValue<number>;
+  translateY: SharedValue<number>;
+  scale: SharedValue<number>;
 }
 
-const DiagramCanvasBase: FC<DiagramCanvasProps> = ({
+/**
+ * Skia layer: dot grid + edges + flow animation, absolute-filled to the
+ * VIEWPORT rather than the graph frame. The old Canvas covered the full graph
+ * bounds (~1960×1020dp ≈ 18MP at 3x) and the clock-driven dash loop
+ * invalidated all of it every frame; sizing the surface to the viewport and
+ * applying pan/zoom as a canvas matrix shrinks the per-frame raster cost to
+ * the visible pixels. Geometry, stroke widths and dot radii all scale through
+ * the matrix exactly as they previously scaled through the RN transform.
+ */
+const DiagramSkiaLayerBase: FC<DiagramSkiaLayerProps> = ({
   graph,
   bounds,
   resolve,
   dotColor,
   orthogonal,
   isDark,
+  translateX,
+  translateY,
+  scale,
 }) => {
   const { width, height } = bounds;
 
@@ -440,6 +461,92 @@ const DiagramCanvasBase: FC<DiagramCanvasProps> = ({
     return out;
   }, [edges]);
 
+  // Dot grid as ONE SkPath → a single render-tree node instead of ~450
+  // <SkiaCircle>s the renderer re-walked every animation frame. Dots never
+  // overlap, so one fill is pixel-identical to the per-circle version.
+  const dotGrid = useMemo<SkPath>(() => {
+    const path = Skia.Path.Make();
+    for (let y = DOT_SPACING; y < height; y += DOT_SPACING) {
+      for (let x = DOT_SPACING; x < width; x += DOT_SPACING) {
+        path.addCircle(x, y, DOT_RADIUS);
+      }
+    }
+    return path;
+  }, [width, height]);
+
+  // Measured canvas (= viewport content box) size. Until the first layout the
+  // Canvas has no surface to draw into anyway, so gating the scene on the
+  // measurement costs nothing visible.
+  const [frame, setFrame] = useState<{ w: number; h: number } | null>(null);
+  const onCanvasLayout = useCallback((e: LayoutChangeEvent) => {
+    const { width: w, height: h } = e.nativeEvent.layout;
+    setFrame(prev => (prev && prev.w === w && prev.h === h ? prev : { w, h }));
+  }, []);
+
+  // Replicates the RN node-card layer's transform chain exactly:
+  //   outer = centre-layout offset of the bounds-sized frame inside the
+  //           viewport ((frame − bounds) / 2, negative when it overflows);
+  //   inner = [translateX, translateY, scale] pivoted on the frame centre,
+  //           matching RN's centre-origin transform semantics.
+  const frameOffset = useMemo(
+    () =>
+      frame
+        ? [
+            { translateX: (frame.w - width) / 2 },
+            { translateY: (frame.h - height) / 2 },
+          ]
+        : null,
+    [frame, width, height],
+  );
+  const frameCenter = useMemo(() => vec(width / 2, height / 2), [width, height]);
+  const viewTransform = useDerivedValue(() => [
+    { translateX: translateX.value },
+    { translateY: translateY.value },
+    { scale: scale.value },
+  ]);
+
+  // Skia clock → animated dash offset, shared by every flow edge.
+  const clock = useClock();
+  const dashPhase = useDerivedValue(() => -(clock.value / 1000) * DASH_SPEED);
+
+  return (
+    <Canvas style={StyleSheet.absoluteFill} onLayout={onCanvasLayout}>
+      {frameOffset ? (
+        <Group transform={frameOffset}>
+          <Group origin={frameCenter} transform={viewTransform}>
+            <SkiaPath path={dotGrid} color={dotColor} opacity={DOT_OPACITY} />
+            {skEdges.map(e =>
+              e.animated ? (
+                <FlowEdge
+                  key={e.id}
+                  edge={e}
+                  dashPhase={dashPhase}
+                  clock={clock}
+                />
+              ) : (
+                <IdleEdge key={e.id} edge={e} />
+              ),
+            )}
+          </Group>
+        </Group>
+      ) : null}
+    </Canvas>
+  );
+};
+
+export const DiagramSkiaLayer = memo(DiagramSkiaLayerBase);
+DiagramSkiaLayer.displayName = 'DiagramSkiaLayer';
+
+/**
+ * RN layer: the source/logo node cards, positioned in graph space. Hosted by
+ * `SLDViewport` inside the pan/zoom `Animated.View` (bounds-sized frame), so
+ * card layout, text and touch behaviour are untouched by the Skia-layer split.
+ */
+const DiagramNodeLayerBase: FC<DiagramLayerBaseProps> = ({
+  graph,
+  bounds,
+  resolve,
+}) => {
   const nodes = useMemo(
     () =>
       graph.nodes.map(node => ({
@@ -450,37 +557,8 @@ const DiagramCanvasBase: FC<DiagramCanvasProps> = ({
     [graph.nodes, bounds],
   );
 
-  const dots = useMemo(() => {
-    const out: Array<{ cx: number; cy: number }> = [];
-    for (let y = DOT_SPACING; y < height; y += DOT_SPACING) {
-      for (let x = DOT_SPACING; x < width; x += DOT_SPACING) {
-        out.push({ cx: x, cy: y });
-      }
-    }
-    return out;
-  }, [width, height]);
-
-  // Skia clock → animated dash offset, shared by every flow edge.
-  const clock = useClock();
-  const dashPhase = useDerivedValue(() => -(clock.value / 1000) * DASH_SPEED);
-
   return (
     <>
-      <Canvas style={StyleSheet.absoluteFill}>
-        <Group color={dotColor} opacity={DOT_OPACITY}>
-          {dots.map((d, i) => (
-            <SkiaCircle key={`dot-${i}`} cx={d.cx} cy={d.cy} r={DOT_RADIUS} />
-          ))}
-        </Group>
-        {skEdges.map(e =>
-          e.animated ? (
-            <FlowEdge key={e.id} edge={e} dashPhase={dashPhase} clock={clock} />
-          ) : (
-            <IdleEdge key={e.id} edge={e} />
-          ),
-        )}
-      </Canvas>
-
       {nodes.map(({ node, rect, logo }) =>
         logo ? (
           <LogoNodeCard key={node.id} node={node} rect={rect} resolve={resolve} />
@@ -492,5 +570,5 @@ const DiagramCanvasBase: FC<DiagramCanvasProps> = ({
   );
 };
 
-export const DiagramCanvas = memo(DiagramCanvasBase);
-DiagramCanvas.displayName = 'DiagramCanvas';
+export const DiagramNodeLayer = memo(DiagramNodeLayerBase);
+DiagramNodeLayer.displayName = 'DiagramNodeLayer';

@@ -1,7 +1,13 @@
 /**
  * SLDViewport — the pan / pinch / zoom surface that hosts the energy-flow
- * `DiagramCanvas`. Shared by the inline diagram (`SLDDiagram`) and the
- * full-screen route (`SLDFullscreenScreen`).
+ * diagram layers (`DiagramSkiaLayer` + `DiagramNodeLayer`). Shared by the
+ * inline diagram (`SLDDiagram`) and the full-screen route
+ * (`SLDFullscreenScreen`).
+ *
+ * The Skia layer absolute-fills the viewport and replays the pan/zoom shared
+ * values as a canvas matrix; the RN node cards live in a graph-bounds-sized
+ * `Animated.View` driven by the same shared values, so both layers move in
+ * lockstep on the UI thread.
  *
  * Deliberately framework-agnostic about *where* it lives: it takes the
  * viewport `width`/`height` and a `fullscreen` flag and owns everything else
@@ -40,7 +46,7 @@ import {
 } from 'src/utils';
 import { SLDGraph, SLDValueResolver } from 'src/types';
 import ControlButtons from './ControlButtons';
-import { DiagramCanvas } from './SummaryView/SLDCanvas';
+import { DiagramNodeLayer, DiagramSkiaLayer } from './SummaryView/SLDCanvas';
 
 const ZOOM_STEP = 1.25;
 /** On-screen scale at which a source card is comfortably readable. */
@@ -134,13 +140,30 @@ const SLDViewport: FC<SLDViewportProps> = ({
   const controlsOpacity = useSharedValue(1);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // `currentZoom` only feeds ControlButtons' +/- disabled checks against
+  // min/max. Mirroring every pinch frame through runOnJS/setState flooded JS
+  // with re-renders, so only cross the bridge when the scale moves between
+  // the min-edge / middle / max-edge zones — the only transitions that can
+  // change what ControlButtons renders. Thresholds match ControlButtons'
+  // (±0.001), so the disabled states still flip at exactly the same scale.
   useAnimatedReaction(
     () => scale.value,
     (value, prev) => {
-      if (prev === null || Math.abs(value - prev) > 0.02) {
+      const zone =
+        value >= maxScale - 0.001 ? 2 : value <= minScale + 0.001 ? 0 : 1;
+      const prevZone =
+        prev === null
+          ? -1
+          : prev >= maxScale - 0.001
+            ? 2
+            : prev <= minScale + 0.001
+              ? 0
+              : 1;
+      if (zone !== prevZone) {
         runOnJS(setCurrentZoom)(value);
       }
     },
+    [minScale, maxScale],
   );
 
   // Re-fit when the full-screen viewport size changes (e.g. the device
@@ -243,7 +266,10 @@ const SLDViewport: FC<SLDViewportProps> = ({
     maxScale,
   ]);
 
-  const canvasStyle = useAnimatedStyle(() => ({
+  // Pan/zoom transform for the RN node-card layer. The Skia layer replays
+  // the same shared values as a canvas matrix (see DiagramSkiaLayer), so the
+  // two layers stay registered without any extra JS work.
+  const panZoomStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: translateX.value },
       { translateY: translateY.value },
@@ -281,23 +307,30 @@ const SLDViewport: FC<SLDViewportProps> = ({
     [themed.viewport, fullscreen, width, height],
   );
 
-  const canvasFrameStyle = useMemo(
-    () => [{ width: bounds.width, height: bounds.height }, canvasStyle],
-    [canvasStyle, bounds.width, bounds.height],
+  // Bounds-sized frame hosting the node cards — centre-laid-out in the
+  // viewport with a centre-origin transform, the exact chain the Skia layer
+  // mirrors in graph space.
+  const nodeFrameStyle = useMemo(
+    () => [{ width: bounds.width, height: bounds.height }, panZoomStyle],
+    [panZoomStyle, bounds.width, bounds.height],
   );
 
   return (
     <GestureDetector gesture={gesture}>
       <View style={viewportStyle}>
-        <Animated.View style={canvasFrameStyle}>
-          <DiagramCanvas
-            graph={graph}
-            bounds={bounds}
-            resolve={resolve}
-            dotColor={scheme.brand}
-            orthogonal={orthogonal}
-            isDark={scheme.isDark}
-          />
+        <DiagramSkiaLayer
+          graph={graph}
+          bounds={bounds}
+          resolve={resolve}
+          dotColor={scheme.brand}
+          orthogonal={orthogonal}
+          isDark={scheme.isDark}
+          translateX={translateX}
+          translateY={translateY}
+          scale={scale}
+        />
+        <Animated.View style={nodeFrameStyle}>
+          <DiagramNodeLayer graph={graph} bounds={bounds} resolve={resolve} />
         </Animated.View>
         <Animated.View
           pointerEvents={controlsShown ? 'box-none' : 'none'}
