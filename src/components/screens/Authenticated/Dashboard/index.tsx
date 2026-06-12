@@ -106,8 +106,13 @@ interface ScrollToTopFabProps {
 
 /** Permanently mounted — visibility is derived from the list's scroll offset
  *  entirely on the UI thread (no per-frame setState / React commit while the
- *  user is mid-gesture). `pointerEvents` flips with visibility so the hidden
- *  FAB never swallows taps. */
+ *  user is mid-gesture).
+ *
+ *  ⚠️ The worklet must return ONLY style properties. Animating
+ *  `pointerEvents` here hoists it into a Fabric view prop and trips a
+ *  duplicate-raw-prop assert in folly's F14 set (debug SIGABRT). Instead the
+ *  hidden FAB slides fully below the screen edge — off-screen views can't be
+ *  tapped — and `onPress` re-checks the offset to cover mid-animation taps. */
 const ScrollToTopFab: FC<ScrollToTopFabProps> = ({ onPress, scrollY }) => {
   const scheme = useScheme();
   const animatedStyle = useAnimatedStyle(() => {
@@ -115,15 +120,18 @@ const ScrollToTopFab: FC<ScrollToTopFabProps> = ({ onPress, scrollY }) => {
     return {
       opacity: withTiming(visible ? 1 : 0, { duration: duration.fast }),
       transform: [
-        { translateY: withTiming(visible ? 0 : 16, { duration: duration.fast }) },
-        { scale: withTiming(visible ? 1 : 0.9, { duration: duration.fast }) },
+        // 96 clears the 52pt FAB + 20pt bottom inset + shadow.
+        { translateY: withTiming(visible ? 0 : 96, { duration: duration.fast }) },
       ],
-      pointerEvents: visible ? 'auto' : 'none',
     };
   });
+  const guardedPress = useCallback(() => {
+    if (scrollY.value <= SCROLL_TO_TOP_THRESHOLD) return;
+    onPress();
+  }, [onPress, scrollY]);
   return (
     <Animated.View style={[styles.fabWrap, animatedStyle]}>
-      <Fab onPress={onPress} accessibilityLabel="Scroll to top" haptic="tap">
+      <Fab onPress={guardedPress} accessibilityLabel="Scroll to top" haptic="tap">
         <UpArrow size={ICON_SIZE_LG} color={scheme.textOnBrand} />
       </Fab>
     </Animated.View>
