@@ -19,7 +19,14 @@
  * and no commit-hook racing across siblings.
  */
 
-import React, { FC, ReactNode, useCallback, useEffect, useRef } from 'react';
+import React, {
+  FC,
+  ReactNode,
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+} from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -308,4 +315,6 @@ const createStyles = (scheme: Scheme) =>
     },
   });
 
-export default TabSelector;
+// Memoized — props are a string + a useCallback'd handler (see
+// ViewsContent), so parent re-renders skip the whole chip strip.
+export default memo(TabSelector);

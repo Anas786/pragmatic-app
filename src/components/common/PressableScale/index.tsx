@@ -1,5 +1,5 @@
 import React, { FC, ReactNode, useCallback } from 'react';
-import { Pressable, StyleProp, View, ViewStyle } from 'react-native';
+import { Pressable, StyleProp, ViewStyle } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -92,9 +92,10 @@ const PressableScale: FC<PressableScaleProps> = ({
       accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled }}
       testID={testID}>
-      <Animated.View style={animatedStyle}>
-        <View style={style}>{children}</View>
-      </Animated.View>
+      {/* User style merged straight onto the animated view (animatedStyle
+          last so the scale transform wins) — one fewer native view per
+          tappable. */}
+      <Animated.View style={[style, animatedStyle]}>{children}</Animated.View>
     </Pressable>
   );
 };

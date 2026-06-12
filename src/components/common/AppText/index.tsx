@@ -1,7 +1,8 @@
-import React, { FC } from 'react';
+import React, { FC, memo } from 'react';
 import {
   ColorValue,
   DimensionValue,
+  StyleSheet,
   Text,
   TextProps,
   TextStyle,
@@ -34,29 +35,44 @@ const AppText: FC<AppTextProps> = ({
   width = 'auto',
   opacity = 1,
   ...rest
-}) => (
-  <Text
-    allowFontScaling={false}
-    // eslint-disable-next-line react-native/no-inline-styles
-    style={{
-      color,
-      fontSize: normalizeFont(fontSize),
-      textAlign: center ? 'center' : 'left',
-      lineHeight: lineHeight ? lineHeight : undefined,
-      width,
-      opacity,
-      fontFamily: bold
-        ? 'Poppins-Bold'
-        : medium
-        ? 'Poppins-Medium'
-        : semi_bold
-        ? 'Poppins-SemiBold'
-        : 'Poppins-Regular',
-      ...style,
-    }}
-    {...rest}>
-    {children}
-  </Text>
-);
+}) => {
+  const weightStyle = bold
+    ? styles.bold
+    : medium
+    ? styles.medium
+    : semi_bold
+    ? styles.semiBold
+    : styles.regular;
+  // Only the per-instance values live in this small object; the static
+  // parts are StyleSheet entries so RN flattens the array natively —
+  // and caller `style` arrays survive intact (the old `{...style}`
+  // object-spread silently dropped them).
+  const dynamic: TextStyle = {
+    color,
+    fontSize: normalizeFont(fontSize),
+    width,
+    opacity,
+  };
+  if (lineHeight) {
+    dynamic.lineHeight = lineHeight;
+  }
+  return (
+    <Text
+      allowFontScaling={false}
+      style={[weightStyle, center ? styles.center : styles.left, dynamic, style]}
+      {...rest}>
+      {children}
+    </Text>
+  );
+};
 
-export default AppText;
+const styles = StyleSheet.create({
+  regular: { fontFamily: 'Poppins-Regular' },
+  medium: { fontFamily: 'Poppins-Medium' },
+  semiBold: { fontFamily: 'Poppins-SemiBold' },
+  bold: { fontFamily: 'Poppins-Bold' },
+  center: { textAlign: 'center' },
+  left: { textAlign: 'left' },
+});
+
+export default memo(AppText);

@@ -16,6 +16,18 @@ export * from './tokens';
 export { useThemedStyles } from './useThemedStyles';
 export type { Scheme } from './useThemedStyles';
 
+// Built once at module load so `useScheme()` returns the *same* object
+// reference on every call for a given mode — keeps memoized children
+// (React.memo / useMemo deps) from invalidating on unrelated re-renders.
+const LIGHT: ColorScheme & { isDark: boolean } = {
+  ...lightScheme,
+  isDark: false,
+};
+const DARK: ColorScheme & { isDark: boolean } = {
+  ...darkScheme,
+  isDark: true,
+};
+
 /**
  * Subscribes a component to the active color scheme.
  *
@@ -23,9 +35,12 @@ export type { Scheme } from './useThemedStyles';
  * returned object is the richer semantic palette (`bg`, `surface`,
  * `brand`, `brandSoft`, `hairline`, `skeletonBase`, …) defined in
  * `tokens.ts`.
+ *
+ * Referentially stable: the same frozen-by-convention object is returned
+ * for every call in a given mode, so it's safe to use directly in
+ * `useMemo`/`useCallback` deps and `React.memo`'d component props.
  */
 export const useScheme = (): ColorScheme & { isDark: boolean } => {
   const isDark = useThemeStore(s => s.isDark);
-  const scheme = isDark ? darkScheme : lightScheme;
-  return { ...scheme, isDark };
+  return isDark ? DARK : LIGHT;
 };
