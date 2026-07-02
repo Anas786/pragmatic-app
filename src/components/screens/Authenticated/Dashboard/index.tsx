@@ -52,7 +52,7 @@ import {
   FONT_SIZE_XXS,
   ICON_SIZE_LG,
 } from 'src/utils';
-import { duration, space, useScheme } from 'src/theme';
+import { duration, radius, space, useScheme } from 'src/theme';
 import { useSiteList, useSwitchActiveSite, useThemeStore } from 'src/hooks';
 import { DashboardStackParamList, ISite } from 'src/types';
 import { MoonIcon, SunIcon, UpArrow } from 'src/assets/icons';
@@ -91,9 +91,18 @@ const GreetingTitle: FC<{ children: ReactNode }> = ({ children }) => {
   );
 };
 
-const BrandLogo: FC = () => (
-  <Image source={Logo} style={styles.brandLogo} resizeMode="contain" />
-);
+// The PES logo is dark-green on transparent — it reads on light surfaces but
+// its "P"/"S" vanish on the dark-mode header bg. In dark mode we back it with a
+// white tile (same treatment the Splash screen uses) so the mark stays legible.
+// Padding is applied in both modes so toggling theme causes no layout shift.
+const BrandLogo: FC = () => {
+  const scheme = useScheme();
+  return (
+    <View style={[styles.brandLogoWrap, scheme.isDark && styles.brandLogoTileDark]}>
+      <Image source={Logo} style={styles.brandLogo} resizeMode="contain" />
+    </View>
+  );
+};
 
 const Separator: FC = () => <View style={styles.separator} />;
 
@@ -416,7 +425,9 @@ const Dashboard: FC = () => {
 };
 
 const styles = StyleSheet.create({
-  brandLogo: { width: 44, height: 30 },
+  brandLogo: { width: 54, height: 26 },
+  brandLogoWrap: { paddingHorizontal: space.sm, paddingVertical: 5 },
+  brandLogoTileDark: { backgroundColor: '#FFFFFF', borderRadius: radius.md },
   listContent: {
     paddingHorizontal: space.lg,
     paddingBottom: space['2xl'],

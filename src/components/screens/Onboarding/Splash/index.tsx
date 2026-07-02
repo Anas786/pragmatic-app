@@ -321,7 +321,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 10 },
     elevation: 16,
   },
-  logo: { width: normalizeWidth(132), height: normalizeHeight(90) },
+  logo: { width: normalizeWidth(150), height: normalizeHeight(72) },
   wordmark: { maxWidth: normalizeWidth(280), letterSpacing: 0.2 },
   tagline: { letterSpacing: 2.5 },
   orb: { position: 'absolute', opacity: 0.08 },
