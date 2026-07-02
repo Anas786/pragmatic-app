@@ -1,4 +1,4 @@
-package com.pragmaticenergysolution
+package com.pragmaticenergy.app
 
 import android.content.Intent
 import android.content.res.Configuration

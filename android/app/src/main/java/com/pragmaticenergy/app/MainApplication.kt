@@ -1,4 +1,4 @@
-package com.pragmaticenergysolution
+package com.pragmaticenergy.app
 
 import android.app.Application
 import com.facebook.react.PackageList
