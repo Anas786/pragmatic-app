@@ -30,5 +30,29 @@ target 'PragmaticEnergySolution' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+
+    # fmt 11.0.2 (pinned by RCT-Folly) enables `consteval` whenever the compiler
+    # advertises __cpp_consteval, but Apple clang 21 (Xcode 26) miscompiles its
+    # consteval basic_format_string — Release archives fail in format-inl.h with
+    # "call to consteval function ... is not a constant expression". fmt already
+    # blacklists Apple clang < 14 for the same reason; extend the blacklist to
+    # all Apple clang. FMT_USE_CONSTEVAL=0 only drops compile-time format-string
+    # checking inside folly — no runtime behavior change. The macro is defined
+    # unguarded in the header (no #ifndef), so a build-setting -D cannot
+    # override it; patching the header is the only reliable hook. Runs on every
+    # `pod install`, idempotent.
+    fmt_base = File.join(installer.sandbox.root, 'fmt', 'include', 'fmt', 'base.h')
+    if File.exist?(fmt_base)
+      src = File.read(fmt_base)
+      patched = src.gsub(
+        '#elif defined(__apple_build_version__) && __apple_build_version__ < 14000029L',
+        '#elif defined(__apple_build_version__)  // consteval broken again in Apple clang 21+'
+      )
+      if patched != src
+        File.chmod(0644, fmt_base) unless File.writable?(fmt_base)
+        File.write(fmt_base, patched)
+        Pod::UI.puts 'Patched fmt/base.h: FMT_USE_CONSTEVAL disabled for Apple clang'.green
+      end
+    end
   end
 end
