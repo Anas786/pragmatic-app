@@ -271,7 +271,7 @@ const Splash: FC = () => {
 
         <Animated.View style={wordmarkStyle}>
           <AppText bold fontSize={24} center color={glass.textBold} lineHeight={32} style={styles.wordmark}>
-            Pragmatic Energy Solution
+            Pragmatic Engineering Solution
           </AppText>
         </Animated.View>
 

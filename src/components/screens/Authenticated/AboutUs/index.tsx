@@ -183,7 +183,7 @@ const AboutUs: FC = () => {
             center
             fontSize={FONT_SIZE_XXS}
             color={scheme.textTertiary}>
-            Pragmatic Energy Solution · All rights reserved
+            Pragmatic Engineering Solution · All rights reserved
           </AppText>
         </Animated.View>
       </ScrollView>
