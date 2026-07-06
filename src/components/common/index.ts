@@ -14,7 +14,6 @@ export { default as Avatar } from './Avatar';
 export { default as Row } from './Row';
 export { default as Loading } from './Loading';
 export { default as ErrorBoundary } from './ErrorBoundary';
-export { default as ImagePickerBottomSheet } from './ImagePickerBottomSheet';
 
 // v2 design-system primitives
 export { default as Surface } from './Surface';

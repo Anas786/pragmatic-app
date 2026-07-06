@@ -7495,11 +7495,6 @@ react-native-get-random-values@^1.11.0:
   dependencies:
     fast-base64-decode "^1.0.0"
 
-react-native-image-picker@^8.2.1:
-  version "8.2.1"
-  resolved "https://registry.npmjs.org/react-native-image-picker/-/react-native-image-picker-8.2.1.tgz"
-  integrity sha512-FBeGYJGFDjMdGCcyubDJgBAPCQ4L1D3hwLXyUU91jY9ahOZMTbluceVvRmrEKqnDPFJ0gF1NVhJ0nr1nROFLdg==
-
 react-native-iphone-screen-helper@^2.0.2:
   version "2.2.1"
   resolved "https://registry.npmjs.org/react-native-iphone-screen-helper/-/react-native-iphone-screen-helper-2.2.1.tgz"
@@ -7519,11 +7514,6 @@ react-native-orientation-locker@^1.7.0:
   version "1.7.0"
   resolved "https://registry.yarnpkg.com/react-native-orientation-locker/-/react-native-orientation-locker-1.7.0.tgz#47ef2b9c24618e40f0a521f184b51270e576b028"
   integrity sha512-2PhG4UyRJktb3KCTISStuu8/q+Q3q3oPesGg9DhdY0b6Cu/ZzxkCvkbJte2TPWRYkS0JpClimvqVaonulGvDrA==
-
-react-native-permissions@^5.4.2:
-  version "5.4.4"
-  resolved "https://registry.npmjs.org/react-native-permissions/-/react-native-permissions-5.4.4.tgz"
-  integrity sha512-WB5lRCBGXETfuaUhem2vgOceb9+URCeyfKpLGFSwoOffLuyJCA6+NTR3l1KLkrK4Ykxsig37z16/shUVufmt7A==
 
 react-native-reanimated@3.16.7:
   version "3.16.7"

@@ -33,8 +33,10 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string/>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>PES saves exported chart and report images to your photo library when you choose to share or save them.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>PES accesses your photo library only to save or share chart and report images that you export from the app.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

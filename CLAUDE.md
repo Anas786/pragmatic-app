@@ -581,7 +581,14 @@ were all removed — Dashboard and Summary now drive off real backend data.
 - **Trend cards real data** — TrendView + TrendAnalysisCard still mock-driven.
 - **MQTT live updates** via AWS IoT — `attach-iot-policy` endpoint not yet documented in openapi.yaml.
 - **Public bootstrap calls** before sign-in: `params-mapping` is wired (cached + persisted via `useAppConfigStore`). `report-mapping` is wired (per-site cached). `params-hierarchy` and `alarms` config are not yet wired.
-- **ImagePickerBottomSheet legacy cleanup** — has hardcoded greys (`#999`, `#666`, etc.). Not used by redesigned UI but still in the bundle.
+- ~~ImagePickerBottomSheet legacy cleanup~~ — DONE (July 2026): component,
+  `permissions.ts`, `react-native-image-picker` and `react-native-permissions`
+  all removed (zero consumers; the image-picker photo/camera API references
+  triggered App Store ITMS-90683). `NSPhotoLibraryUsageDescription` +
+  `NSPhotoLibraryAddUsageDescription` are in Info.plist for the
+  react-native-share chart-export path (`InstagramShare.m` uses PHPhotoLibrary),
+  which DOES remain. The empty `NSLocationWhenInUseUsageDescription` was
+  dropped (no location APIs remain).
 
 ---
 
