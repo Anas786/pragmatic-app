@@ -25,16 +25,16 @@ import {
   handlePoint,
   isEdgeAnimated,
   isLogoNode,
-  nodeRectInBounds,
+  resolveNodeRects,
   SLDBounds,
 } from 'src/utils';
 import { SLDNode, SLDValueResolver, SLDGraph } from 'src/types';
 
 /* ─────────── canvas constants (graph-space units) ─────────── */
 
-const DOT_SPACING = 64;
+const DOT_SPACING = 72;
 const DOT_RADIUS = 2;
-const DOT_OPACITY = 0.18;
+const DOT_OPACITY = 0.12;
 const ICON_SIZE = 34;
 const LOGO_ICON_SIZE = 38;
 
@@ -53,12 +53,20 @@ const PARTICLE_BASE_PERIOD = 4.8; // s
 /* ─────────── static styles ─────────── */
 
 const styles = StyleSheet.create({
+  // Rounded to hug the card's 16px corners — the card no longer clips its
+  // children (overflow:'hidden' would kill the iOS shadow).
   accentBar: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     height: 3,
+    borderTopLeftRadius: 15,
+    borderTopRightRadius: 15,
+  },
+  accentWash: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 15,
   },
   cardHeaderRow: {
     flexDirection: 'row',
@@ -111,6 +119,8 @@ const styles = StyleSheet.create({
 
 const createCanvasStyles = (scheme: Scheme) =>
   StyleSheet.create({
+    // NO overflow:'hidden' here — iOS clips its own shadow with it. The
+    // rounded inner overlays (accent bar/wash) carry their own radii instead.
     sourceCard: {
       position: 'absolute',
       backgroundColor: scheme.surface,
@@ -120,13 +130,22 @@ const createCanvasStyles = (scheme: Scheme) =>
       paddingHorizontal: 12,
       paddingTop: 11,
       paddingBottom: 12,
-      overflow: 'hidden',
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: scheme.isDark ? 0.3 : 0.12,
+      shadowRadius: 8,
+      elevation: 4,
     },
     logoNode: {
       position: 'absolute',
       backgroundColor: scheme.surface,
       borderWidth: 3,
       borderColor: scheme.brand,
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: scheme.isDark ? 0.3 : 0.12,
+      shadowRadius: 8,
+      elevation: 4,
     },
   });
 
@@ -161,12 +180,13 @@ const sampleEdgePoints = (skPath: SkPath): number[] => {
 
 /* ─────────── edges (Skia) ─────────── */
 
+// Thinner + fainter than flow edges so live power routes read at a glance.
 const IdleEdge: FC<{ edge: SkEdge }> = ({ edge }) => (
-  <Group opacity={0.55}>
+  <Group opacity={0.45}>
     <SkiaPath
       path={edge.skPath}
       style="stroke"
-      strokeWidth={2}
+      strokeWidth={1.5}
       color={edge.color}
     />
     {edge.skArrow ? <SkiaPath path={edge.skArrow} color={edge.color} /> : null}
@@ -258,10 +278,7 @@ const SourceNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
       {scheme.isDark ? (
         <View
           pointerEvents="none"
-          style={[
-            StyleSheet.absoluteFillObject,
-            { backgroundColor: accent + '0D' },
-          ]}
+          style={[styles.accentWash, { backgroundColor: accent + '0D' }]}
         />
       ) : null}
       <View
@@ -437,15 +454,19 @@ const DiagramSkiaLayerBase: FC<DiagramSkiaLayerProps> = ({
     [graph.nodes],
   );
 
+  // De-overlapped rects — MUST be the same map the card layer uses (it
+  // computes the identical deterministic result), or arrows detach.
+  const nodeRects = useMemo(() => resolveNodeRects(graph, bounds), [graph, bounds]);
+
   const edges = useMemo(
     () =>
       graph.edges
         .map(edge => {
           const s = nodeById.get(edge.source);
           const t = nodeById.get(edge.target);
-          if (!s || !t) return null;
-          const sr = nodeRectInBounds(s, bounds);
-          const tr = nodeRectInBounds(t, bounds);
+          const sr = nodeRects.get(edge.source);
+          const tr = nodeRects.get(edge.target);
+          if (!s || !t || !sr || !tr) return null;
           const from = handlePoint(sr, edge.sourceHandle);
           const to = handlePoint(tr, edge.targetHandle);
           const geo = orthogonal
@@ -459,7 +480,7 @@ const DiagramSkiaLayerBase: FC<DiagramSkiaLayerProps> = ({
           };
         })
         .filter((e): e is NonNullable<typeof e> => e !== null),
-    [graph.edges, nodeById, bounds, resolve, orthogonal, isDark],
+    [graph.edges, nodeById, nodeRects, resolve, orthogonal, isDark],
   );
 
   // Parse edge geometry into Skia paths once; sample points for animated edges.
@@ -581,14 +602,18 @@ const DiagramNodeLayerBase: FC<DiagramLayerBaseProps> = ({
   bounds,
   resolve,
 }) => {
+  // Same deterministic de-overlap pass as the Skia edge layer — the two maps
+  // are identical by construction, keeping arrows anchored to their cards.
+  const nodeRects = useMemo(() => resolveNodeRects(graph, bounds), [graph, bounds]);
+
   const nodes = useMemo(
     () =>
       graph.nodes.map(node => ({
         node,
-        rect: nodeRectInBounds(node, bounds),
+        rect: nodeRects.get(node.id)!,
         logo: isLogoNode(node),
       })),
-    [graph.nodes, bounds],
+    [graph.nodes, nodeRects],
   );
 
   return (

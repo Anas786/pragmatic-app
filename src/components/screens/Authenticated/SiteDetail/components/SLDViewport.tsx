@@ -38,19 +38,12 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Scheme, useScheme, useThemedStyles } from 'src/theme';
-import {
-  isLogoNode,
-  nodeRectInBounds,
-  normalizeWidth,
-  SLDBounds,
-} from 'src/utils';
+import { normalizeWidth, SLDBounds } from 'src/utils';
 import { SLDGraph, SLDValueResolver } from 'src/types';
 import ControlButtons from './ControlButtons';
 import { DiagramNodeLayer, DiagramSkiaLayer } from './SummaryView/SLDCanvas';
 
 const ZOOM_STEP = 1.25;
-/** On-screen scale at which a source card is comfortably readable. */
-const READABLE_SCALE = 0.58;
 /** Corner radius of the inline viewport — shared by the border, the node
  *  clipping wrapper, and the Skia clip so all three stay in register. */
 const VIEWPORT_RADIUS = normalizeWidth(16);
@@ -100,33 +93,23 @@ const SLDViewport: FC<SLDViewportProps> = ({
   const scheme = useScheme();
   const themed = useThemedStyles(createStyles);
 
-  // Fit + focus math. Inline opens at a readable zoom centred on the logo
-  // node; full-screen opens fit-to-viewport, centred.
+  // Fit math. Both inline and full-screen open fitted to the WHOLE diagram,
+  // centred — a complete, tidy first view (no half-cut cards at the edges);
+  // users pinch in for card-level detail. Zooming into the plant node by
+  // default read as broken to customers.
   const { minScale, maxScale, initialScale, focusTx, focusTy } =
     useMemo(() => {
       const fit = Math.min(width / bounds.width, height / bounds.height);
       const min = fit * 0.9;
       const max = Math.max(fit * 8, 1.3);
-      const init = clamp(fullscreen ? fit : READABLE_SCALE, min, max);
-
-      let tx = 0;
-      let ty = 0;
-      if (!fullscreen) {
-        const logo = graph.nodes.find(isLogoNode);
-        if (logo) {
-          const r = nodeRectInBounds(logo, bounds);
-          tx = -(r.x + r.w / 2 - bounds.width / 2) * init;
-          ty = -(r.y + r.h / 2 - bounds.height / 2) * init;
-        }
-      }
       return {
         minScale: min,
         maxScale: max,
-        initialScale: init,
-        focusTx: tx,
-        focusTy: ty,
+        initialScale: clamp(fit, min, max),
+        focusTx: 0,
+        focusTy: 0,
       };
-    }, [graph, bounds, width, height, fullscreen]);
+    }, [bounds, width, height]);
 
   const [isLocked, setIsLocked] = useState(false);
   const [orthogonal, setOrthogonal] = useState(false);

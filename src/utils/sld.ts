@@ -519,3 +519,81 @@ export const selectSldGraph = (config: unknown): SLDGraph | null => {
 
   return { nodes, edges };
 };
+
+/* ─────────── node rect de-overlap ─────────── */
+
+/** Gap kept between separated cards, in graph units. */
+const DEOVERLAP_GAP = 12;
+const DEOVERLAP_MAX_ITERS = 12;
+
+/**
+ * All node rects for a graph, with overlapping cards nudged apart.
+ *
+ * Backend node coordinates sometimes collide (cards rendered on top of each
+ * other), which reads as broken. This pass separates overlapping pairs along
+ * the axis of least penetration, keeping the logo (plant) node fixed as the
+ * hub. Deterministic: nodes are processed in id order and ties break by
+ * sign, so the layout is stable across renders and identical wherever it is
+ * computed — BOTH the card layer and the edge geometry must use this map, or
+ * arrows detach from their cards.
+ */
+export const resolveNodeRects = (
+  graph: SLDGraph,
+  bounds: SLDBounds,
+): Map<string, SLDRect> => {
+  const nodes = [...graph.nodes].sort((a, b) => a.id.localeCompare(b.id));
+  const rects = new Map<string, SLDRect>();
+  nodes.forEach(n => rects.set(n.id, { ...nodeRectInBounds(n, bounds) }));
+  const fixed = new Set(nodes.filter(isLogoNode).map(n => n.id));
+
+  for (let iter = 0; iter < DEOVERLAP_MAX_ITERS; iter++) {
+    let moved = false;
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = rects.get(nodes[i].id)!;
+        const b = rects.get(nodes[j].id)!;
+        const dx = a.x + a.w / 2 - (b.x + b.w / 2);
+        const dy = a.y + a.h / 2 - (b.y + b.h / 2);
+        const px = (a.w + b.w) / 2 + DEOVERLAP_GAP - Math.abs(dx);
+        const py = (a.h + b.h) / 2 + DEOVERLAP_GAP - Math.abs(dy);
+        if (px <= 0 || py <= 0) continue; // no overlap (incl. gap)
+
+        const aFixed = fixed.has(nodes[i].id);
+        const bFixed = fixed.has(nodes[j].id);
+        if (aFixed && bFixed) continue;
+        moved = true;
+
+        // Push apart along the axis of least penetration; the fixed node
+        // (if any) stays put and the other absorbs the full displacement.
+        if (px < py) {
+          const dir = dx >= 0 ? 1 : -1;
+          if (aFixed) b.x -= dir * px;
+          else if (bFixed) a.x += dir * px;
+          else {
+            a.x += (dir * px) / 2;
+            b.x -= (dir * px) / 2;
+          }
+        } else {
+          const dir = dy >= 0 ? 1 : -1;
+          if (aFixed) b.y -= dir * py;
+          else if (bFixed) a.y += dir * py;
+          else {
+            a.y += (dir * py) / 2;
+            b.y -= (dir * py) / 2;
+          }
+        }
+      }
+    }
+    if (!moved) break;
+  }
+
+  // Keep every card inside the graph frame (pushes can drift past the edge;
+  // clamping may reintroduce a small overlap at the border, which the next
+  // iteration has already had a chance to resolve).
+  rects.forEach(r => {
+    r.x = Math.min(Math.max(r.x, 0), Math.max(0, bounds.width - r.w));
+    r.y = Math.min(Math.max(r.y, 0), Math.max(0, bounds.height - r.h));
+  });
+
+  return rects;
+};
