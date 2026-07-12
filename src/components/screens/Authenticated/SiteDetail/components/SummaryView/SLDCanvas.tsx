@@ -6,6 +6,8 @@ import {
   DashPathEffect,
   Group,
   Path as SkiaPath,
+  rect as skRect,
+  rrect as skRRect,
   Skia,
   useClock,
   type SkPath,
@@ -231,6 +233,10 @@ const SourceNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
   // tint (esp. for bright yellows on white), so light theme keeps a clean
   // white card with a neutral border and lets the colour live in the top bar
   // + icon well. Dark theme keeps the richer accent wash + border.
+  // minHeight (not height): the graph geometry was tuned for the system
+  // font, and Poppins' taller line boxes clipped the last metric row mid
+  // glyph. Letting the card grow a few px downward beats truncated values;
+  // edge handle points still anchor to the designed rect.
   const cardStyle = useMemo(
     () =>
       StyleSheet.flatten([
@@ -239,7 +245,7 @@ const SourceNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
           left: rect.x,
           top: rect.y,
           width: rect.w,
-          height: rect.h,
+          minHeight: rect.h,
           borderColor: scheme.isDark ? accent + '40' : scheme.border,
         },
       ]),
@@ -273,6 +279,7 @@ const SourceNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
         </View>
         <AppText
           fontSize={15}
+          lineHeight={20}
           bold
           color={scheme.textPrimary}
           numberOfLines={1}
@@ -288,6 +295,7 @@ const SourceNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
           <View key={i} style={styles.metricRow}>
             <AppText
               fontSize={11}
+              lineHeight={14}
               semi_bold
               color={scheme.textTertiary}
               numberOfLines={1}
@@ -297,6 +305,7 @@ const SourceNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
             <View style={styles.metricValueWrap}>
               <AppText
                 fontSize={14}
+                lineHeight={18}
                 bold
                 color={scheme.textPrimary}
                 numberOfLines={1}
@@ -306,7 +315,7 @@ const SourceNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
                 {formatSldValue(resolve(k.param))}
               </AppText>
               {k.unit ? (
-                <AppText fontSize={10} medium color={scheme.textSecondary}>
+                <AppText fontSize={10} lineHeight={13} medium color={scheme.textSecondary}>
                   {k.unit}
                 </AppText>
               ) : null}
@@ -351,11 +360,20 @@ const LogoNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
     <View style={logoStyle}>
       <View style={styles.logoInner}>
         {icon ? <GifImage source={icon.path} size={LOGO_ICON_SIZE} /> : null}
-        <AppText fontSize={13} bold color={scheme.textPrimary} numberOfLines={1}>
+        <AppText
+          fontSize={13}
+          lineHeight={17}
+          bold
+          color={scheme.textPrimary}
+          numberOfLines={1}>
           {node.data.heading}
         </AppText>
         {primary ? (
-          <AppText fontSize={11} color={scheme.textSecondary} numberOfLines={1}>
+          <AppText
+            fontSize={11}
+            lineHeight={14}
+            color={scheme.textSecondary}
+            numberOfLines={1}>
             {formatSldValue(resolve(primary.param))}
             {primary.unit ? ` ${primary.unit}` : ''}
           </AppText>
@@ -385,6 +403,10 @@ interface DiagramSkiaLayerProps extends DiagramLayerBaseProps {
   translateX: SharedValue<number>;
   translateY: SharedValue<number>;
   scale: SharedValue<number>;
+  /** Corner radius of the viewport the canvas fills — content is clipped to
+   *  it inside the canvas, since native `overflow: hidden` doesn't reliably
+   *  clip the transformed layers on every platform. 0 = square (fullscreen). */
+  clipRadius?: number;
 }
 
 /**
@@ -406,6 +428,7 @@ const DiagramSkiaLayerBase: FC<DiagramSkiaLayerProps> = ({
   translateX,
   translateY,
   scale,
+  clipRadius = 0,
 }) => {
   const { width, height } = bounds;
 
@@ -512,23 +535,33 @@ const DiagramSkiaLayerBase: FC<DiagramSkiaLayerProps> = ({
   const clock = useClock();
   const dashPhase = useDerivedValue(() => -(clock.value / 1000) * DASH_SPEED);
 
+  // Clip in canvas space (OUTSIDE the pan/zoom matrix) so edges/dots can
+  // never draw past the viewport's rounded frame.
+  const clipShape = useMemo(
+    () =>
+      frame ? skRRect(skRect(0, 0, frame.w, frame.h), clipRadius, clipRadius) : null,
+    [frame, clipRadius],
+  );
+
   return (
     <Canvas style={StyleSheet.absoluteFill} onLayout={onCanvasLayout}>
-      {frame ? (
-        <Group matrix={viewMatrix}>
-          <SkiaPath path={dotGrid} color={dotColor} opacity={DOT_OPACITY} />
-          {skEdges.map(e =>
-            e.animated ? (
-              <FlowEdge
-                key={e.id}
-                edge={e}
-                dashPhase={dashPhase}
-                clock={clock}
-              />
-            ) : (
-              <IdleEdge key={e.id} edge={e} />
-            ),
-          )}
+      {frame && clipShape ? (
+        <Group clip={clipShape}>
+          <Group matrix={viewMatrix}>
+            <SkiaPath path={dotGrid} color={dotColor} opacity={DOT_OPACITY} />
+            {skEdges.map(e =>
+              e.animated ? (
+                <FlowEdge
+                  key={e.id}
+                  edge={e}
+                  dashPhase={dashPhase}
+                  clock={clock}
+                />
+              ) : (
+                <IdleEdge key={e.id} edge={e} />
+              ),
+            )}
+          </Group>
         </Group>
       ) : null}
     </Canvas>

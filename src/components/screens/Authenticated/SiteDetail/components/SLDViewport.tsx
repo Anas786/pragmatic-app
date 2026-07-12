@@ -51,6 +51,9 @@ import { DiagramNodeLayer, DiagramSkiaLayer } from './SummaryView/SLDCanvas';
 const ZOOM_STEP = 1.25;
 /** On-screen scale at which a source card is comfortably readable. */
 const READABLE_SCALE = 0.58;
+/** Corner radius of the inline viewport — shared by the border, the node
+ *  clipping wrapper, and the Skia clip so all three stay in register. */
+const VIEWPORT_RADIUS = normalizeWidth(16);
 
 const clamp = (v: number, min: number, max: number) =>
   Math.min(Math.max(v, min), max);
@@ -343,10 +346,18 @@ const SLDViewport: FC<SLDViewportProps> = ({
           translateX={translateX}
           translateY={translateY}
           scale={scale}
+          clipRadius={fullscreen ? 0 : VIEWPORT_RADIUS - 1}
         />
-        <Animated.View style={nodeFrameStyle}>
-          <DiagramNodeLayer graph={graph} bounds={bounds} resolve={resolve} />
-        </Animated.View>
+        {/* Explicit clipping wrapper: the viewport's own overflow:'hidden'
+            doesn't reliably clip the Reanimated-transformed frame on every
+            platform — cards were bleeding over the rounded border. */}
+        <View
+          pointerEvents="box-none"
+          style={[themed.nodeClip, fullscreen && styles.clipSquare]}>
+          <Animated.View style={nodeFrameStyle}>
+            <DiagramNodeLayer graph={graph} bounds={bounds} resolve={resolve} />
+          </Animated.View>
+        </View>
         <Animated.View
           pointerEvents={controlsShown ? 'box-none' : 'none'}
           style={[StyleSheet.absoluteFill, controlsStyle]}>
@@ -380,6 +391,9 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     borderWidth: 0,
   },
+  clipSquare: {
+    borderRadius: 0,
+  },
 });
 
 const createStyles = (scheme: Scheme) =>
@@ -392,7 +406,14 @@ const createStyles = (scheme: Scheme) =>
       backgroundColor: scheme.isDark ? scheme.surfaceRaised : scheme.surfaceMuted,
       borderWidth: 1,
       borderColor: scheme.border,
-      borderRadius: normalizeWidth(16),
+      borderRadius: VIEWPORT_RADIUS,
+    },
+    nodeClip: {
+      ...StyleSheet.absoluteFillObject,
+      overflow: 'hidden',
+      borderRadius: VIEWPORT_RADIUS - 1,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
   });
 
