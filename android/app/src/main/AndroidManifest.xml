@@ -1,5 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <uses-permission android:name="android.permission.INTERNET" />
+  <!-- Short vibration feedback on taps (src/utils/haptics.ts). Without this
+       declared, Vibrator.vibrate() throws SecurityException at runtime. -->
+  <uses-permission android:name="android.permission.VIBRATE" />
 
   <application
     android:name=".MainApplication"
