@@ -138,6 +138,7 @@ const SLDViewport: FC<SLDViewportProps> = ({
   const savedTY = useSharedValue(focusTy);
   const savedScale = useSharedValue(initialScale);
   const controlsOpacity = useSharedValue(1);
+  const pinchActive = useSharedValue(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // `currentZoom` only feeds ControlButtons' +/- disabled checks against
@@ -146,9 +147,15 @@ const SLDViewport: FC<SLDViewportProps> = ({
   // the min-edge / middle / max-edge zones — the only transitions that can
   // change what ControlButtons renders. Thresholds match ControlButtons'
   // (±0.001), so the disabled states still flip at exactly the same scale.
+  //
+  // NEVER while a pinch is active: pinching to the stops crosses zones
+  // repeatedly, and a React commit landing mid-gesture races the UI thread's
+  // Skia/transform updates. The pinch's onFinalize syncs the state once
+  // when the fingers lift instead.
   useAnimatedReaction(
     () => scale.value,
     (value, prev) => {
+      if (pinchActive.value) return;
       const zone =
         value >= maxScale - 0.001 ? 2 : value <= minScale + 0.001 ? 0 : 1;
       const prevZone =
@@ -244,11 +251,18 @@ const SLDViewport: FC<SLDViewportProps> = ({
 
     const pinch = Gesture.Pinch()
       .enabled(!isLocked)
+      .onBegin(() => {
+        pinchActive.value = true;
+      })
       .onUpdate(e => {
         scale.value = clamp(savedScale.value * e.scale, minScale, maxScale);
       })
-      .onEnd(() => {
+      // onFinalize (not onEnd) so cancelled/failed gestures also release the
+      // mirror guard. Syncs the zoom state to JS exactly once per pinch.
+      .onFinalize(() => {
+        pinchActive.value = false;
         savedScale.value = scale.value;
+        runOnJS(setCurrentZoom)(scale.value);
       });
 
     return Gesture.Simultaneous(pinch, pan, tap);
@@ -262,6 +276,7 @@ const SLDViewport: FC<SLDViewportProps> = ({
     savedTY,
     scale,
     savedScale,
+    pinchActive,
     minScale,
     maxScale,
   ]);

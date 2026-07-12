@@ -8,7 +8,6 @@ import {
   Path as SkiaPath,
   Skia,
   useClock,
-  vec,
   type SkPath,
 } from '@shopify/react-native-skia';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
@@ -483,27 +482,31 @@ const DiagramSkiaLayerBase: FC<DiagramSkiaLayerProps> = ({
     setFrame(prev => (prev && prev.w === w && prev.h === h ? prev : { w, h }));
   }, []);
 
-  // Replicates the RN node-card layer's transform chain exactly:
-  //   outer = centre-layout offset of the bounds-sized frame inside the
-  //           viewport ((frame − bounds) / 2, negative when it overflows);
-  //   inner = [translateX, translateY, scale] pivoted on the frame centre,
-  //           matching RN's centre-origin transform semantics.
-  const frameOffset = useMemo(
-    () =>
-      frame
-        ? [
-            { translateX: (frame.w - width) / 2 },
-            { translateY: (frame.h - height) / 2 },
-          ]
-        : null,
-    [frame, width, height],
-  );
-  const frameCenter = useMemo(() => vec(width / 2, height / 2), [width, height]);
-  const viewTransform = useDerivedValue(() => [
-    { translateX: translateX.value },
-    { translateY: translateY.value },
-    { scale: scale.value },
-  ]);
+  // Replicates the RN node-card layer's transform chain exactly, folded into
+  // ONE SkMatrix per frame:
+  //   p' = frameOffset + C + T + s·(p − C)
+  // i.e. the centre-layout offset of the bounds frame inside the viewport,
+  // then RN's centre-origin [translate, scale] semantics.
+  //
+  // ⚠️ Must stay a single `matrix` prop. The previous implementation animated
+  // a `transform` ARRAY (rebuilt per frame by a derived value) on a Group
+  // with an `origin` — RN Skia 1.x's composite-prop interop races between
+  // the UI and render threads at pinch frequency and crashes on device. A
+  // matrix host object is the library's blessed animated-transform path
+  // (its own gesture examples use it).
+  const offX = frame ? (frame.w - width) / 2 : 0;
+  const offY = frame ? (frame.h - height) / 2 : 0;
+  const cx = width / 2;
+  const cy = height / 2;
+  const viewMatrix = useDerivedValue(() => {
+    const m = Skia.Matrix();
+    // Ops pre-concatenate: the first call applies LAST to a point, so this
+    // reads bottom-up — un-centre, scale, then offset + centre + pan.
+    m.translate(offX + cx + translateX.value, offY + cy + translateY.value);
+    m.scale(scale.value, scale.value);
+    m.translate(-cx, -cy);
+    return m;
+  }, [offX, offY, cx, cy]);
 
   // Skia clock → animated dash offset, shared by every flow edge.
   const clock = useClock();
@@ -511,23 +514,21 @@ const DiagramSkiaLayerBase: FC<DiagramSkiaLayerProps> = ({
 
   return (
     <Canvas style={StyleSheet.absoluteFill} onLayout={onCanvasLayout}>
-      {frameOffset ? (
-        <Group transform={frameOffset}>
-          <Group origin={frameCenter} transform={viewTransform}>
-            <SkiaPath path={dotGrid} color={dotColor} opacity={DOT_OPACITY} />
-            {skEdges.map(e =>
-              e.animated ? (
-                <FlowEdge
-                  key={e.id}
-                  edge={e}
-                  dashPhase={dashPhase}
-                  clock={clock}
-                />
-              ) : (
-                <IdleEdge key={e.id} edge={e} />
-              ),
-            )}
-          </Group>
+      {frame ? (
+        <Group matrix={viewMatrix}>
+          <SkiaPath path={dotGrid} color={dotColor} opacity={DOT_OPACITY} />
+          {skEdges.map(e =>
+            e.animated ? (
+              <FlowEdge
+                key={e.id}
+                edge={e}
+                dashPhase={dashPhase}
+                clock={clock}
+              />
+            ) : (
+              <IdleEdge key={e.id} edge={e} />
+            ),
+          )}
         </Group>
       ) : null}
     </Canvas>
