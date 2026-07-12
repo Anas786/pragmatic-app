@@ -111,8 +111,12 @@ const SLDViewport: FC<SLDViewportProps> = ({
       };
     }, [bounds, width, height]);
 
-  const [isLocked, setIsLocked] = useState(false);
-  const [orthogonal, setOrthogonal] = useState(false);
+  // Locked + orthogonal (right-angle) routing by default: the diagram opens
+  // as a tidy, fixed schematic — unlock to pan/pinch, toggle routing for
+  // curved edges. The +/- zoom buttons still work while locked (only
+  // gestures are gated), and the tap-to-show-controls gesture stays live.
+  const [isLocked, setIsLocked] = useState(true);
+  const [orthogonal, setOrthogonal] = useState(true);
   const [currentZoom, setCurrentZoom] = useState(initialScale);
   // Auto-hiding controls: visible on tap, fade out after a short idle.
   const [controlsShown, setControlsShown] = useState(true);
