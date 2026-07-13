@@ -1,12 +1,12 @@
 import React, { FC, memo, ReactNode, useMemo } from 'react';
 import { StyleSheet, View, ViewStyle } from 'react-native';
-import { energyPalette, radius as radiusTokens, space } from 'src/theme';
+import { radius as radiusTokens, space } from 'src/theme';
 import {
   FONT_SIZE_SM,
   FONT_SIZE_XXS,
   formatCompact,
+  resolveCardColor,
   shortSourceLabel,
-  sourceTokenFromName,
 } from 'src/utils';
 import { ISiteCard } from 'src/types';
 import AppText from '../AppText';
@@ -127,8 +127,7 @@ const MetricChip: FC<MetricChipProps> = memo(
     textSecondary,
     textTertiary,
   }) => {
-    const sourceColor =
-      energyPalette[sourceTokenFromName(card.name) ?? 'solar'] ?? card.color;
+    const sourceColor = resolveCardColor(card);
     const label = shortSourceLabel(card.name);
     const hasPercent = (percent ?? 0) > 0 && trackColor !== undefined;
     return (

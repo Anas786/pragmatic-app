@@ -44,8 +44,11 @@ interface UseSiteListResult {
    * cached page sequentially (7 pages deep = 7 serial round-trips) —
    * this prunes the cache down to page one first, so only a single
    * request fires. Deeper pages reload lazily as the user scrolls.
+   *
+   * Returns the refetch promise (settles even on fetch error) so callers
+   * can drive a spinner — e.g. Dashboard's RefreshControl.
    */
-  refresh: () => void;
+  refresh: () => Promise<unknown>;
 }
 
 /**
@@ -85,6 +88,15 @@ export const useSiteList = (
     },
     staleTime: 1000 * 60 * 10,
     gcTime: 1000 * 60 * 30,
+    // Automatic focus/reconnect refetches replay EVERY cached page of an
+    // infinite query serially (7 pages deep = 7 back-to-back round-trips,
+    // each with a 15s axios timeout) — exactly the pathology `refresh()`
+    // was built to avoid, while also pinning any fetching-derived UI.
+    // Pull-to-refresh + pagination cover freshness, so both automatic
+    // replay triggers are disabled (App.tsx wires focusManager to AppState
+    // and onlineManager to NetInfo, so both would otherwise fire).
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: (failureCount, error: any) => {
       const status = error?.response?.status;
       if (status === 401 || status === 403) return false;
@@ -109,16 +121,24 @@ export const useSiteList = (
             }
           : data,
     );
-    refetch();
+    return refetch();
   }, [queryClient, searchKey, pageSize, refetch]);
 
   // Flatten loaded pages into a single array for the FlatList. Memoised
   // so the array reference is stable across unrelated re-renders, which
   // keeps the FlatList's per-row memo cells from re-evaluating.
-  const sites = useMemo<ISite[]>(
-    () => query.data?.pages.flatMap(p => p.data) ?? [],
-    [query.data],
-  );
+  //
+  // Deduped by id: offset pagination against a cache/origin-mixed backend
+  // (metadata.source flips between Redis snapshot and origin) can serve a
+  // site on two adjacent pages, which would duplicate FlatList keys
+  // (keyExtractor = site.id). Map keeps the first occurrence's position
+  // while the later (fresher) object wins.
+  const sites = useMemo<ISite[]>(() => {
+    const flat = query.data?.pages.flatMap(p => p.data) ?? [];
+    if (flat.length === 0) return flat;
+    const byId = new Map(flat.map(s => [s.id, s]));
+    return byId.size === flat.length ? flat : Array.from(byId.values());
+  }, [query.data]);
 
   const total =
     query.data?.pages[query.data.pages.length - 1]?.metadata.total ??

@@ -65,13 +65,16 @@ export const formatCompact = (value: number | string | null | undefined): string
     return formatCompact(parsed);
   }
   if (!Number.isFinite(value)) return '—';
+  // Decimal-count thresholds compare the MAGNITUDE — comparing the signed
+  // value made every negative reading (battery discharge, grid export)
+  // pick up an extra decimal vs its positive twin (-121.4K vs 121K).
   const abs = Math.abs(value);
   if (abs >= 1e9)
-    return (value / 1e9).toFixed(value >= 10e9 ? 0 : 1) + 'B';
+    return (value / 1e9).toFixed(abs >= 10e9 ? 0 : 1) + 'B';
   if (abs >= 1e6)
-    return (value / 1e6).toFixed(value >= 10e6 ? 0 : 1) + 'M';
+    return (value / 1e6).toFixed(abs >= 10e6 ? 0 : 1) + 'M';
   if (abs >= 1e3)
-    return (value / 1e3).toFixed(value >= 10e3 ? 0 : 1) + 'K';
+    return (value / 1e3).toFixed(abs >= 10e3 ? 0 : 1) + 'K';
   return value.toFixed(0);
 };
 
@@ -83,6 +86,40 @@ export const formatCompact = (value: number | string | null | undefined): string
  */
 export const findSourceForColumn = (column: string): SourceToken | undefined =>
   sourceTokenFromName(column);
+
+/**
+ * Neutral accent for cards whose name doesn't resolve to a source token
+ * AND whose backend `color` is missing/malformed. Mirrors the design
+ * tokens' slate-500 neutral (scheme.textSecondary in light mode). MUST
+ * stay a 6-digit hex — callers alpha-suffix it (e.g. `${color}2E` in
+ * SiteCard's hero tint/border fills).
+ */
+const NEUTRAL_CARD_HEX = '#6B7280';
+
+/**
+ * Backend-shipped card colours are only trusted when they're a full
+ * `#RRGGBB` hex: callers append 2-digit alpha suffixes, which silently
+ * breaks on shorthand (`#0f0`), named (`red`) or `rgba()` values.
+ */
+const SIX_DIGIT_HEX = /^#[0-9a-fA-F]{6}$/;
+
+/**
+ * Accent colour for a backend card:
+ *   1. the v2 `energyPalette` entry when `name` resolves to a source token,
+ *   2. else the card's own backend-provided `color` (if a valid 6-digit hex),
+ *   3. else a neutral slate.
+ *
+ * Always returns a 6-digit hex so callers may alpha-suffix it.
+ */
+export const resolveCardColor = (card: {
+  name: string;
+  color?: string | null;
+}): string => {
+  const token = sourceTokenFromName(card.name);
+  if (token) return energyPalette[token];
+  if (card.color && SIX_DIGIT_HEX.test(card.color)) return card.color;
+  return NEUTRAL_CARD_HEX;
+};
 
 /** Coerce a card-style value (`number | "NA" | etc.`) to a finite
  *  number, or `null` when it can't be parsed. */

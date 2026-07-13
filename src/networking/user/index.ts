@@ -18,11 +18,16 @@ const normalizeSiteListResponse = (
   fallbackPageSize: number,
 ): ISiteListResponse => {
   if (Array.isArray(raw)) {
+    // The legacy shape ships the ENTIRE list in one response and ignores
+    // page/pageSize params. Synthesizing pageSize >= raw.length makes the
+    // envelope self-terminating (totalPages === 1), so useSiteList's
+    // getNextPageParam never requests a "page 2" that would just re-fetch
+    // and append the same full array.
     return {
       metadata: {
         total: raw.length,
         page: fallbackPage,
-        pageSize: fallbackPageSize,
+        pageSize: Math.max(raw.length, fallbackPageSize),
         responseType: 'original',
       },
       data: raw as ISite[],

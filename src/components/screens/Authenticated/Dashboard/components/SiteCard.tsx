@@ -25,7 +25,6 @@ import {
 } from 'src/components/common';
 import {
   duration,
-  energyPalette,
   radius as radiusTokens,
   Scheme,
   space,
@@ -42,8 +41,8 @@ import {
   FONT_SIZE_XXS,
   ICON_SIZE_MD,
   numericCardValue,
+  resolveCardColor,
   shortSourceLabel,
-  sourceTokenFromName,
 } from 'src/utils';
 import { ISite, ISiteCard } from 'src/types';
 import { DownArrow, UpArrow } from 'src/assets/icons';
@@ -54,9 +53,6 @@ const STAGGER_CAP = 6;
 // mount later during scroll (window recycling) render as plain Views.
 // Matches STAGGER_CAP so every animated row also gets a staggered delay.
 const ANIM_LIMIT = 6;
-
-const resolveSourceColor = (card: ISiteCard): string =>
-  energyPalette[sourceTokenFromName(card.name) ?? 'solar'] ?? card.color;
 
 /** Pick the highest-numeric card as the hero. Falls back to the first card
  *  when no value is numeric (so a site with only "NA" entries still shows
@@ -81,12 +77,14 @@ const StatusRow: FC<{ children?: ReactNode }> = ({ children }) => (
   <View style={styles.statusRow}>{children}</View>
 );
 
-const SatellitesGrid: FC<{ children?: ReactNode }> = ({ children }) => (
-  <View style={styles.satellitesGrid}>{children}</View>
-);
-
-const SatellitesGridExpanded: FC<{ children?: ReactNode }> = ({ children }) => (
-  <View style={[styles.satellitesGrid, styles.satellitesGridExpanded]}>
+/** One component, prop-driven — toggling `expanded` must diff a style, not
+ *  swap the element TYPE (a type swap unmounts/remounts every MetricChip,
+ *  defeating their memo; see the frozen-wrapper convention below). */
+const SatellitesGrid: FC<{ expanded: boolean; children?: ReactNode }> = ({
+  expanded,
+  children,
+}) => (
+  <View style={[styles.satellitesGrid, expanded && styles.satellitesGridExpanded]}>
     {children}
   </View>
 );
@@ -218,14 +216,31 @@ export const SiteCard: FC<SiteCardProps> = memo(
   ({ site, index, onPress }) => {
     const scheme = useScheme();
     const themed = useThemedStyles(createCardStyles);
-    const [logoFailed, setLogoFailed] = useState(false);
+    // Tracks the exact URL that failed (not a boolean) so a changed
+    // logo_ext retries immediately, and is reset whenever a refreshed
+    // `site` object arrives (render-phase adjustment below) so one
+    // transient CDN/network failure doesn't downgrade the avatar to
+    // initials for the rest of the Dashboard session.
+    const [failedLogoUrl, setFailedLogoUrl] = useState<string | null>(null);
     const [expanded, setExpanded] = useState(false);
     // Frozen at first mount: if `index` later crosses the ANIM_LIMIT
     // boundary (search narrowing, refresh pruning), the wrapper element
     // type must not flip — that would remount the card and drop
-    // `expanded`/`logoFailed` state.
+    // `expanded`/`failedLogoUrl` state.
     const [animateEntrance] = useState(() => index < ANIM_LIMIT);
-    const logoUrl = !logoFailed ? buildSiteLogoUrl(site) : null;
+    // React's "derived state" pattern: react-query structural sharing
+    // keeps `site` identity stable unless the payload actually changed,
+    // so this only fires (and re-renders) on genuinely fresh data.
+    const [lastSite, setLastSite] = useState(site);
+    if (site !== lastSite) {
+      setLastSite(site);
+      setFailedLogoUrl(null);
+    }
+    const resolvedLogoUrl = buildSiteLogoUrl(site);
+    const logoUrl =
+      resolvedLogoUrl && resolvedLogoUrl !== failedLogoUrl
+        ? resolvedLogoUrl
+        : null;
     // Stable identity (the `?? []` would otherwise be a new array each
     // render) so the heroCard/satellites memos below don't recompute.
     const cards = useMemo(() => site.cards ?? [], [site.cards]);
@@ -239,11 +254,7 @@ export const SiteCard: FC<SiteCardProps> = memo(
     const hasOverflow = satellites.length > 3;
     const visibleSatellites = expanded ? satellites : satellites.slice(0, 3);
 
-    const SatellitesContainer = expanded
-      ? SatellitesGridExpanded
-      : SatellitesGrid;
-
-    const heroColor = heroCard ? resolveSourceColor(heroCard) : scheme.brand;
+    const heroColor = heroCard ? resolveCardColor(heroCard) : scheme.brand;
     const heroLabel = heroCard
       ? shortSourceLabel(heroCard.name).toUpperCase()
       : '';
@@ -266,7 +277,7 @@ export const SiteCard: FC<SiteCardProps> = memo(
                   <Image
                     source={{ uri: logoUrl }}
                     style={styles.avatarImage}
-                    onError={() => setLogoFailed(true)}
+                    onError={() => setFailedLogoUrl(logoUrl)}
                   />
                 ) : (
                   <AppText
@@ -356,7 +367,7 @@ export const SiteCard: FC<SiteCardProps> = memo(
           )}
 
           {visibleSatellites.length > 0 ? (
-            <SatellitesContainer>
+            <SatellitesGrid expanded={expanded}>
               {visibleSatellites.map((card, i) => (
                 <MetricChip
                   key={`${site.id}-sat-${i}`}
@@ -367,7 +378,7 @@ export const SiteCard: FC<SiteCardProps> = memo(
                   textTertiary={scheme.textTertiary}
                 />
               ))}
-            </SatellitesContainer>
+            </SatellitesGrid>
           ) : null}
 
           {hasOverflow ? (

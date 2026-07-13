@@ -179,7 +179,6 @@ const Dashboard: FC = () => {
     sites,
     total,
     isLoading,
-    isFetching,
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
@@ -187,6 +186,17 @@ const Dashboard: FC = () => {
     refresh,
     error,
   } = useSiteList({ q: debouncedQuery });
+
+  // RefreshControl is driven by LOCAL state so the spinner engages ONLY on
+  // a user pull — deriving it from `isFetching` made every background
+  // refetch (focus regain, stale search-cache revalidation) yank the list
+  // down with a phantom spinner. `.finally` because react-query's refetch
+  // promise resolves (never rejects) even when the fetch errors.
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    refresh().finally(() => setRefreshing(false));
+  }, [refresh]);
 
   const rows: SiteRow[] = useMemo(
     () => sites.map(site => ({ site })),
@@ -403,8 +413,8 @@ const Dashboard: FC = () => {
         keyboardDismissMode="on-drag"
         refreshControl={
           <RefreshControl
-            refreshing={!isLoading && isFetching && !isFetchingNextPage}
-            onRefresh={refresh}
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
             tintColor={scheme.brand}
             colors={[scheme.brand]}
           />
