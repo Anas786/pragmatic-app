@@ -44,6 +44,8 @@ import ControlButtons from './ControlButtons';
 import { DiagramNodeLayer, DiagramSkiaLayer } from './SummaryView/SLDCanvas';
 
 const ZOOM_STEP = 1.25;
+/** Idle time before the floating controls fade out. */
+const HIDE_CONTROLS_DELAY_MS = 2600;
 /** Corner radius of the inline viewport — shared by the border, the node
  *  clipping wrapper, and the Skia clip so all three stay in register. */
 const VIEWPORT_RADIUS = normalizeWidth(16);
@@ -130,6 +132,14 @@ const SLDViewport: FC<SLDViewportProps> = ({
   const controlsOpacity = useSharedValue(1);
   const pinchActive = useSharedValue(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // JS-side count of in-flight pan/pinch gestures (mutated only via runOnJS
+  // callbacks, never from a worklet). A COUNTER, not a boolean: pinch + pan
+  // are Gesture.Simultaneous, so a boolean cleared by either onFinalize
+  // would re-arm the hide timer while the other gesture is still updating.
+  const activeGestureCount = useRef(0);
+  // Set when a reveal happened mid-gesture — the setControlsShown(true)
+  // commit is deferred to the last gesture's onFinalize.
+  const pendingControlsShow = useRef(false);
 
   // `currentZoom` only feeds ControlButtons' +/- disabled checks against
   // min/max. Mirroring every pinch frame through runOnJS/setState flooded JS
@@ -195,25 +205,80 @@ const SLDViewport: FC<SLDViewportProps> = ({
     savedScale,
   ]);
 
-  const hideControls = useCallback(() => {
-    controlsOpacity.value = withTiming(0, { duration: 350 });
-    setControlsShown(false);
+  const cancelHideTimer = useCallback(() => {
+    if (hideTimer.current) {
+      clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+    }
+  }, []);
+
+  // Fade + commit the controls away — but NEVER while a gesture is actively
+  // driving the shared values: setControlsShown flips the overlay's
+  // pointerEvents prop, and a React/Fabric commit landing mid-gesture races
+  // the UI thread's Skia/transform updates (same race the pinch mirror guard
+  // above exists for). If a gesture is in flight, push the deadline back.
+  const hideControls = useCallback(
+    function hide() {
+      if (activeGestureCount.current > 0) {
+        hideTimer.current = setTimeout(hide, HIDE_CONTROLS_DELAY_MS);
+        return;
+      }
+      controlsOpacity.value = withTiming(0, { duration: 350 });
+      setControlsShown(false);
+    },
+    [controlsOpacity],
+  );
+
+  const armHideTimer = useCallback(() => {
+    cancelHideTimer();
+    hideTimer.current = setTimeout(hideControls, HIDE_CONTROLS_DELAY_MS);
+  }, [cancelHideTimer, hideControls]);
+
+  // Reveal the controls. The opacity ramp is a pure UI-thread animation and
+  // is always safe mid-gesture; the setControlsShown(true) COMMIT is
+  // deferred to gesture end while a pan/pinch is active (the user can't tap
+  // the controls mid-gesture anyway).
+  const revealControls = useCallback(() => {
+    controlsOpacity.value = withTiming(1, { duration: 180 });
+    if (activeGestureCount.current > 0) {
+      pendingControlsShow.current = true;
+      return;
+    }
+    setControlsShown(true);
   }, [controlsOpacity]);
 
   const showControls = useCallback(() => {
-    controlsOpacity.value = withTiming(1, { duration: 180 });
-    setControlsShown(true);
-    if (hideTimer.current) clearTimeout(hideTimer.current);
-    hideTimer.current = setTimeout(hideControls, 2600);
-  }, [controlsOpacity, hideControls]);
+    revealControls();
+    // While a gesture is in flight the timer is armed by its onFinalize —
+    // arming here would let it fire mid-gesture.
+    if (activeGestureCount.current === 0) armHideTimer();
+  }, [revealControls, armHideTimer]);
+
+  // Gesture bookkeeping, called via runOnJS (timers + refs live on JS).
+  // Clear the hide timer the moment a gesture starts; re-arm it only when
+  // the LAST simultaneous gesture finalizes, so the auto-hide commit can
+  // never land while onUpdate is writing shared values every frame.
+  const onGestureBegin = useCallback(() => {
+    activeGestureCount.current += 1;
+    cancelHideTimer();
+  }, [cancelHideTimer]);
+
+  const onGestureFinalize = useCallback(() => {
+    activeGestureCount.current = Math.max(0, activeGestureCount.current - 1);
+    if (activeGestureCount.current === 0) {
+      if (pendingControlsShow.current) {
+        pendingControlsShow.current = false;
+        setControlsShown(true);
+      }
+      armHideTimer();
+    }
+  }, [armHideTimer]);
 
   // Show briefly on mount (so the controls are discoverable), then fade.
   useEffect(() => {
     showControls();
-    return () => {
-      if (hideTimer.current) clearTimeout(hideTimer.current);
-    };
-  }, [showControls]);
+    return cancelHideTimer;
+  }, [showControls, cancelHideTimer]);
 
   const gesture = useMemo(() => {
     const tap = Gesture.Tap()
@@ -222,7 +287,10 @@ const SLDViewport: FC<SLDViewportProps> = ({
 
     const pan = Gesture.Pan()
       .enabled(!isLocked)
-      .onBegin(() => runOnJS(showControls)())
+      .onBegin(() => {
+        runOnJS(onGestureBegin)();
+        runOnJS(revealControls)();
+      })
       .onUpdate(e => {
         if (rotated) {
           // Parent is rotated 90° clockwise → remap screen-space deltas into
@@ -237,12 +305,14 @@ const SLDViewport: FC<SLDViewportProps> = ({
       .onEnd(() => {
         savedTX.value = translateX.value;
         savedTY.value = translateY.value;
-      });
+      })
+      .onFinalize(() => runOnJS(onGestureFinalize)());
 
     const pinch = Gesture.Pinch()
       .enabled(!isLocked)
       .onBegin(() => {
         pinchActive.value = true;
+        runOnJS(onGestureBegin)();
       })
       .onUpdate(e => {
         scale.value = clamp(savedScale.value * e.scale, minScale, maxScale);
@@ -253,6 +323,7 @@ const SLDViewport: FC<SLDViewportProps> = ({
         pinchActive.value = false;
         savedScale.value = scale.value;
         runOnJS(setCurrentZoom)(scale.value);
+        runOnJS(onGestureFinalize)();
       });
 
     return Gesture.Simultaneous(pinch, pan, tap);
@@ -260,6 +331,9 @@ const SLDViewport: FC<SLDViewportProps> = ({
     isLocked,
     rotated,
     showControls,
+    revealControls,
+    onGestureBegin,
+    onGestureFinalize,
     translateX,
     translateY,
     savedTX,

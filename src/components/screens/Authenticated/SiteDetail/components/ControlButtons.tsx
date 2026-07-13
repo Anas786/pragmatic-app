@@ -45,8 +45,10 @@ const ControlButtons: FC<ControlButtonsProps> = ({
 }) => {
   const scheme = useScheme();
   const styles = useMemo(() => createStyles(scheme), [scheme]);
-  const isZoomInDisabled = isLocked || currentZoom >= maxZoom - 0.001;
-  const isZoomOutDisabled = isLocked || currentZoom <= minZoom + 0.001;
+  // Lock only gates pan/pinch GESTURES (see SLDViewport) — the +/- buttons
+  // stay live while locked, gated purely on the min/max zoom stops.
+  const isZoomInDisabled = currentZoom >= maxZoom - 0.001;
+  const isZoomOutDisabled = currentZoom <= minZoom + 0.001;
   const containerStyle = useMemo(
     () => [
       styles.container,

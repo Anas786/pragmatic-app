@@ -13,7 +13,11 @@ import {
 const HERO_HEIGHT = 188;
 const ENV_TILE_HEIGHT = 130;
 const SLD_HEIGHT = 220;
-const TAB_PILL_WIDTHS = [88, 78, 70, 86, 78, 92, 84];
+// Keep in sync with TabSelector: one pill per visible tab (6 — Alarms is
+// hidden) at PILL_HEIGHT (40), so the strip doesn't shift at the
+// skeleton → content swap.
+const TAB_PILL_WIDTHS = [88, 78, 70, 86, 92, 84];
+const TAB_PILL_HEIGHT = 40;
 
 const stagger = (i: number) =>
   FadeInDown.delay(60 * i).duration(duration.slow).springify().damping(22);
@@ -28,7 +32,7 @@ const SiteDetailSkeleton: FC = () => {
       <Animated.View entering={stagger(0)}>
         <TabStrip>
           {TAB_PILL_WIDTHS.map((w, i) => (
-            <Skeleton key={i} width={w} height={36} radius="pill" />
+            <Skeleton key={i} width={w} height={TAB_PILL_HEIGHT} radius="pill" />
           ))}
         </TabStrip>
       </Animated.View>
@@ -139,7 +143,9 @@ const styles = StyleSheet.create({
   tabStrip: {
     flexDirection: 'row',
     gap: space.sm,
+    // Mirrors TabSelector's container padding so pills line up exactly.
     paddingVertical: space.xs,
+    paddingHorizontal: space.xs,
   },
   heroTopRow: {
     flexDirection: 'row',

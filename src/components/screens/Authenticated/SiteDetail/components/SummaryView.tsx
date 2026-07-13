@@ -26,13 +26,8 @@
  *   - site_info.revenue.tariff/currency drive the Revenue line
  */
 
-import React, { FC, ReactNode, useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  InteractionManager,
-  StyleSheet,
-  View,
-} from 'react-native';
+import React, { FC, ReactNode, useMemo } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import LottieView from 'lottie-react-native';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -60,6 +55,7 @@ import { BoltIcon } from 'src/assets/icons';
 import {
   formatCardValue as formatCardValueLegacy,
   formatNumber,
+  numericCardValue,
   resolveCardValue,
   FONT_SIZE_XXS,
   FONT_SIZE_XS,
@@ -96,9 +92,9 @@ const KWH_TO_MWH = 1 / 1000;
 const getP24 = (
   liveData: ISiteAllData | null | undefined,
 ): number | undefined => {
-  const raw = resolveCardValue(P24_PROBE, liveData);
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) return undefined;
-  return raw;
+  // Backend sometimes serializes numbers as strings (CLAUDE.md §14) —
+  // coerce via the shared helper instead of discarding non-number leaves.
+  return numericCardValue(resolveCardValue(P24_PROBE, liveData)) ?? undefined;
 };
 
 interface SummaryContext {
@@ -269,16 +265,15 @@ const SummaryView: FC = () => {
   const { data: siteConfig } = useSiteConfig(siteId);
   const ready = useInteractionReady();
 
-  const [showDiagram, setShowDiagram] = useState(false);
-
-  // SLDDiagram is heavy — defer mounting until after the navigation
-  // transition has settled.
-  useEffect(() => {
-    const handle = InteractionManager.runAfterInteractions(() => {
-      setShowDiagram(true);
-    });
-    return () => handle.cancel();
-  }, []);
+  // SLDDiagram (Skia canvas + gesture handlers + node cards) must land in a
+  // LATER commit than the hero/env tree. InteractionManager.runAfterInteractions
+  // fired on the next tick here — native-stack transitions and the tab-chip
+  // morph register no JS interaction handles — so the "deferred" mount
+  // collapsed into the same commit as the rest of the tab and the spinner
+  // placeholder never showed. A second, longer mount-anchored timer is
+  // deterministic: `ready` flips at 120 ms, the diagram at 300 ms, so the
+  // heavy subtree never shares a commit with the main tree.
+  const showDiagram = useInteractionReady(300);
 
   const ctx = useMemo<SummaryContext>(
     () => extractRevenueContext(siteConfig),

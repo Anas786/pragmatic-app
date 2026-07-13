@@ -9,7 +9,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { AppText, createBox, PressableScale } from 'src/components/common';
+import {
+  AppText,
+  createBox,
+  EmptyStateCard,
+  PressableScale,
+} from 'src/components/common';
 import {
   duration,
   Scheme,
@@ -47,7 +52,32 @@ const SiteDetail: FC = () => {
   const siteConfig = useSiteConfig(siteId);
   useReportMapping();
 
-  const isInitialLoading = liveData.isLoading || siteConfig.isLoading;
+  // react-query v5: `isLoading` = isPending && isFetching, which is FALSE
+  // both when a query errored after retries and when it's paused offline
+  // (onlineManager/NetInfo). The old `isLoading`-only gate let ViewsContent
+  // mount a placeholder "—" dashboard with a pulsing LIVE badge in those
+  // states. Branch explicitly instead: initial-load error → retry card,
+  // paused with no data → offline card (auto-resumes on reconnect),
+  // pending → skeleton, otherwise content. A failed BACKGROUND refetch
+  // (isError with cached data) intentionally falls through to content.
+  const isInitialError =
+    (liveData.isError && liveData.data === undefined) ||
+    (siteConfig.isError && siteConfig.data === undefined);
+  const isOffline =
+    !isInitialError &&
+    ((liveData.isPending && liveData.fetchStatus === 'paused') ||
+      (siteConfig.isPending && siteConfig.fetchStatus === 'paused'));
+  const isInitialLoading =
+    !isInitialError &&
+    !isOffline &&
+    (liveData.isPending || siteConfig.isPending);
+
+  const handleRetry = () => {
+    if (liveData.isError || liveData.data === undefined) liveData.refetch();
+    if (siteConfig.isError || siteConfig.data === undefined) {
+      siteConfig.refetch();
+    }
+  };
 
   const [logoFailed, setLogoFailed] = useState(false);
   const logoSource =
@@ -127,6 +157,19 @@ const SiteDetail: FC = () => {
       <BodyScroll>
         {isInitialLoading ? (
           <SiteDetailSkeleton />
+        ) : isInitialError ? (
+          <EmptyStateCard
+            prominent
+            title="Couldn't load site data"
+            message="Something went wrong while fetching this site. Check your connection and try again."
+            onRetry={handleRetry}
+          />
+        ) : isOffline ? (
+          <EmptyStateCard
+            prominent
+            title="You're offline"
+            message="Site data will load automatically once your connection is restored."
+          />
         ) : (
           <ContentFade>
             <ViewsContent />
@@ -231,13 +274,11 @@ const BodyScroll: FC<{children?: ReactNode}> = ({children}) => (
     style={styles.scrollView}
     contentContainerStyle={styles.scrollContent}
     showsVerticalScrollIndicator={false}
-    // Perf knobs for scrolling a deep tree of charts, Lottie tiles and
-    // heavy Surfaces. `removeClippedSubviews` lets RN drop offscreen
-    // native views during scroll; `scrollEventThrottle` keeps any
-    // onScroll cadence cheap; `keyboardShouldPersistTaps` avoids the
-    // hidden-keyboard relayout that was triggering on each tap.
-    removeClippedSubviews
-    scrollEventThrottle={16}
+    // `keyboardShouldPersistTaps` avoids the hidden-keyboard relayout that
+    // was triggering on each tap. (Note: `removeClippedSubviews` would be a
+    // no-op here — the content container has a single full-height child, so
+    // nothing is ever clipped — and `scrollEventThrottle` is meaningless
+    // without an onScroll handler; neither is set on purpose.)
     keyboardShouldPersistTaps="handled">
     {children}
   </ScrollView>

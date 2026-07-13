@@ -5,8 +5,8 @@ import {
   getSiteConfig,
 } from 'src/networking';
 import { REPORT_MAPPING_QUERY_KEY } from './useReportMapping';
-import { siteConfigQueryKey } from './useSiteConfig';
-import { siteDataQueryKey } from './useSiteData';
+import { SITE_CONFIG_STALE_TIME, siteConfigQueryKey } from './useSiteConfig';
+import { SITE_DATA_STALE_TIME, siteDataQueryKey } from './useSiteData';
 
 /**
  * Tracks the most recently opened site so we know whether the user is
@@ -60,15 +60,19 @@ export const useSwitchActiveSite = () => {
     // Fire all three requests in parallel. The two protected per-site
     // endpoints + the public report-mapping are independent, so there's
     // no point sequencing them.
+    // staleTimes MUST match the subscriber hooks' (shared constants) — a
+    // drifted shorter value here made a same-site re-tap refire the large
+    // /protected/data/all payload mid-navigation while the mounting
+    // useSiteData observer simultaneously served the cache as fresh.
     queryClient.prefetchQuery({
       queryKey: siteDataQueryKey(siteId),
       queryFn: () => getSiteAllData(siteId),
-      staleTime: 1000 * 30,
+      staleTime: SITE_DATA_STALE_TIME,
     });
     queryClient.prefetchQuery({
       queryKey: siteConfigQueryKey(siteId),
       queryFn: () => getSiteConfig(siteId),
-      staleTime: 1000 * 60 * 30,
+      staleTime: SITE_CONFIG_STALE_TIME,
     });
     queryClient.prefetchQuery({
       queryKey: REPORT_MAPPING_QUERY_KEY,

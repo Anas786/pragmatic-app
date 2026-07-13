@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { getSiteAllData } from 'src/networking';
 import { ISiteAllData } from 'src/types';
 
@@ -15,8 +15,12 @@ export const siteDataQueryKey = (siteId: string) =>
  * subscriber. Keep staleTime generous so switching tabs serves cache instead
  * of refiring the large /protected/data/all payload mid-transition. Must stay
  * below gcTime (5 min) or the entry would be collected while still fresh.
+ *
+ * Exported so `useSwitchActiveSite`'s prefetch shares the exact same
+ * freshness window — a drifted literal there made same-site re-taps refetch
+ * the full payload mid-navigation.
  */
-const SITE_DATA_STALE_TIME = 1000 * 60 * 3;
+export const SITE_DATA_STALE_TIME = 1000 * 60 * 3;
 
 /**
  * Subscribes the calling component to /protected/data/all/{siteId}.
@@ -50,23 +54,3 @@ export const useSiteData = (siteId: string | undefined | null) =>
       return failureCount < 2;
     },
   });
-
-/**
- * Prefetch helper — call from Dashboard's onPress so the network request
- * fires the moment the user taps a card, not after SiteDetail mounts.
- *
- * Usage:
- *   const prefetchSite = usePrefetchSiteData();
- *   onPress={() => { prefetchSite(site.id); navigation.navigate(...); }}
- */
-export const usePrefetchSiteData = () => {
-  const queryClient = useQueryClient();
-  return (siteId: string) => {
-    if (!siteId) return;
-    queryClient.prefetchQuery({
-      queryKey: siteDataQueryKey(siteId),
-      queryFn: () => getSiteAllData(siteId),
-      staleTime: SITE_DATA_STALE_TIME,
-    });
-  };
-};

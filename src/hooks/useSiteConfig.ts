@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { getSiteConfig } from 'src/networking';
 import { ISiteConfig } from 'src/types';
 
@@ -9,6 +9,13 @@ import { ISiteConfig } from 'src/types';
  */
 export const siteConfigQueryKey = (siteId: string) =>
   ['site', 'config', siteId] as const;
+
+/**
+ * Site config rarely changes, so it stays fresh much longer than the live
+ * data cache. Exported so `useSwitchActiveSite`'s prefetch shares the exact
+ * same freshness window.
+ */
+export const SITE_CONFIG_STALE_TIME = 1000 * 60 * 30;
 
 /**
  * Subscribes the calling component to /protected/config/site/{siteId}.
@@ -27,7 +34,7 @@ export const useSiteConfig = (siteId: string | undefined | null) =>
     queryKey: siteConfigQueryKey(siteId ?? ''),
     queryFn: () => getSiteConfig(siteId as string),
     enabled: !!siteId,
-    staleTime: 1000 * 60 * 30,
+    staleTime: SITE_CONFIG_STALE_TIME,
     gcTime: 1000 * 60 * 60,
     retry: (failureCount, error: any) => {
       const status = error?.response?.status;
@@ -35,25 +42,3 @@ export const useSiteConfig = (siteId: string | undefined | null) =>
       return failureCount < 2;
     },
   });
-
-/**
- * Prefetch helper — call from Dashboard's onPress so the network request
- * fires the moment the user taps a card, in parallel with the live-data
- * prefetch. By the time SiteDetail mounts both responses are typically
- * already in cache.
- *
- * Usage:
- *   const prefetchConfig = usePrefetchSiteConfig();
- *   onPress={() => { prefetchConfig(site.id); navigation.navigate(...); }}
- */
-export const usePrefetchSiteConfig = () => {
-  const queryClient = useQueryClient();
-  return (siteId: string) => {
-    if (!siteId) return;
-    queryClient.prefetchQuery({
-      queryKey: siteConfigQueryKey(siteId),
-      queryFn: () => getSiteConfig(siteId),
-      staleTime: 1000 * 60 * 30,
-    });
-  };
-};
