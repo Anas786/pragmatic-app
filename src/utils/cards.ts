@@ -1,4 +1,5 @@
 import { ICardConfig, ISiteAllData, ISiteConfig } from 'src/types';
+import { tryNumber } from './parsers';
 
 /**
  * Card config + live-data resolver pipeline.
@@ -35,16 +36,6 @@ import { ICardConfig, ISiteAllData, ISiteConfig } from 'src/types';
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
-
-/** Try to coerce a value to a finite number; returns undefined otherwise. */
-const tryNumber = (v: unknown): number | undefined => {
-  if (typeof v === 'number' && Number.isFinite(v)) return v;
-  if (typeof v === 'string' && v.trim() !== '') {
-    const n = Number(v);
-    if (Number.isFinite(n)) return n;
-  }
-  return undefined;
-};
 
 /**
  * Pull a single card config out of the raw `cards` array entry. Tolerates
@@ -160,70 +151,23 @@ export const resolveCardValue = (
 };
 
 /**
- * Abbreviate a large number with K/M/B/T suffixes. Keeps the configured
- * decimal places. Used by {@link formatCardValue} to keep cards readable
- * inside the 48%-width grid even when telemetry runs into the billions
- * (e.g. lifetime energy counters).
- *
- * Examples (decimalPlaces = 2):
- *   1,005,727,768.96 → "1.01B"
- *   14,655,700        → "14.66M"
- *   2,500,000,000,000 → "2.50T"
- */
-export const formatCompactNumber = (
-  num: number,
-  decimalPlaces?: number,
-): string => {
-  if (!Number.isFinite(num)) return '—';
-  const abs = Math.abs(num);
-  const dp =
-    typeof decimalPlaces === 'number' && decimalPlaces >= 0
-      ? decimalPlaces
-      : 2;
-
-  let divisor = 1;
-  let suffix = '';
-  if (abs >= 1e12) {
-    divisor = 1e12;
-    suffix = 'T';
-  } else if (abs >= 1e9) {
-    divisor = 1e9;
-    suffix = 'B';
-  } else if (abs >= 1e6) {
-    divisor = 1e6;
-    suffix = 'M';
-  }
-
-  const scaled = num / divisor;
-  return (
-    scaled.toLocaleString(undefined, {
-      minimumFractionDigits: dp,
-      maximumFractionDigits: dp,
-    }) + suffix
-  );
-};
-
-/**
  * Render a value with the card's configured decimal places.
  *
  *  - Numbers are formatted with locale thousand separators at full precision.
  *  - Non-numeric values pass through as strings.
  *  - null / undefined / empty render as an em-dash.
  *
- * Pass `options.compact = true` to force K/M/B/T abbreviation (useful for
- * dense list views or future detail panes). Compact is opt-in only — by
- * default the full numeric value is shown.
+ * Full precision is the project default (CLAUDE.md §10/§14). For cramped
+ * slots (hero values, chips) use `formatCompact` from `utils/sources.ts`
+ * instead — this formatter never abbreviates.
  */
 export const formatCardValue = (
   raw: unknown,
   decimalPlaces: number | undefined,
-  options?: { compact?: boolean },
 ): string => {
   if (raw === null || raw === undefined || raw === '') return '—';
   const num = tryNumber(raw);
   if (num !== undefined) {
-    if (options?.compact) return formatCompactNumber(num, decimalPlaces);
-
     const dp =
       typeof decimalPlaces === 'number' && decimalPlaces >= 0
         ? decimalPlaces

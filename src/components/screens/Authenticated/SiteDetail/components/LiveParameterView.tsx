@@ -441,7 +441,8 @@ const LiveParameterView: FC = () => {
   const route = useRoute<SiteDetailRouteProp>();
   const { siteId } = route.params;
 
-  const { data: liveData, isLoading, isFetching, refetch } = useSiteData(siteId);
+  const { data: liveData, isLoading, isFetching, isError, refetch } =
+    useSiteData(siteId);
   const paramsMapping = useParamsMapping();
   // Defer the tile-grid mount so the tab-switch animation and the
   // (cheap) header always commit first. On first visit the user sees
@@ -466,31 +467,37 @@ const LiveParameterView: FC = () => {
   const categories: CategoryDef[] = useMemo(
     () => [
       { key: 'all', label: 'All', color: scheme.brand, match: () => true },
+      // Energy is tested BEFORE power: standard meter registers like
+      // "Active Energy Import (kWh)" / "Reactive Energy" must land in
+      // Energy, not get claimed by a power keyword first. kvarh/kvah
+      // (reactive/apparent energy registers) are energy too.
+      {
+        key: 'energy',
+        label: 'Energy',
+        color: scheme.brand,
+        match: n => /\b(energy|kwh|mwh|gwh|kvarh|kvah)\b/i.test(n),
+      },
       {
         key: 'power',
         label: 'Power',
         color: energyPalette.solar,
-        match: n =>
-          /\b(power|kw|kvar|kva|pf)\b/i.test(n) ||
-          /\b(active|reactive|apparent)\b/i.test(n),
+        // No bare active|reactive|apparent alternation — "Active Power"
+        // already matches \bpower\b, and the bare words misclassified
+        // energy/current registers ("Reactive Energy", "Reactive Current").
+        match: n => /\b(power|kw|kvar|kva|pf)\b/i.test(n),
       },
       {
         key: 'voltage',
         label: 'Voltage',
         color: energyPalette.wind,
-        match: n => /\b(volt|voltage|kv|^v\b)/i.test(n),
+        // kv needs a trailing boundary or it claims kVArh/kVAh registers.
+        match: n => /\b(volt|voltage|kv\b|^v\b)/i.test(n),
       },
       {
         key: 'current',
         label: 'Current',
         color: energyPalette.grid,
         match: n => /\b(current|amp|amps|^a\b)/i.test(n),
-      },
-      {
-        key: 'energy',
-        label: 'Energy',
-        color: scheme.brand,
-        match: n => /\b(energy|kwh|mwh|gwh)\b/i.test(n),
       },
       {
         key: 'temperature',
@@ -622,11 +629,28 @@ const LiveParameterView: FC = () => {
       </View>
     );
   } else if (params.length === 0) {
+    // A failed fetch is NOT "no parameters available" — don't assert a
+    // definitive empty state when we simply couldn't load the data.
+    // The header refresh button also recovers, but an explicit retry
+    // here is the discoverable path.
     body = (
       <View style={styles.statusBlock}>
         <AppText fontSize={FONT_SIZE_XS} color={scheme.textSecondary} center>
-          No live parameters available for this site.
+          {isError
+            ? "Couldn't load live parameters."
+            : 'No live parameters available for this site.'}
         </AppText>
+        {isError ? (
+          <PressableScale
+            onPress={() => refetch()}
+            haptic="tap"
+            accessibilityLabel="Retry loading live parameters"
+            style={themed.retryButton}>
+            <AppText fontSize={FONT_SIZE_XXS} semi_bold color={scheme.textOnBrand}>
+              Retry
+            </AppText>
+          </PressableScale>
+        ) : null}
       </View>
     );
   } else if (filtered.length === 0) {
@@ -816,6 +840,12 @@ const createStyles = (scheme: Scheme) =>
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: scheme.brandSoft,
+    },
+    retryButton: {
+      paddingHorizontal: space.xl,
+      paddingVertical: space.sm,
+      borderRadius: radiusTokens.pill,
+      backgroundColor: scheme.brand,
     },
     searchBar: {
       flexDirection: 'row',
