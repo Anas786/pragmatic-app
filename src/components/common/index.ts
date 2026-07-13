@@ -1,18 +1,9 @@
 export { default as AppText } from './AppText';
 export { default as Spacer } from './Spacer';
-export { default as Button } from './Button';
 export { default as CustomIcon } from './CustomIcon';
-export { default as Header } from './Header';
-export { default as TextField } from './TextField';
 export { default as BaseKeyboardAvoid } from './BaseKeyboardAvoid';
 export { default as ScrollContainer } from './ScrollContainer';
-export { default as Divider } from './Divider';
-export { default as DropDownInput } from './DropDownInput';
-export { default as Checkbox } from './Checkbox';
-export { default as DetailSection } from './DetailSection';
 export { default as Avatar } from './Avatar';
-export { default as Row } from './Row';
-export { default as Loading } from './Loading';
 export { default as ErrorBoundary } from './ErrorBoundary';
 
 // v2 design-system primitives
@@ -70,7 +61,3 @@ export {
   ChipLabel,
   ProgressBar,
 } from './MetricChip';
-
-// Chart zoom controls
-export { default as ZoomControls } from './ZoomControls';
-export type { ZoomControlsProps } from './ZoomControls';

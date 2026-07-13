@@ -6,7 +6,6 @@
  * `babel-plugin-module-resolver` for non-JS assets.
  */
 
-export const electricLottie = require('./electric.json');
 export const revenueLottie = require('./revenue.json');
 export const co2Lottie = require('./co2.json');
 export const coalLottie = require('./coal.json');

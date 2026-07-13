@@ -14,20 +14,3 @@ export const inverterFilters: InverterFilterOption[] = [
   'Year',
   'Life Time',
 ];
-
-export const mockInverterData: InverterEntryData[] = [
-  {
-    title: 'Canteen, Pump Room (Inverter 9)',
-    production: '241.56',
-    yield: '2.20',
-    performanceRatio: 86.56,
-    uptimePercent: 61.56,
-  },
-  {
-    title: 'Canteen, Pump Room (Inverter 9)',
-    production: '241.56',
-    yield: '2.20',
-    performanceRatio: 86.56,
-    uptimePercent: 61.56,
-  },
-];

@@ -1,3 +1,23 @@
+/**
+ * Legacy `ThemeColors` shim — key-compatible with the pre-redesign
+ * theme object, but every value is now RE-DERIVED from the v2 design
+ * tokens (`src/theme/tokens.ts`), as CLAUDE.md §4.2/§13 document.
+ * Unmigrated call sites (`useThemeStore().colors.X`) therefore pick up
+ * the v2 palette automatically, and tuning `tokens.ts` propagates here.
+ *
+ * New code should NOT use this — read from `useScheme()` instead.
+ *
+ * Import note: pull from `src/theme/tokens` directly (never the
+ * `src/theme` barrel) to avoid a require cycle:
+ * theme/index → hooks/useThemeStore → utils/theme/colors.
+ */
+import {
+  ColorScheme,
+  darkScheme,
+  glass,
+  lightScheme,
+} from 'src/theme/tokens';
+
 export type ThemeColors = {
   // Backgrounds
   splashBg: string;
@@ -54,84 +74,57 @@ export type ThemeColors = {
   tabActiveBg: string;
 };
 
-export const darkColors: ThemeColors = {
-  splashBg: '#151314',
-  inputDarkBg: '#1b1a1b',
-  cardBg: '#171717',
-  metricCardBg: '#1F1F1F',
-  dropdownBg: '#1F1F1F',
-  tabInactiveBg: '#1B1A1B',
-  progressBg: '#262626',
-  progressFilled: '#3AD04B',
-  darkBgSecondary: '#2A2A2A',
-  rememberMeFilled: '#00a908',
+/**
+ * Map every legacy key to its nearest v2 scheme token. The scrim
+ * (`overlayDark`) has no scheme token yet, so it keeps a literal value
+ * per mode.
+ */
+const deriveColors = (scheme: ColorScheme, isDark: boolean): ThemeColors => ({
+  splashBg: scheme.bg,
+  inputDarkBg: scheme.surfaceMuted,
+  cardBg: scheme.surface,
+  metricCardBg: scheme.surfaceRaised,
+  dropdownBg: scheme.surfaceRaised,
+  tabInactiveBg: scheme.surfaceMuted,
+  progressBg: scheme.skeletonBase,
+  progressFilled: scheme.brand,
+  darkBgSecondary: scheme.surfaceRaised,
+  rememberMeFilled: scheme.brand,
 
-  inputDarkBorder: '#303030',
+  inputDarkBorder: scheme.border,
 
-  primaryText: '#ffffff',
-  textSecondary: '#6e6e6e',
+  primaryText: scheme.textPrimary,
+  textSecondary: scheme.textSecondary,
 
-  overlayDark: 'rgba(0, 0, 0, 0.85)',
-  overlayLightBorder: 'rgba(255, 255, 255, 0.15)',
-  overlayLightStrip: 'rgba(255, 255, 255, 0.2)',
-  chartRuleColor: 'rgba(255, 255, 255, 0.08)',
-  divider: 'rgba(255, 255, 255, 0.05)',
+  // No scrim token in tokens.ts — keep the literal per-mode values.
+  overlayDark: isDark ? 'rgba(0, 0, 0, 0.85)' : 'rgba(255, 255, 255, 0.95)',
+  overlayLightBorder: isDark ? glass.borderSubtle : scheme.hairline,
+  overlayLightStrip: isDark ? glass.medium : scheme.hairline,
+  chartRuleColor: scheme.hairline,
+  divider: scheme.hairline,
 
-  loginButtonBg: '#00a908',
-  termsLink: '#05c80e',
+  loginButtonBg: scheme.brand,
+  termsLink: scheme.brand,
 
-  bubbleTextDark: '#1a1a1a',
-  bubbleBg: '#fff',
+  // Bubble is always a light chip with dark text, in both modes.
+  bubbleTextDark: lightScheme.textPrimary,
+  bubbleBg: isDark ? lightScheme.surface : lightScheme.surfaceMuted,
 
-  fullscreenBg: '#000',
-  controlButtonBg: 'rgba(27, 26, 27, 0.9)',
+  fullscreenBg: scheme.bg,
+  controlButtonBg: scheme.surfaceRaised,
 
-  statusBarStyle: 'light-content',
-  navigationBg: '#FDFDFD',
+  statusBarStyle: isDark ? 'light-content' : 'dark-content',
+  navigationBg: scheme.bg,
 
-  headerBg: '#1b1a1b',
-  dateFilterBg: '#303030',
-  dateFilterText: '#fff',
-  tabActiveBg: '#3AD04B',
-};
+  headerBg: scheme.surfaceMuted,
 
-export const lightColors: ThemeColors = {
-  splashBg: '#FFFFFF',
-  inputDarkBg: '#F0F0F0',
-  cardBg: '#FFFFFF',
-  metricCardBg: '#F0F0F0',
-  dropdownBg: '#FFFFFF',
-  tabInactiveBg: '#F0F0F0',
-  progressBg: '#E4E4E7',
-  progressFilled: '#3AD04B',
-  darkBgSecondary: '#EBEBEB',
-  rememberMeFilled: '#08820E',
+  // Light mode kept its high-contrast "dark pill on light page" look.
+  dateFilterBg: isDark ? scheme.surfaceRaised : scheme.textPrimary,
+  dateFilterText: isDark ? scheme.textPrimary : scheme.textOnBrand,
 
-  inputDarkBorder: '#CCCCCC',
+  tabActiveBg: scheme.brand,
+});
 
-  primaryText: '#000000',
-  textSecondary: '#6E6E6E',
+export const darkColors: ThemeColors = deriveColors(darkScheme, true);
 
-  overlayDark: 'rgba(255, 255, 255, 0.95)',
-  overlayLightBorder: 'rgba(0, 0, 0, 0.1)',
-  overlayLightStrip: 'rgba(0, 0, 0, 0.1)',
-  chartRuleColor: 'rgba(0, 0, 0, 0.08)',
-  divider: 'rgba(0, 0, 0, 0.05)',
-
-  loginButtonBg: '#08820E',
-  termsLink: '#08820E',
-
-  bubbleTextDark: '#1a1a1a',
-  bubbleBg: '#EBEBEB',
-
-  fullscreenBg: '#FFFFFF',
-  controlButtonBg: 'rgba(235, 235, 235, 0.9)',
-
-  statusBarStyle: 'dark-content',
-  navigationBg: '#FFFFFF',
-
-  headerBg: '#E4E4E7',
-  dateFilterBg: '#000000',
-  dateFilterText: '#FFFFFF',
-  tabActiveBg: '#08820E',
-};
+export const lightColors: ThemeColors = deriveColors(lightScheme, false);
