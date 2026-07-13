@@ -17,7 +17,14 @@ import {
   ScrollContainer,
 } from 'src/components/common';
 import { useLogin } from 'src/hooks';
-import { Scheme, radius, space, useScheme, useThemedStyles } from 'src/theme';
+import {
+  Scheme,
+  radius,
+  semantic,
+  space,
+  useScheme,
+  useThemedStyles,
+} from 'src/theme';
 import {
   FONT_SIZE_MD,
   FONT_SIZE_XL,
@@ -75,6 +82,7 @@ const PasswordVisibilityToggle: FC<PasswordVisibilityToggleProps> = ({
 const Login: FC = () => {
   const {
     control,
+    errors,
     onSubmit,
     loading,
     requiresNewPassword,
@@ -117,8 +125,7 @@ const Login: FC = () => {
                 fontSize={FONT_SIZE_XS}
                 center
                 style={styles.subtitle}>
-                Please enter your email/phone or connect to your accounts to
-                continue.
+                Please enter your email and password to continue.
               </AppText>
             </View>
 
@@ -126,52 +133,74 @@ const Login: FC = () => {
               {!requiresNewPassword ? (
                 <>
                   <View style={styles.inputsContainer}>
-                    <Controller
-                      control={control}
-                      name="email"
-                      render={({ field: { onChange, onBlur, value } }) => (
-                        <View style={themed.inputWrapper}>
-                          <EmailIcon color={scheme.textSecondary} />
-                          <AppTextInput
-                            style={styles.input}
-                            placeholder="Email or Phone"
-                            value={value}
-                            onChangeText={onChange}
-                            onBlur={onBlur}
-                            keyboardType="email-address"
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                            editable={!loading}
-                          />
-                        </View>
-                      )}
-                    />
+                    <View style={styles.field}>
+                      <Controller
+                        control={control}
+                        name="email"
+                        render={({ field: { onChange, onBlur, value, ref } }) => (
+                          <View style={themed.inputWrapper}>
+                            <EmailIcon color={scheme.textSecondary} />
+                            <AppTextInput
+                              ref={ref}
+                              style={styles.input}
+                              placeholder="Email"
+                              value={value}
+                              onChangeText={onChange}
+                              onBlur={onBlur}
+                              keyboardType="email-address"
+                              autoCapitalize="none"
+                              autoCorrect={false}
+                              editable={!loading}
+                            />
+                          </View>
+                        )}
+                      />
+                      {errors.email?.message ? (
+                        <AppText
+                          color={semantic.danger}
+                          fontSize={FONT_SIZE_XS}
+                          style={styles.fieldError}>
+                          {errors.email.message}
+                        </AppText>
+                      ) : null}
+                    </View>
 
-                    <Controller
-                      control={control}
-                      name="password"
-                      render={({ field: { onChange, onBlur, value } }) => (
-                        <View style={themed.inputWrapper}>
-                          <LockIcon color={scheme.textSecondary} />
-                          <AppTextInput
-                            style={styles.input}
-                            placeholder="Password"
-                            value={value}
-                            onChangeText={onChange}
-                            onBlur={onBlur}
-                            secureTextEntry={!showPassword}
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                            editable={!loading}
-                          />
-                          <PasswordVisibilityToggle
-                            visible={showPassword}
-                            onToggle={() => setShowPassword(prev => !prev)}
-                            color={scheme.textSecondary}
-                          />
-                        </View>
-                      )}
-                    />
+                    <View style={styles.field}>
+                      <Controller
+                        control={control}
+                        name="password"
+                        render={({ field: { onChange, onBlur, value, ref } }) => (
+                          <View style={themed.inputWrapper}>
+                            <LockIcon color={scheme.textSecondary} />
+                            <AppTextInput
+                              ref={ref}
+                              style={styles.input}
+                              placeholder="Password"
+                              value={value}
+                              onChangeText={onChange}
+                              onBlur={onBlur}
+                              secureTextEntry={!showPassword}
+                              autoCapitalize="none"
+                              autoCorrect={false}
+                              editable={!loading}
+                            />
+                            <PasswordVisibilityToggle
+                              visible={showPassword}
+                              onToggle={() => setShowPassword(prev => !prev)}
+                              color={scheme.textSecondary}
+                            />
+                          </View>
+                        )}
+                      />
+                      {errors.password?.message ? (
+                        <AppText
+                          color={semantic.danger}
+                          fontSize={FONT_SIZE_XS}
+                          style={styles.fieldError}>
+                          {errors.password.message}
+                        </AppText>
+                      ) : null}
+                    </View>
                   </View>
 
                   <PressableScale
@@ -202,10 +231,11 @@ const Login: FC = () => {
                     <Controller
                       control={newPasswordControl}
                       name="newPassword"
-                      render={({ field: { onChange, onBlur, value } }) => (
+                      render={({ field: { onChange, onBlur, value, ref } }) => (
                         <View style={themed.inputWrapper}>
                           <LockIcon color={scheme.textSecondary} />
                           <AppTextInput
+                            ref={ref}
                             style={styles.input}
                             placeholder="New password"
                             value={value}
@@ -225,7 +255,10 @@ const Login: FC = () => {
                       )}
                     />
                     {newPasswordErrors.newPassword?.message ? (
-                      <AppText color={scheme.brand} fontSize={FONT_SIZE_XS}>
+                      <AppText
+                        color={semantic.danger}
+                        fontSize={FONT_SIZE_XS}
+                        style={styles.fieldError}>
                         {newPasswordErrors.newPassword.message}
                       </AppText>
                     ) : null}
@@ -249,18 +282,28 @@ const Login: FC = () => {
             </View>
           </View>
 
+          {/* No link styling on the document names: the Terms screen lives in
+              the authenticated drawer (unreachable pre-auth) and there is no
+              hosted Privacy Policy URL to open, so brand-colored segments
+              would be fake links. */}
           <View style={styles.footer}>
             <AppText
               color={scheme.textPrimary}
               fontSize={FONT_SIZE_XS}
               center
               style={styles.footerText}>
-              By clicking Continue, you agree to Dart{' '}
-              <AppText color={scheme.brand} fontSize={FONT_SIZE_XS} semi_bold>
+              By logging in, you agree to the Pragmatic Engineering Solution{' '}
+              <AppText
+                color={scheme.textPrimary}
+                fontSize={FONT_SIZE_XS}
+                semi_bold>
                 Terms of Use
               </AppText>{' '}
               and{' '}
-              <AppText color={scheme.brand} fontSize={FONT_SIZE_XS} semi_bold>
+              <AppText
+                color={scheme.textPrimary}
+                fontSize={FONT_SIZE_XS}
+                semi_bold>
                 Privacy Policy
               </AppText>
               .
@@ -335,6 +378,12 @@ const styles = StyleSheet.create({
   },
   inputsContainer: {
     gap: space.lg,
+  },
+  field: {
+    gap: space.xs,
+  },
+  fieldError: {
+    marginLeft: space.md,
   },
   iconContainer: {
     width: normalizeWidth(20),

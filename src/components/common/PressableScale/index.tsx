@@ -70,10 +70,13 @@ const PressableScale: FC<PressableScaleProps> = ({
     scale.value = withSpring(scaleTo, spring.responsive);
   }, [disabled, scale, scaleTo]);
 
+  // Deliberately NOT gated on `disabled`: if a parent flips `disabled` true
+  // while the finger is down (e.g. a refetch flag landing mid-press), the
+  // release's pressOut must still spring the scale back to 1 — otherwise the
+  // control renders permanently shrunken. Springing to 1 is always safe.
   const handlePressOut = useCallback(() => {
-    if (disabled) return;
     scale.value = withSpring(1, spring.responsive);
-  }, [disabled, scale]);
+  }, [scale]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],

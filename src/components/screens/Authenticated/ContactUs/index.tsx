@@ -1,5 +1,12 @@
 import React, { FC, useMemo } from 'react';
-import { Linking, ScrollView, StatusBar, StyleSheet, View } from 'react-native';
+import {
+  Alert,
+  Linking,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  View,
+} from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
 import {
@@ -24,6 +31,8 @@ import {
   FONT_SIZE_XL,
   ICON_SIZE_LG,
   ICON_SIZE_SM,
+  display,
+  inspectError,
 } from 'src/utils';
 import {
   Back,
@@ -61,7 +70,21 @@ const ContactRow: FC<{ item: ContactItem }> = ({ item }) => {
   const { Icon, color, title, value, url } = item;
 
   const handlePress = () => {
-    Linking.openURL(url).catch(() => {});
+    // No canOpenURL gating: on Android 11+ it returns false without a
+    // <queries> manifest entry even when a handler exists. Catch-based
+    // feedback only — openURL rejects when no app can handle the scheme.
+    Linking.openURL(url).catch(err => {
+      display('ContactUs.openURL ERROR', inspectError(err), undefined, true);
+      const action = url.startsWith('tel:')
+        ? 'make calls'
+        : url.startsWith('mailto:')
+          ? 'send email'
+          : 'open this link';
+      Alert.alert(
+        'Unable to open',
+        `No app is available on this device to ${action}.`,
+      );
+    });
   };
 
   return (

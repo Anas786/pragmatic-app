@@ -24,7 +24,7 @@ import {
   useScheme,
   useThemedStyles,
 } from 'src/theme';
-import { FONT_SIZE_SM, FONT_SIZE_XS } from 'src/utils';
+import { FONT_SIZE_SM } from 'src/utils';
 import { DownArrow, UpArrow } from 'src/assets/icons';
 import PickerSheet from './pickers/PickerSheet';
 
@@ -148,7 +148,6 @@ const MonthYearPickerModal: FC<MonthYearPickerModalProps> = ({
   initialMonth,
   onApply,
 }) => {
-  const scheme = useScheme();
   const themed = useThemedStyles(createStyles);
 
   const [tempYear, setTempYear] = useState(initialYear);

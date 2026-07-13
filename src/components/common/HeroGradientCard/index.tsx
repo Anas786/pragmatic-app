@@ -61,10 +61,14 @@ const HeroGradientCard: FC<HeroGradientCardProps> = ({
     () =>
       StyleSheet.flatten([
         styles.shadow,
-        { shadowColor: glowColor },
+        // Opaque background lets iOS derive a cheap CALayer.shadowPath —
+        // without it UIKit renders the 24px-blur shadow via a per-frame
+        // offscreen alpha-mask pass. The inner clip view (same radius,
+        // opaque gradient) fully covers it, so there's no visual change.
+        { shadowColor: glowColor, backgroundColor: gradientColors[2] },
         style,
       ]) as ViewStyle,
-    [glowColor, style],
+    [glowColor, gradientColors, style],
   );
   const contentStyle = useMemo<ViewStyle>(() => ({ padding }), [padding]);
 

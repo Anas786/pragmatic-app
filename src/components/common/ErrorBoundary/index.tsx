@@ -1,5 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 import { AppText, PressableScale, Surface } from 'src/components/common';
 import { Scheme, space, useScheme, useThemedStyles } from 'src/theme';
 import { FONT_SIZE_SM, FONT_SIZE_XS, FONT_SIZE_XXS } from 'src/utils';
@@ -35,7 +35,6 @@ class ErrorBoundaryInner extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     this.setState({ info });
-    // eslint-disable-next-line no-console
     console.error('[ErrorBoundary]', this.props.label ?? 'unknown', error, info);
   }
 

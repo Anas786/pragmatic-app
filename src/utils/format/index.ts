@@ -22,7 +22,14 @@ export const normalizeWidth = (size: number) => {
 };
 
 export const getInitials = (name: string) =>
-  name.toUpperCase().slice(0, 2).split(' ').map(word => word[0]).join('') ;
+  name
+    .trim()
+    .toUpperCase()
+    .split(/\s+/)
+    .map(word => word[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('');
 
 export const handlePhoneNumber = (input: string) => {
   // Format the input as "XX XXX XXXX"
