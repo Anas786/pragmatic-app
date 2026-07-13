@@ -2,6 +2,11 @@
  * Tiny logger that writes to both `console` and Reactotron when available.
  * Use everywhere instead of bare `console.log` so messages always reach
  * Reactotron in dev builds.
+ *
+ * ALL console output is dev-only: in release builds `console.*` still pays
+ * Hermes serialization cost and lands in persistent device logs (logcat /
+ * os_log) — auth breadcrumbs there are harvestable via adb / bug reports.
+ * The Reactotron piping needs no gate: the `tron` global only exists in dev.
  */
 
 type LogArgs = unknown[];
@@ -9,20 +14,23 @@ type LogArgs = unknown[];
 const tron = () => (globalThis as any)?.tron;
 
 export const log = (...args: LogArgs) => {
-  // eslint-disable-next-line no-console
-  console.log(...args);
+  if (__DEV__) {
+    console.log(...args);
+  }
   tron()?.log?.(...args);
 };
 
 export const warn = (...args: LogArgs) => {
-  // eslint-disable-next-line no-console
-  console.warn(...args);
+  if (__DEV__) {
+    console.warn(...args);
+  }
   tron()?.warn?.(...args);
 };
 
 export const error = (...args: LogArgs) => {
-  // eslint-disable-next-line no-console
-  console.error(...args);
+  if (__DEV__) {
+    console.error(...args);
+  }
   tron()?.error?.(args[0], args[1]);
 };
 
@@ -39,7 +47,6 @@ export const display = (
   // Dev-only: serializing full payloads to console in release builds costs
   // real CPU time on Hermes (Reactotron is already dev-only via the tron ref).
   if (__DEV__) {
-    // eslint-disable-next-line no-console
     console.log(`[${name}]`, preview ?? '', value);
   }
   tron()?.display?.({

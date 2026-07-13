@@ -1,12 +1,9 @@
-import axios, {
-  AxiosError,
-  AxiosResponse,
-  InternalAxiosRequestConfig,
-} from 'axios';
-import { APIResponse } from 'src/types';
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { BASE_URL } from 'src/utils';
 import { display, inspectError } from 'src/utils/logger';
 import { useUserStore } from 'src/hooks/useUserStore';
+import { queryClient } from 'src/queryClient';
+import { resetToLogin } from 'src/routes/navigationRef';
 import { cognitoSignOut } from './auth/cognito';
 import { getValidIdToken } from './auth/session';
 
@@ -21,32 +18,30 @@ export const appAxios = axios.create({
   },
 });
 
-/* ------------------------------------------------------------------ */
-/* Legacy header helpers (kept for callers that might still use them) */
-/* ------------------------------------------------------------------ */
+/* -------------------- Logout plumbing ---------------------------- */
 
-export const setAuthToken = (token: string) => {
-  appAxios.defaults.headers.Authorization = `Bearer ${token}`;
-};
-
-export const deleteToken = () => {
-  delete appAxios.defaults.headers.Authorization;
-};
-
-/* -------------------- Global logout plumbing --------------------- */
-
-let globalLogout: (() => void) | null = null;
-
-export const setGlobalLogout = (logoutFn: () => void) => {
-  globalLogout = logoutFn;
-};
-
-// In-flight dedup: N parallel 401 cascades collapse into a single logout, and
-// the executeLogout → globalLogout → executeLogout mutual recursion (useAuth's
-// logout calls back into us) short-circuits on the re-entrant call instead of
-// looping.
+// In-flight dedup: N parallel 401 cascades collapse into a single logout,
+// and any re-entrant call short-circuits instead of looping.
 let logoutInFlight: Promise<void> | null = null;
 
+/**
+ * The single sign-out routine, used by BOTH:
+ *  - the response interceptor below (forced logout on terminal 401/403/419), and
+ *  - the drawer's user-initiated sign-out (useLogout delegates here).
+ *
+ * Owning the complete cleanup in one place keeps the two paths from drifting:
+ *  1. Cognito sign-out — revokes the refresh token, wipes Amplify storage and
+ *     the in-memory session/token cache (clearSessionCache runs in its finally).
+ *  2. Clear the in-memory user store.
+ *  3. Wipe every cached query so the next login can't briefly surface the
+ *     previous user's data (the site-list cache key is user-agnostic).
+ *  4. Forget the last-active site so the first card tap after re-login always
+ *     runs the full switch lifecycle.
+ *  5. Reset navigation to Onboarding → Login via the app-lifetime
+ *     navigationRef — never a hook-registered handler, which goes stale when
+ *     its screen unmounts. resetToLogin() no-ops while the container isn't
+ *     ready or the user is already on the onboarding stack.
+ */
 export const executeLogout = (): Promise<void> => {
   if (logoutInFlight) return logoutInFlight;
 
@@ -56,9 +51,16 @@ export const executeLogout = (): Promise<void> => {
     } catch (err) {
       display('executeLogout cognitoSignOut FAILED', inspectError(err));
     } finally {
-      deleteToken();
       useUserStore.getState().removeUser();
-      globalLogout?.();
+      queryClient.clear();
+      // Deferred require: useSwitchActiveSite imports from src/networking,
+      // so a top-level import here would create a require cycle. By the time
+      // executeLogout runs, every module is initialized and this resolves to
+      // the same singleton the hooks use.
+      const { resetActiveSite } =
+        require('src/hooks/useSwitchActiveSite') as typeof import('src/hooks/useSwitchActiveSite');
+      resetActiveSite();
+      resetToLogin();
     }
   })().finally(() => {
     logoutInFlight = null;
@@ -83,14 +85,31 @@ type RetriableConfig = InternalAxiosRequestConfig & { _retried?: boolean };
 appAxios.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
     if (isPublicPath(config.url)) return config;
+
+    let idToken: string | null = null;
     try {
-      const idToken = await getValidIdToken();
-      if (idToken) {
-        config.headers.Authorization = `Bearer ${idToken}`;
-      }
+      idToken = await getValidIdToken();
     } catch (err) {
       display('axios.request token FAILED', inspectError(err));
     }
+
+    if (!idToken) {
+      // A protected request without a token is guaranteed to 401 — sending it
+      // anyway would escalate a transient token-acquisition failure (Cognito
+      // endpoint unreachable, keychain hiccup) into a forced sign-out via the
+      // response interceptor. Reject locally with a network-style
+      // (response-less) error instead, so React Query treats it as retriable
+      // per its own policy.
+      return Promise.reject(
+        new AxiosError(
+          'Could not obtain an auth token for a protected request.',
+          AxiosError.ERR_NETWORK,
+          config,
+        ),
+      );
+    }
+
+    config.headers.Authorization = `Bearer ${idToken}`;
     return config;
   },
   (error) => Promise.reject(error),
@@ -99,7 +118,7 @@ appAxios.interceptors.request.use(
 /* -------------------- Response interceptor ---------------------- */
 
 /**
- * Auth-error handling:
+ * Auth-error handling (protected endpoints only — /public/* is exempt):
  *
  *  1. On 401, attempt a single retry with `forceRefresh=true`. This handles
  *     the common case where API Gateway rejects a token because it expired
@@ -113,6 +132,14 @@ appAxios.interceptors.response.use(
   async (error: AxiosError) => {
     const status = error.response?.status;
     const original = error.config as RetriableConfig | undefined;
+
+    // /public/* requests carry no Bearer token, so an auth-status code from
+    // them says nothing about the user's session (e.g. a CloudFront/WAF 403
+    // on a public config fetch). Surface it as an ordinary error — never
+    // retry with a token attached, never sign the user out.
+    if (isPublicPath(original?.url)) {
+      return Promise.reject(error);
+    }
 
     if (status === 401 && original && !original._retried) {
       original._retried = true;
@@ -134,33 +161,3 @@ appAxios.interceptors.response.use(
     return Promise.reject(error);
   },
 );
-
-/* -------------------- Response unwrapper ------------------------ */
-
-export const callAPI = async <T>(
-  axiosPromise: Promise<AxiosResponse<APIResponse<T>>>,
-): Promise<APIResponse<T>> => {
-  try {
-    const data = (await axiosPromise).data as APIResponse<T>;
-    if (data.status === 'error') {
-      throw new Error(data.message || 'An error occurred');
-    }
-    return data;
-  } catch (err) {
-    if (err instanceof AxiosError) {
-      const status = err.response?.status;
-      if (status === 401 || status === 403 || status === 419) {
-        // Already handled by the response interceptor — re-throw a friendly
-        // message for the caller / UI.
-        throw new Error('Unauthorized access. Please login again.');
-      }
-      throw (
-        (err.response?.data as any)?.message ||
-        err.message ||
-        'Request failed'
-      );
-    }
-    if (err instanceof Error) throw err.message;
-    throw err;
-  }
-};

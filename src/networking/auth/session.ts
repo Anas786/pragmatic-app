@@ -27,7 +27,9 @@ import { display, inspectError } from 'src/utils/logger';
  *   Multiple parallel API calls during cold start would each call
  *   fetchAuthSession(). Amplify dedupes internally, but we also dedupe at
  *   this layer to keep our logging clean and to short-circuit when we
- *   already have a known-valid token in memory.
+ *   already have a known-valid token in memory. The dedup is force-aware:
+ *   a forced caller (post-401) never silently joins a non-forced fetch —
+ *   that would hand back the exact token the server just rejected.
  */
 
 export interface SessionTokens {
@@ -42,6 +44,14 @@ const EXPIRY_BUFFER_SECONDS = 60;
 
 let cached: SessionTokens | null = null;
 let inflight: Promise<SessionTokens | null> | null = null;
+/** Whether the current `inflight` fetch (or chain) ends in a forced refresh. */
+let inflightForced = false;
+/**
+ * Bumped by clearSessionCache() — a fetch started BEFORE a logout must not
+ * repopulate `cached` with the signed-out user's tokens when it resolves
+ * after the logout.
+ */
+let generation = 0;
 
 // Freshness check against the expiry we decoded ONCE when the token was
 // cached (fetchAndCache) — avoids a full base64 JWT decode on every
@@ -54,8 +64,16 @@ const isFresh = (tokens: SessionTokens): boolean =>
 const fetchAndCache = async (
   forceRefresh: boolean,
 ): Promise<SessionTokens | null> => {
+  const startedInGeneration = generation;
   try {
     const session = await fetchAuthSession({ forceRefresh });
+
+    if (generation !== startedInGeneration) {
+      // clearSessionCache() ran while this fetch was in flight (logout) —
+      // discard the result instead of resurrecting the old user's tokens.
+      return null;
+    }
+
     const idToken = session.tokens?.idToken?.toString();
     const accessToken = session.tokens?.accessToken?.toString();
     if (!idToken || !accessToken) {
@@ -72,9 +90,32 @@ const fetchAndCache = async (
     return cached;
   } catch (err) {
     display('session.fetch FAILED', inspectError(err));
-    cached = null;
+    if (generation === startedInGeneration) {
+      cached = null;
+    }
     return null;
   }
+};
+
+/**
+ * Register `p` as the current in-flight fetch. Cleanup is identity-guarded:
+ * when a forced fetch is chained behind a non-forced one, the superseded
+ * promise's `finally` must not clobber the tracking of its replacement
+ * (that would break dedup and leave `inflightForced` stale).
+ */
+const trackInflight = (
+  p: Promise<SessionTokens | null>,
+  forced: boolean,
+): Promise<SessionTokens | null> => {
+  const tracked: Promise<SessionTokens | null> = p.finally(() => {
+    if (inflight === tracked) {
+      inflight = null;
+      inflightForced = false;
+    }
+  });
+  inflight = tracked;
+  inflightForced = forced;
+  return tracked;
 };
 
 /**
@@ -89,12 +130,21 @@ export const getSessionTokens = async (
 ): Promise<SessionTokens | null> => {
   if (!forceRefresh && cached && isFresh(cached)) return cached;
 
-  if (inflight) return inflight;
+  if (inflight) {
+    // Join the in-flight fetch only when its force level satisfies the
+    // caller. A forced caller joining a non-forced fetch would receive the
+    // same not-yet-rotated token the server just rejected — the 401 retry
+    // would then re-send it and escalate into a spurious sign-out. Chain a
+    // genuine forced refresh behind the current fetch instead.
+    // (fetchAndCache never rejects, so the chain always runs.)
+    if (!forceRefresh || inflightForced) return inflight;
+    return trackInflight(
+      inflight.then(() => fetchAndCache(true)),
+      true,
+    );
+  }
 
-  inflight = fetchAndCache(forceRefresh).finally(() => {
-    inflight = null;
-  });
-  return inflight;
+  return trackInflight(fetchAndCache(forceRefresh), forceRefresh);
 };
 
 /** Convenience — returns just the idToken string, or null. */
@@ -107,8 +157,10 @@ export const getValidIdToken = async (
 
 /** Drop the in-memory cache. Call this on logout to avoid stale reads. */
 export const clearSessionCache = () => {
+  generation += 1;
   cached = null;
   inflight = null;
+  inflightForced = false;
 };
 
 /** For diagnostics / Reactotron — exposes the current cached snapshot. */

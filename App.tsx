@@ -30,16 +30,14 @@ import Orientation from 'react-native-orientation-locker';
 import RNBootSplash from 'react-native-bootsplash';
 import NetInfo from '@react-native-community/netinfo';
 import {
-  QueryClient,
   QueryClientProvider,
   focusManager,
   onlineManager,
 } from '@tanstack/react-query';
 import { Routes } from 'src/routes';
+import { navigationRef } from 'src/routes/navigationRef';
+import { queryClient } from 'src/queryClient';
 import { useBootstrap, useThemeStore } from 'src/hooks';
-import FlashMessage from 'react-native-flash-message';
-
-const queryClient = new QueryClient();
 
 // React Query ships with browser-oriented online detection; on React Native
 // it must be fed from NetInfo so queries pause while offline and refetch on
@@ -92,7 +90,11 @@ function App(): React.JSX.Element {
   return (
     <GestureHandlerRootView style={{flex: 1}}>
       <QueryClientProvider client={queryClient}>
+        {/* ref: app-lifetime navigation handle — the forced-logout path in
+            src/networking/config.ts resets to Login through it, independent
+            of any mounted screen. */}
         <NavigationContainer
+          ref={navigationRef}
           theme={navTheme}
           onReady={() => {
             RNBootSplash.hide({
@@ -100,7 +102,6 @@ function App(): React.JSX.Element {
             });
           }}>
           <Routes />
-          <FlashMessage position="top" />
         </NavigationContainer>
       </QueryClientProvider>
     </GestureHandlerRootView>

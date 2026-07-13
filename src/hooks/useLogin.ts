@@ -9,15 +9,15 @@ import {
   cognitoGetTokens,
   cognitoSignIn,
 } from 'src/networking';
-import { ILogin, INewPassword, IUser } from 'src/types';
+import { ILogin, INewPassword } from 'src/types';
 import {
   decodeJwt,
   display,
   inspectError,
   LoginSchema,
   NewPasswordSchema,
-  parseBool,
 } from 'src/utils';
+import { userFromClaims } from 'src/utils/user';
 import { useUserStore } from './useUserStore';
 
 export const useLogin = () => {
@@ -52,25 +52,7 @@ export const useLogin = () => {
     const claims = decodeJwt(tokens.idToken);
     if (!claims) throw new Error('Could not read session claims.');
 
-    const user: IUser = {
-      user_id: claims['custom:userId'] || claims.sub,
-      name:
-        claims['custom:userName'] ||
-        claims['cognito:username'] ||
-        claims.email ||
-        '',
-      email: claims.email || '',
-      phone: claims['custom:phone'],
-      company_id: claims['custom:companyId'],
-      company: claims['custom:company'],
-      client_id: claims['custom:clientId'],
-      customer_id: claims['custom:customerId'],
-      is_client_admin: parseBool(claims['custom:isClientAdmin']),
-      is_customer_admin: parseBool(claims['custom:isCustomerAdmin']),
-      login_date: new Date(),
-    };
-
-    setUser(user);
+    setUser(userFromClaims(claims));
 
     navigation.dispatch(
       CommonActions.reset({

@@ -7471,14 +7471,6 @@ react-native-echarts-pro@^1.9.3:
   resolved "https://registry.npmjs.org/react-native-echarts-pro/-/react-native-echarts-pro-1.9.3.tgz"
   integrity sha512-vyxZAFw3X0bipQHyEqtawKTJXJ9xkCvVJ/0gXJqzpRLjj1PS6yVxQVNC/+GnLjnqRaN09GcY4rXKDWPruywUdQ==
 
-react-native-flash-message@^0.4.2:
-  version "0.4.2"
-  resolved "https://registry.npmjs.org/react-native-flash-message/-/react-native-flash-message-0.4.2.tgz"
-  integrity sha512-YvdXRW9AGMTI99S3DJZhLO0mbk/ehKv/UQf4/Df+3dtGi8DlkidRbyqCQZk1WMtZ7rN85PMTGr/xEI9CF9z0YA==
-  dependencies:
-    prop-types "^15.8.1"
-    react-native-iphone-screen-helper "^2.0.2"
-
 react-native-gesture-handler@^2.30.0:
   version "2.30.0"
   resolved "https://registry.npmjs.org/react-native-gesture-handler/-/react-native-gesture-handler-2.30.0.tgz"
@@ -7494,11 +7486,6 @@ react-native-get-random-values@^1.11.0:
   integrity sha512-4BTbDbRmS7iPdhYLRcz3PGFIpFJBwNZg9g42iwa2P6FOv9vZj/xJc678RZXnLNZzd0qd7Q3CCF6Yd+CU2eoXKQ==
   dependencies:
     fast-base64-decode "^1.0.0"
-
-react-native-iphone-screen-helper@^2.0.2:
-  version "2.2.1"
-  resolved "https://registry.npmjs.org/react-native-iphone-screen-helper/-/react-native-iphone-screen-helper-2.2.1.tgz"
-  integrity sha512-gMHawcFa9O8St9rJ6zugW55O/sM3UUTLqc4MDaZQewBTIDjfvHzLmk2A/+PxySl5ZTfv6fyIV5g+2ozLRW5kcw==
 
 react-native-is-edge-to-edge@^1.2.1:
   version "1.2.1"

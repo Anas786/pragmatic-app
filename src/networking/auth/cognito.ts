@@ -31,13 +31,22 @@ export interface CognitoSignInResult {
 export type CognitoTokens = SessionTokens;
 
 /**
+ * Never log the raw sign-in identifier — it's the user's email (PII).
+ * Keep only the domain as a debugging breadcrumb.
+ */
+const redactUsername = (username: string): string => {
+  const at = username.indexOf('@');
+  return at > 0 ? `***@${username.slice(at + 1)}` : '***';
+};
+
+/**
  * Start a sign-in session against the Cognito User Pool.
  */
 export const cognitoSignIn = async (
   username: string,
   password: string,
 ): Promise<CognitoSignInResult> => {
-  log('[cognito] signIn →', { username });
+  log('[cognito] signIn →', { username: redactUsername(username) });
   try {
     const { isSignedIn, nextStep } = await amplifySignIn({
       username,
@@ -48,7 +57,11 @@ export const cognitoSignIn = async (
     if (isSignedIn) {
       // Warm the session cache immediately so the very first authenticated
       // request after sign-in skips a round-trip to fetchAuthSession.
-      await getSessionTokens(true);
+      // NON-forced on purpose: the SRP flow just minted the tokens, so this
+      // reads them from Amplify's store with no network I/O — forceRefresh
+      // would discard them and pay a second Cognito exchange on the login
+      // critical path.
+      await getSessionTokens();
     }
     return mapNextStep(isSignedIn, nextStep);
   } catch (err) {
@@ -65,7 +78,8 @@ export const cognitoConfirmNewPassword = async (
     const { isSignedIn, nextStep } = await amplifyConfirmSignIn({
       challengeResponse: newPassword,
     });
-    if (isSignedIn) await getSessionTokens(true);
+    // Non-forced warm-up — see cognitoSignIn.
+    if (isSignedIn) await getSessionTokens();
     log('[cognito] confirmNewPassword ✓', { isSignedIn, nextStep });
     return mapNextStep(isSignedIn, nextStep);
   } catch (err) {
@@ -87,7 +101,8 @@ export const cognitoConfirmCode = async (
     const { isSignedIn, nextStep } = await amplifyConfirmSignIn({
       challengeResponse: code,
     });
-    if (isSignedIn) await getSessionTokens(true);
+    // Non-forced warm-up — see cognitoSignIn.
+    if (isSignedIn) await getSessionTokens();
     return mapNextStep(isSignedIn, nextStep);
   } catch (err) {
     display('cognito.confirmCode FAILED', inspectError(err), undefined, true);

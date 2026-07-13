@@ -44,7 +44,6 @@ const base64UrlDecode = (input: string): string => {
   }
 
   // Fallback — should not hit in RN runtime but keeps things safe for tests.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { Buffer } = require('buffer');
   return Buffer.from(normalized, 'base64').toString('utf8');
 };
