@@ -240,7 +240,6 @@ src/
 │   │   ├── GifImage/       (plain <Image> GIF wrapper)
 │   │   └── index.ts        (barrel — exports ONLY GifImage + lottie-icons; legacy wrappers deleted)
 │   ├── lottie/             (Lottie JSON animations — only the 5 referenced files remain)
-│   ├── device-icons/       (SLD device-state SVGs)
 │   ├── images/             (static images)
 │   └── svg/                (misc SVG)
 ├── components/
@@ -248,7 +247,8 @@ src/
 │   │   ├── AppText, AppTextInput, Surface, PressableScale, Skeleton,
 │   │   ├── PulseDot, OverlineLabel, GlassChip, PowerMixBar,
 │   │   ├── HeroGradientCard
-│   │   └── (legacy: Avatar, Button, Header, TextField, etc.)
+│   │   └── (legacy survivors: Avatar, EmptyStateCard — the other legacy
+│   │        components were deleted in the July 2026 dead-code sweep)
 │   └── screens/
 │       ├── Onboarding/     (Splash, Login)
 │       └── Authenticated/
@@ -555,17 +555,18 @@ automatically.
 
 ## 15. What's still mock data
 
-Some mock data still in `src/data/mock/`:
+`src/data/mock/` barrel exports ONLY (July 2026 dead-code sweep removed the
+rest — dashboard/summary/performanceReport mocks are gone; Trends is
+API-wired via `useTrendData`):
 
 | Mock | Used by | Status |
 |---|---|---|
-| `mockTrendsData` | TrendView's GradientRangeBar (Chart Analysis card) | Not yet API-wired |
-| `mockAlarmsData` | AlarmsView | Not yet wired |
-| `trendAnalysisSeries` | TrendAnalysisCard (line + bar charts) | Not yet wired |
+| `mockAlarmsData` | AlarmsView | Not yet wired to `liveData.alarms` |
 | `inverterFilters`, `InverterFilterOption` | Filter pills on Reports / Tables — pure constant, fine to keep |
 
-`mockSitesData`, `mockYieldMetrics`, `mockEnvironmentalMetrics`, `mockCardsData`
-were all removed — Dashboard and Summary now drive off real backend data.
+`src/data/mock/sld.ts` still exists on disk but is deliberately NOT in the
+barrel — it's a fixture deep-imported only by `__tests__/sldDeoverlap.test.ts`,
+so it stays out of the production bundle.
 
 ---
 
