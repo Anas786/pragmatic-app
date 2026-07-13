@@ -170,17 +170,33 @@ const normalizeTrend = (raw: unknown): TrendConfig | null => {
 };
 
 /**
+ * A normalized trend section plus its position in the ORIGINAL
+ * `siteComponents.trends[]` array. The data endpoint's `idx` param is
+ * defined against that raw array (1:1), so when a malformed sibling is
+ * dropped the surviving sections must keep their original index —
+ * otherwise every later section silently fetches the wrong data.
+ */
+export interface IndexedTrendConfig extends TrendConfig {
+  /** 0-based index into the raw config array — use as the endpoint `idx`. */
+  sourceIdx: number;
+}
+
+/**
  * Safely read + normalize `siteConfig.siteComponents.trends[]` down to
- * the whitelisted shape. Drops any malformed entry. Returns [] when the
+ * the whitelisted shape. Drops any malformed entry while preserving each
+ * survivor's original array index as `sourceIdx`. Returns [] when the
  * config is missing or the wrong shape.
  */
-export const selectTrends = (config: unknown): TrendConfig[] => {
+export const selectTrends = (config: unknown): IndexedTrendConfig[] => {
   if (!config || typeof config !== 'object') return [];
   const components = (config as Record<string, unknown>).siteComponents;
   if (!components || typeof components !== 'object') return [];
   const trends = (components as Record<string, unknown>).trends;
   if (!Array.isArray(trends)) return [];
   return trends
-    .map(normalizeTrend)
-    .filter((t): t is TrendConfig => t !== null);
+    .map((raw, sourceIdx): IndexedTrendConfig | null => {
+      const trend = normalizeTrend(raw);
+      return trend ? { ...trend, sourceIdx } : null;
+    })
+    .filter((t): t is IndexedTrendConfig => t !== null);
 };

@@ -7,15 +7,10 @@ import { TrendAggregation, TrendDataRow } from 'src/types';
 import { FONT_SIZE_XXS } from 'src/utils';
 import SectionCard from '../PerformanceReport/SectionCard';
 import ChartFullscreenModal from '../ChartFullscreenModal';
+import { chartThemeFromScheme, WEBVIEW_SETTINGS } from '../chartConfig';
 import { buildTrendComboOption } from './echartsOption';
 
 const COMBO_CHART_HEIGHT = 300;
-
-// react-native-echarts-pro hardcodes androidHardwareAccelerationDisabled
-// on its WebView but spreads `webViewSettings` AFTER it — so this
-// override wins and re-enables GPU compositing on Android. Module-level
-// so the prop reference stays stable across renders.
-const WEBVIEW_SETTINGS = { androidHardwareAccelerationDisabled: false };
 
 // Placeholder fed to the (closed) fullscreen modal while the detailed
 // option hasn't been built yet — its chart only mounts when visible.
@@ -45,27 +40,13 @@ const TrendComboChart: FC<TrendComboChartProps> = ({
   const scheme = useScheme();
   const [fullscreen, setFullscreen] = useState(false);
 
+  // Referentially stable per scheme (chartConfig caches by the scheme
+  // singleton) — safe as a single useMemo dep for both option builds.
+  const chartTheme = chartThemeFromScheme(scheme);
+
   const option = useMemo(
-    () =>
-      buildTrendComboOption(rows, aggregations, windowMs, {
-        textPrimary: scheme.textPrimary,
-        textSecondary: scheme.textSecondary,
-        textTertiary: scheme.textTertiary,
-        border: scheme.border,
-        surface: scheme.surfaceRaised,
-        isDark: scheme.isDark,
-      }),
-    [
-      rows,
-      aggregations,
-      windowMs,
-      scheme.textPrimary,
-      scheme.textSecondary,
-      scheme.textTertiary,
-      scheme.border,
-      scheme.surfaceRaised,
-      scheme.isDark,
-    ],
+    () => buildTrendComboOption(rows, aggregations, windowMs, chartTheme),
+    [rows, aggregations, windowMs, chartTheme],
   );
 
   // Detailed (per-series axes + every x label) — for the full-screen view.
@@ -74,33 +55,11 @@ const TrendComboChart: FC<TrendComboChartProps> = ({
   const detailedOption = useMemo(
     () =>
       fullscreen
-        ? buildTrendComboOption(
-            rows,
-            aggregations,
-            windowMs,
-            {
-              textPrimary: scheme.textPrimary,
-              textSecondary: scheme.textSecondary,
-              textTertiary: scheme.textTertiary,
-              border: scheme.border,
-              surface: scheme.surfaceRaised,
-              isDark: scheme.isDark,
-            },
-            { detailed: true },
-          )
+        ? buildTrendComboOption(rows, aggregations, windowMs, chartTheme, {
+            detailed: true,
+          })
         : null,
-    [
-      fullscreen,
-      rows,
-      aggregations,
-      windowMs,
-      scheme.textPrimary,
-      scheme.textSecondary,
-      scheme.textTertiary,
-      scheme.border,
-      scheme.surfaceRaised,
-      scheme.isDark,
-    ],
+    [fullscreen, rows, aggregations, windowMs, chartTheme],
   );
 
   return (

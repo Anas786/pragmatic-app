@@ -28,8 +28,16 @@ const EMPTY_ROWS: TrendDataRow[] = [];
 
 interface TrendSectionProps {
   siteId: string;
-  /** 0-based index into `siteComponents.trends[]` — drives the data idx. */
+  /**
+   * 0-based index into the ORIGINAL `siteComponents.trends[]` array —
+   * the data endpoint's `idx` contract. NOT necessarily the render
+   * position: `selectTrends` drops malformed entries but preserves each
+   * survivor's original index (`sourceIdx`).
+   */
   idx: number;
+  /** Render position among the visible sections — drives the entrance
+   *  stagger/deferral only, never the data fetch. */
+  position: number;
   trend: TrendConfig;
 }
 
@@ -38,9 +46,14 @@ interface TrendSectionProps {
  * combined echarts chart (line+area+bar in one frame). The data query
  * fires on mount (so the request is in flight during the tab
  * transition); the chart mount is deferred behind `useInteractionReady`
- * with an index-based stagger so N sections don't all mount at once.
+ * with a position-based stagger so N sections don't all mount at once.
  */
-const TrendSection: FC<TrendSectionProps> = ({ siteId, idx, trend }) => {
+const TrendSection: FC<TrendSectionProps> = ({
+  siteId,
+  idx,
+  position,
+  trend,
+}) => {
   const scheme = useScheme();
 
   const [period, setPeriod] = useState<TrendPeriod>(DEFAULT_TREND_PERIOD);
@@ -71,8 +84,9 @@ const TrendSection: FC<TrendSectionProps> = ({ siteId, idx, trend }) => {
     args,
   );
 
-  // Defer chart mount until the tab transition settles; stagger by index.
-  const ready = useInteractionReady(140 + idx * 70);
+  // Defer chart mount until the tab transition settles; stagger by
+  // render position.
+  const ready = useInteractionReady(140 + position * 70);
 
   const rows = data?.data ?? EMPTY_ROWS;
 
@@ -98,7 +112,13 @@ const TrendSection: FC<TrendSectionProps> = ({ siteId, idx, trend }) => {
     if (!ready || (isLoading && rows.length === 0)) {
       return <Skeleton width="100%" height={TREND_CHART_HEIGHT} radius="lg" />;
     }
-    if (error) {
+    // Only surface the error card when there's nothing to render — a
+    // failed BACKGROUND refetch keeps `error` set while react-query v5
+    // retains the previous data, and tearing down a working chart (and
+    // its in-WebView zoom/legend state) over that would be worse than
+    // showing slightly stale rows. The header refresh button remains the
+    // retry affordance in that state.
+    if (error && rows.length === 0) {
       return (
         <EmptyStateCard
           title="Couldn't load trend"
@@ -122,7 +142,7 @@ const TrendSection: FC<TrendSectionProps> = ({ siteId, idx, trend }) => {
 
   return (
     <Animated.View
-      entering={FadeInDown.delay(40 * idx)
+      entering={FadeInDown.delay(40 * position)
         .duration(duration.fast)
         .springify()
         .damping(20)}

@@ -17,17 +17,8 @@
 
 import { TrendAggregation, TrendDataRow } from 'src/types';
 import { formatTrendLabel, isBarType } from 'src/utils';
+import { ChartTheme } from '../chartConfig';
 import { coerceValue } from './helpers';
-
-export interface TrendChartTheme {
-  textPrimary: string;
-  textSecondary: string;
-  textTertiary: string;
-  border: string;
-  /** Raised surface — used as the tooltip background. */
-  surface: string;
-  isDark: boolean;
-}
 
 /** Compact y-axis tick formatter, passed as a string fn (echarts-pro
  *  needs `enableParseStringFunction` to eval it inside the WebView). */
@@ -68,7 +59,7 @@ export const buildTrendComboOption = (
   rows: TrendDataRow[],
   aggregations: TrendAggregation[],
   windowMs: number,
-  theme: TrendChartTheme,
+  theme: ChartTheme,
   options: TrendComboOptions = {},
 ): object => {
   const detailed = options.detailed === true;

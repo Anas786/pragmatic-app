@@ -10,6 +10,7 @@ import RNEChartsPro from 'react-native-echarts-pro';
 import { AppText, PressableScale } from 'src/components/common';
 import { radius as radiusTokens, space, useScheme } from 'src/theme';
 import { FONT_SIZE_SM, FONT_SIZE_XS, FONT_SIZE_XXS } from 'src/utils';
+import { WEBVIEW_SETTINGS } from './chartConfig';
 import { ChartExportRef, exportChartImage } from './exportChart';
 
 const PAD = 12;
@@ -20,12 +21,6 @@ const HEADER_H = 54;
 const NOTCH_INSET = 40;
 // Smaller inset on the right so the right-hand y-axis labels don't clip.
 const RIGHT_INSET = 20;
-
-// react-native-echarts-pro hardcodes androidHardwareAccelerationDisabled
-// on its WebView but spreads `webViewSettings` AFTER it — so this
-// override wins and re-enables GPU compositing on Android. Module-level
-// so the prop reference stays stable across renders.
-const WEBVIEW_SETTINGS = { androidHardwareAccelerationDisabled: false };
 
 interface ChartFullscreenModalProps {
   visible: boolean;
