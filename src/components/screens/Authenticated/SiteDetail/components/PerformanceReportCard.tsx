@@ -37,22 +37,19 @@ import {
 } from 'src/components/common';
 import { duration, glass, radius as radiusTokens, space, useScheme } from 'src/theme';
 import {
-  buildReportFilter,
-  daysAgo,
-  DEFAULT_CUSTOM_RANGE_DAYS,
   FONT_SIZE_SM,
   FONT_SIZE_XXS,
   FONT_SIZE_XXL,
-  formatDateFilterLabel,
-  MonthSelection,
 } from 'src/utils';
 import {
+  useDateFilter,
   useEnergyReport,
   useInteractionReady,
   useReportMapping,
 } from 'src/hooks';
 import { DashboardStackParamList } from 'src/types';
-import { InverterFilterOption, inverterFilters } from 'src/data/mock';
+import { inverterFilters } from 'src/data/mock';
+import { WEBVIEW_SETTINGS } from './chartConfig';
 import DateRangePickerModal from './DateRangePickerModal';
 import DateFilterHeader from './DateFilterHeader';
 import MonthYearPickerModal from './MonthYearPickerModal';
@@ -78,12 +75,6 @@ type SiteDetailRouteProp = RouteProp<DashboardStackParamList, 'SiteDetail'>;
 const PIE_HEIGHT = 240;
 const BAR_HEIGHT = 280;
 
-// react-native-echarts-pro hardcodes androidHardwareAccelerationDisabled
-// on its WebView but spreads `webViewSettings` AFTER it — so this
-// override wins and re-enables GPU compositing on Android. Module-level
-// so the prop reference stays stable across renders.
-const WEBVIEW_SETTINGS = { androidHardwareAccelerationDisabled: false };
-
 /** Ref handle exposed by react-native-echarts-pro that we rely on. */
 interface ReportChartHandle {
   dispatchAction: (action: object) => void;
@@ -93,6 +84,12 @@ interface ReportChartProps {
   option: object;
   height: number;
   onPress?: (result: string) => void;
+  /**
+   * Fires when the chart's WebView finishes loading — i.e. the
+   * page-side message listener (registered by the injected script at
+   * load end) can now receive `dispatchAction` postMessages.
+   */
+  onLoadEnd?: () => void;
 }
 
 /**
@@ -106,17 +103,27 @@ interface ReportChartProps {
  */
 const ReportChart = memo(
   forwardRef<ReportChartHandle, ReportChartProps>(
-    ({ option, height, onPress }, ref) => (
-      <RNEChartsPro
-        ref={ref as never}
-        height={height}
-        option={option}
-        backgroundColor="transparent"
-        enableParseStringFunction
-        webViewSettings={WEBVIEW_SETTINGS}
-        onPress={onPress}
-      />
-    ),
+    ({ option, height, onPress, onLoadEnd }, ref) => {
+      // The library spreads `webViewSettings` before its own WebView
+      // props and never sets `onLoadEnd` itself, so composing it here
+      // survives. Memoized (callers pass a useCallback'd onLoadEnd) so
+      // the settings reference stays stable and the memo above holds.
+      const webViewSettings = useMemo(
+        () => (onLoadEnd ? { ...WEBVIEW_SETTINGS, onLoadEnd } : WEBVIEW_SETTINGS),
+        [onLoadEnd],
+      );
+      return (
+        <RNEChartsPro
+          ref={ref as never}
+          height={height}
+          option={option}
+          backgroundColor="transparent"
+          enableParseStringFunction
+          webViewSettings={webViewSettings}
+          onPress={onPress}
+        />
+      );
+    },
   ),
 );
 ReportChart.displayName = 'ReportChart';
@@ -126,25 +133,25 @@ const PerformanceReportCard: FC = () => {
   const route = useRoute<SiteDetailRouteProp>();
   const { siteId } = route.params;
 
-  const [startDate, setStartDate] = useState(() => daysAgo(DEFAULT_CUSTOM_RANGE_DAYS));
-  const [endDate, setEndDate] = useState(() => new Date());
-  const [selectedMonth, setSelectedMonth] = useState<MonthSelection>(() => {
-    const now = new Date();
-    return { month: now.getMonth() + 1, year: now.getFullYear() };
-  });
-  const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear());
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showMonthPicker, setShowMonthPicker] = useState(false);
-  const [showYearPicker, setShowYearPicker] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [activeFilter, setActiveFilter] = useState<InverterFilterOption>('Custom');
   const [barFullscreen, setBarFullscreen] = useState(false);
+  // Counts pie-WebView load completions (not a boolean): a remounted
+  // WebView re-fires onLoadEnd, re-arming the select-sync effect below
+  // even when none of its data deps changed.
+  const [pieLoadCount, setPieLoadCount] = useState(0);
   const pieRef = useRef<ReportChartHandle | null>(null);
 
-  const reportFilter = useMemo(
-    () => buildReportFilter(activeFilter, startDate, endDate, selectedMonth, selectedYear),
-    [activeFilter, startDate, endDate, selectedMonth, selectedYear],
-  );
+  const {
+    activeFilter,
+    setActiveFilter,
+    reportFilter,
+    dateLabel,
+    pillDisabled,
+    handlePillPress,
+    dateRangePickerProps,
+    monthPickerProps,
+    yearPickerProps,
+  } = useDateFilter();
 
   const {
     data: reportData,
@@ -223,22 +230,36 @@ const PerformanceReportCard: FC = () => {
     [stackData, stackMaxValue, chartTheme],
   );
 
+  // Fired via `webViewSettings.onLoadEnd` when the pie WebView finishes
+  // loading. Stable identity so the memoized ReportChart never re-renders
+  // because of it.
+  const handlePieLoadEnd = useCallback(() => setPieLoadCount(c => c + 1), []);
+
   // Keep the pie's selected slice in sync with `selectedIndex` — so
   // tapping a SOURCE ROW (not just a slice) pops the matching slice.
-  // `selectedMode: 'single'` makes echarts deselect the previous one;
-  // the small delay lets a freshly-applied option settle first.
+  // `selectedMode: 'single'` makes echarts deselect the previous one.
+  // dispatchAction is a raw postMessage and the page-side listener only
+  // registers once the WebView finishes loading — anything posted
+  // earlier is silently dropped. So the effect is gated on
+  // `pieLoadCount` and re-runs on every (re)load. The first shot waits
+  // 60 ms for a freshly-applied option to settle; the 360 ms backstop
+  // covers the small onLoadEnd ↔ injected-script ordering race.
   useEffect(() => {
-    const ref = pieRef.current;
-    if (!ref?.dispatchAction || grandTotal <= 0) return;
-    const t = setTimeout(() => {
-      ref.dispatchAction({
+    if (pieLoadCount === 0 || grandTotal <= 0) return;
+    const dispatch = () => {
+      pieRef.current?.dispatchAction?.({
         type: 'select',
         seriesIndex: 0,
         dataIndex: safeSelectedIndex,
       });
-    }, 60);
-    return () => clearTimeout(t);
-  }, [safeSelectedIndex, pieOption, grandTotal]);
+    };
+    const t1 = setTimeout(dispatch, 60);
+    const t2 = setTimeout(dispatch, 360);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [safeSelectedIndex, pieOption, grandTotal, pieLoadCount]);
 
   // Tapping a pie slice selects that source (highlights its row).
   // Stable identity (useCallback) so the memoized ReportChart wrapper
@@ -249,33 +270,6 @@ const PerformanceReportCard: FC = () => {
       setSelectedIndex(params.dataIndex);
     }
   }, []);
-
-  const handleDateApply = (start: Date, end: Date) => {
-    setStartDate(start);
-    setEndDate(end);
-  };
-  const handleMonthApply = (sel: { year: number; month: number }) => {
-    setSelectedMonth({ year: sel.year, month: sel.month });
-  };
-  const handleYearApply = (sel: { year: number }) => {
-    setSelectedYear(sel.year);
-  };
-  const handlePillPress = () => {
-    switch (activeFilter) {
-      case 'Custom':
-        setShowDatePicker(true);
-        break;
-      case 'Month':
-        setShowMonthPicker(true);
-        break;
-      case 'Year':
-        setShowYearPicker(true);
-        break;
-      case 'Life Time':
-      default:
-        break;
-    }
-  };
 
   const renderFilters = () => (
     <View style={styles.filterRow}>
@@ -374,6 +368,7 @@ const PerformanceReportCard: FC = () => {
               height={PIE_HEIGHT}
               option={pieOption}
               onPress={handlePiePress}
+              onLoadEnd={handlePieLoadEnd}
             />
           </View>
         </SectionCard>
@@ -445,7 +440,12 @@ const PerformanceReportCard: FC = () => {
         </Animated.View>
       );
     }
-    if (error) {
+    // A failed BACKGROUND refetch sets `error` while react-query still
+    // holds the previous data — with cached content rendered above,
+    // appending an error card would contradict it. Reserve the error
+    // state for a genuinely empty report (the header spinner already
+    // covers refresh feedback).
+    if (error && grandTotal <= 0) {
       return (
         <Animated.View entering={tabStagger(2)}>
           <EmptyStateCard
@@ -471,14 +471,8 @@ const PerformanceReportCard: FC = () => {
       <Animated.View entering={tabStagger(0)}>
         <DateFilterHeader
           title="Energy Mix"
-          dateLabel={formatDateFilterLabel(
-            activeFilter,
-            startDate,
-            endDate,
-            selectedMonth,
-            selectedYear,
-          )}
-          pillDisabled={activeFilter === 'Life Time'}
+          dateLabel={dateLabel}
+          pillDisabled={pillDisabled}
           onDatePress={handlePillPress}
           onRefresh={refetch}
           refreshing={isLoading || isFetching}
@@ -492,30 +486,9 @@ const PerformanceReportCard: FC = () => {
       {renderBarChart()}
       {renderStateBlock()}
 
-      <DateRangePickerModal
-        visible={showDatePicker}
-        onClose={() => setShowDatePicker(false)}
-        startDate={startDate}
-        endDate={endDate}
-        onApply={handleDateApply}
-      />
-
-      <MonthYearPickerModal
-        visible={showMonthPicker}
-        onClose={() => setShowMonthPicker(false)}
-        mode="month"
-        initialYear={selectedMonth.year}
-        initialMonth={selectedMonth.month}
-        onApply={handleMonthApply}
-      />
-
-      <MonthYearPickerModal
-        visible={showYearPicker}
-        onClose={() => setShowYearPicker(false)}
-        mode="year"
-        initialYear={selectedYear}
-        onApply={handleYearApply}
-      />
+      <DateRangePickerModal {...dateRangePickerProps} />
+      <MonthYearPickerModal {...monthPickerProps} />
+      <MonthYearPickerModal {...yearPickerProps} />
 
       <ChartFullscreenModal
         visible={barFullscreen}

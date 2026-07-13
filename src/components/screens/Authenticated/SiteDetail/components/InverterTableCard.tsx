@@ -1,4 +1,4 @@
-import React, { FC, useMemo, useState } from 'react';
+import React, { FC, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -26,24 +26,24 @@ import {
   useThemedStyles,
 } from 'src/theme';
 import {
-  buildReportFilter,
-  daysAgo,
-  DEFAULT_CUSTOM_RANGE_DAYS,
   formatCompact,
-  formatDateFilterLabel,
-  MonthSelection,
   FONT_SIZE_SM,
   FONT_SIZE_XS,
   FONT_SIZE_XXS,
   FONT_SIZE_XXL,
 } from 'src/utils';
-import { useInteractionReady, useInverterReport } from 'src/hooks';
+import { useDateFilter, useInteractionReady, useInverterReport } from 'src/hooks';
 import { DashboardStackParamList } from 'src/types';
-import { InverterFilterOption, inverterFilters } from 'src/data/mock';
+import { inverterFilters } from 'src/data/mock';
 import DateRangePickerModal from './DateRangePickerModal';
 import DateFilterHeader from './DateFilterHeader';
 import MonthYearPickerModal from './MonthYearPickerModal';
-import { mapRowsToEntries, InverterEntry, statusFor } from './InverterTable/helpers';
+import {
+  mapRowsToEntries,
+  InverterEntry,
+  MOUNT_CHUNK,
+  statusFor,
+} from './InverterTable/helpers';
 import InverterCard from './InverterTable/InverterCard';
 import ReportFilterPill from './PerformanceReport/ReportFilterPill';
 
@@ -55,24 +55,19 @@ const InverterTableCard: FC = () => {
   const route = useRoute<SiteDetailRouteProp>();
   const { siteId } = route.params;
 
-  const [startDate, setStartDate] = useState(() => daysAgo(DEFAULT_CUSTOM_RANGE_DAYS));
-  const [endDate, setEndDate] = useState(() => new Date());
-  const [selectedMonth, setSelectedMonth] = useState<MonthSelection>(() => {
-    const now = new Date();
-    return { month: now.getMonth() + 1, year: now.getFullYear() };
-  });
-  const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear());
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showMonthPicker, setShowMonthPicker] = useState(false);
-  const [showYearPicker, setShowYearPicker] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<InverterFilterOption>('Custom');
+  const {
+    activeFilter,
+    setActiveFilter,
+    reportFilter,
+    dateLabel,
+    pillDisabled,
+    handlePillPress,
+    dateRangePickerProps,
+    monthPickerProps,
+    yearPickerProps,
+  } = useDateFilter();
 
-  const reportFilter = useMemo(
-    () => buildReportFilter(activeFilter, startDate, endDate, selectedMonth, selectedYear),
-    [activeFilter, startDate, endDate, selectedMonth, selectedYear],
-  );
-
-  const { data: reportData, refetch, isLoading, error } = useInverterReport(
+  const { data: reportData, refetch, isLoading, isFetching, error } = useInverterReport(
     siteId,
     reportFilter,
   );
@@ -99,32 +94,38 @@ const InverterTableCard: FC = () => {
     return { avgPr, best, worst, totalProduction, count: inverterEntries.length };
   }, [inverterEntries]);
 
-  const handleDateApply = (start: Date, end: Date) => {
-    setStartDate(start);
-    setEndDate(end);
-  };
-  const handleMonthApply = (sel: { year: number; month: number }) => {
-    setSelectedMonth({ year: sel.year, month: sel.month });
-  };
-  const handleYearApply = (sel: { year: number }) => {
-    setSelectedYear(sel.year);
-  };
-  const handlePillPress = () => {
-    switch (activeFilter) {
-      case 'Custom':
-        setShowDatePicker(true);
-        break;
-      case 'Month':
-        setShowMonthPicker(true);
-        break;
-      case 'Year':
-        setShowYearPicker(true);
-        break;
-      case 'Life Time':
-      default:
-        break;
-    }
-  };
+  /* ── chunked progressive mount ─────────────────────────────────
+   * This list can't virtualise inside SiteDetail's ScrollView (same
+   * orientation) and each InverterCard is ~20+ native views, so an
+   * unbounded fleet must not land in one Fabric commit. Reveal
+   * MOUNT_CHUNK rows per frame via a rAF counter (LiveParameterView
+   * convention), keyed on `reportFilter` so a period change resets the
+   * window synchronously (state-from-render pattern) while refetches
+   * of the same period keep already-mounted rows in place. */
+  const [reveal, setReveal] = useState(() => ({ key: reportFilter, count: MOUNT_CHUNK }));
+  if (reveal.key !== reportFilter) {
+    setReveal({ key: reportFilter, count: MOUNT_CHUNK });
+  }
+
+  useEffect(() => {
+    if (!ready || reveal.count >= inverterEntries.length) return;
+    const frame = requestAnimationFrame(() => {
+      setReveal(s =>
+        s.count >= inverterEntries.length
+          ? s
+          : { ...s, count: Math.min(s.count + MOUNT_CHUNK, inverterEntries.length) },
+      );
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [ready, reveal, inverterEntries.length]);
+
+  const visibleEntries = useMemo(
+    () =>
+      inverterEntries.length > reveal.count
+        ? inverterEntries.slice(0, reveal.count)
+        : inverterEntries,
+    [inverterEntries, reveal.count],
+  );
 
   const renderHero = () => {
     if (!fleet) return null;
@@ -262,7 +263,11 @@ const InverterTableCard: FC = () => {
   const renderList = () => {
     if (!ready) return renderSkeletons();
     if (isLoading && inverterEntries.length === 0) return renderSkeletons();
-    if (error) {
+    // A failed BACKGROUND refetch sets `error` while react-query still
+    // holds the previous data — keep showing the cached list in that
+    // case (the header spinner covers refresh feedback) and reserve
+    // the error card for a genuinely empty cache.
+    if (error && inverterEntries.length === 0) {
       return (
         <EmptyStateCard
           title="Couldn't load inverter report"
@@ -276,7 +281,7 @@ const InverterTableCard: FC = () => {
     }
     return (
       <View style={styles.list}>
-        {inverterEntries.map((entry, i) => (
+        {visibleEntries.map((entry, i) => (
           <InverterCard key={`${entry.title}-${i}`} entry={entry} index={i} />
         ))}
       </View>
@@ -287,16 +292,11 @@ const InverterTableCard: FC = () => {
     <View style={styles.container}>
       <DateFilterHeader
         title="Inverter Fleet"
-        dateLabel={formatDateFilterLabel(
-          activeFilter,
-          startDate,
-          endDate,
-          selectedMonth,
-          selectedYear,
-        )}
-        pillDisabled={activeFilter === 'Life Time'}
+        dateLabel={dateLabel}
+        pillDisabled={pillDisabled}
         onDatePress={handlePillPress}
         onRefresh={refetch}
+        refreshing={isLoading || isFetching}
       />
 
       {/* Filter pills sit directly under the date selector — they
@@ -306,30 +306,9 @@ const InverterTableCard: FC = () => {
       {renderHero()}
       {renderList()}
 
-      <DateRangePickerModal
-        visible={showDatePicker}
-        onClose={() => setShowDatePicker(false)}
-        startDate={startDate}
-        endDate={endDate}
-        onApply={handleDateApply}
-      />
-
-      <MonthYearPickerModal
-        visible={showMonthPicker}
-        onClose={() => setShowMonthPicker(false)}
-        mode="month"
-        initialYear={selectedMonth.year}
-        initialMonth={selectedMonth.month}
-        onApply={handleMonthApply}
-      />
-
-      <MonthYearPickerModal
-        visible={showYearPicker}
-        onClose={() => setShowYearPicker(false)}
-        mode="year"
-        initialYear={selectedYear}
-        onApply={handleYearApply}
-      />
+      <DateRangePickerModal {...dateRangePickerProps} />
+      <MonthYearPickerModal {...monthPickerProps} />
+      <MonthYearPickerModal {...yearPickerProps} />
     </View>
   );
 };

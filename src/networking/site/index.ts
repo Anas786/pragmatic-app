@@ -110,7 +110,10 @@ const reportParamsFor = (
  * percent rounding, etc.).
  */
 export interface InverterReportRow {
-  inverter_num: string;
+  /** Inverter identifier — the backend has shipped this both as a
+   *  bare number and as a numeric string, so consumers must coerce
+   *  (see `numericCardValue`) rather than `typeof`-gate. */
+  inverter_num: string | number;
   /** Energy yield in kWh for the requested period. */
   ed_solar: number;
   /** Performance Ratio (0–100). */

@@ -26,7 +26,7 @@ export const endOfDayMs = (d: Date): number => {
 /**
  * Returns "now minus N calendar days" as a fresh `Date`. Used to seed
  * the default Custom-filter range across every Trend / Report card so
- * "open the screen, see the last 15 days" works without the user
+ * "open the screen, see the last two weeks" works without the user
  * having to touch the date picker.
  *
  * Pass `0` to get a copy of "now"; negative values shift forward.
@@ -37,8 +37,26 @@ export const daysAgo = (n: number): Date => {
   return d;
 };
 
-/** Default span (in days) used by the Custom filter on every Trend / Report card. */
-export const DEFAULT_CUSTOM_RANGE_DAYS = 15;
+/**
+ * Maximum inclusive span (in calendar days) the report Custom range can
+ * cover. MUST stay in lockstep with `DateRangePickerModal`'s default
+ * `MAX_RANGE_DAYS` (counted as *additional* days after the start day,
+ * i.e. `REPORT_CUSTOM_MAX_DAYS - 1`) — the picker greys out anything
+ * past that cap and its caption reads "Max range: N days".
+ *
+ * Mirrors the `TREND_CUSTOM_MAX_DAYS` / `TREND_CUSTOM_MAX_RANGE` parity
+ * pattern in `src/utils/trends.ts`.
+ */
+export const REPORT_CUSTOM_MAX_DAYS = 15;
+
+/**
+ * Default span used to seed the Custom filter on every Report card:
+ * `start = daysAgo(DEFAULT_CUSTOM_RANGE_DAYS)`, `end = today` — an
+ * inclusive `REPORT_CUSTOM_MAX_DAYS`-day window. Derived from the cap
+ * (cap − 1 additional days) so the default range is always exactly
+ * reproducible inside the picker.
+ */
+export const DEFAULT_CUSTOM_RANGE_DAYS = REPORT_CUSTOM_MAX_DAYS - 1;
 
 /**
  * The four UI pill labels both Reports cards expose. Kept as a `string`

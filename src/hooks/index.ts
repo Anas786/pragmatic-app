@@ -10,6 +10,7 @@ export * from './useSiteData';
 export * from './useSiteConfig';
 export * from './useSwitchActiveSite';
 export * from './useInverterReport';
+export * from './useDateFilter';
 export * from './useEnergyReport';
 export * from './useTrendData';
 export * from './useReportMapping';
