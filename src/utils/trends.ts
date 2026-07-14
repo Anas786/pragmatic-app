@@ -7,7 +7,12 @@
  * this lives separate from `reports.ts`.
  */
 
-import { TrendAggregation, TrendAggType, TrendConfig } from 'src/types';
+import {
+  ParamsMapping,
+  TrendAggregation,
+  TrendAggType,
+  TrendConfig,
+} from 'src/types';
 import { endOfDayMs, startOfDayMs } from './reports';
 
 /* ─────────────── period pills ─────────────── */
@@ -135,21 +140,53 @@ const VALID_TYPES: ReadonlySet<string> = new Set([
   'bar',
 ]);
 
-const normalizeAggregation = (raw: unknown): TrendAggregation | null => {
+/**
+ * Human label for a param code from `/public/config/params-mapping`
+ * (`"p10436"` → `"SVG 4 Active Power"`). The dict is typed
+ * `Record<string, string | unknown>`, so guard at runtime.
+ */
+const mappedParamLabel = (
+  mapping: ParamsMapping | null | undefined,
+  param: string,
+): string | null => {
+  const label = mapping?.[param];
+  return typeof label === 'string' && label.trim().length > 0 ? label : null;
+};
+
+const normalizeAggregation = (
+  raw: unknown,
+  mapping: ParamsMapping | null | undefined,
+): TrendAggregation | null => {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
   const param = typeof o.param === 'string' ? o.param : null;
   const type = typeof o.type === 'string' ? o.type.toLowerCase() : null;
   if (!param || !type || !VALID_TYPES.has(type)) return null;
+
+  // Series label priority: an explicit, MEANINGFUL config `display` (some
+  // configs fill it with the raw p-code — treat that as absent) → the
+  // params-mapping label → the raw code as a last resort. Legends, series
+  // names and tooltips all render this value.
+  const explicitDisplay =
+    typeof o.display === 'string' &&
+    o.display.trim().length > 0 &&
+    o.display.trim() !== param
+      ? o.display
+      : null;
+  const display = explicitDisplay ?? mappedParamLabel(mapping, param) ?? param;
+
   return {
     param,
     type: type as TrendAggType,
     color: typeof o.color === 'string' ? o.color : '#9CA3AF',
-    display: typeof o.display === 'string' ? o.display : param,
+    display,
   };
 };
 
-const normalizeTrend = (raw: unknown): TrendConfig | null => {
+const normalizeTrend = (
+  raw: unknown,
+  mapping: ParamsMapping | null | undefined,
+): TrendConfig | null => {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
   const payload =
@@ -158,7 +195,7 @@ const normalizeTrend = (raw: unknown): TrendConfig | null => {
       : {};
   const rawAggs = Array.isArray(payload.aggregations) ? payload.aggregations : [];
   const aggregations = rawAggs
-    .map(normalizeAggregation)
+    .map(a => normalizeAggregation(a, mapping))
     .filter((a): a is TrendAggregation => a !== null);
   if (aggregations.length === 0) return null;
   return {
@@ -186,8 +223,15 @@ export interface IndexedTrendConfig extends TrendConfig {
  * the whitelisted shape. Drops any malformed entry while preserving each
  * survivor's original array index as `sourceIdx`. Returns [] when the
  * config is missing or the wrong shape.
+ *
+ * `mapping` is the `/public/config/params-mapping` dict (from
+ * `useParamsMapping()`) — series labels resolve through it whenever the
+ * trend config carries no meaningful `display` of its own.
  */
-export const selectTrends = (config: unknown): IndexedTrendConfig[] => {
+export const selectTrends = (
+  config: unknown,
+  mapping?: ParamsMapping | null,
+): IndexedTrendConfig[] => {
   if (!config || typeof config !== 'object') return [];
   const components = (config as Record<string, unknown>).siteComponents;
   if (!components || typeof components !== 'object') return [];
@@ -195,7 +239,7 @@ export const selectTrends = (config: unknown): IndexedTrendConfig[] => {
   if (!Array.isArray(trends)) return [];
   return trends
     .map((raw, sourceIdx): IndexedTrendConfig | null => {
-      const trend = normalizeTrend(raw);
+      const trend = normalizeTrend(raw, mapping);
       return trend ? { ...trend, sourceIdx } : null;
     })
     .filter((t): t is IndexedTrendConfig => t !== null);

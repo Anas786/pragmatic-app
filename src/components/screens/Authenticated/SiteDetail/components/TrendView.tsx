@@ -19,7 +19,7 @@ import { EmptyStateCard, Skeleton } from 'src/components/common';
 import { space } from 'src/theme';
 import { DashboardStackParamList } from 'src/types';
 import { selectTrends } from 'src/utils';
-import { useSiteConfig } from 'src/hooks';
+import { useParamsMapping, useSiteConfig } from 'src/hooks';
 import { TREND_CHART_HEIGHT } from './Trends/helpers';
 import TrendSection from './Trends/TrendSection';
 
@@ -30,7 +30,15 @@ const TrendView: FC = () => {
   const { siteId } = route.params;
 
   const { data: config, isLoading, isError, refetch } = useSiteConfig(siteId);
-  const trends = useMemo(() => selectTrends(config), [config]);
+  // Series labels resolve through /public/config/params-mapping (bootstrap
+  // cached + persisted) — without it, configs that omit `display` would
+  // render raw p-codes in legends/tooltips. Re-renders once when the
+  // bootstrap fetch lands, so labels upgrade in place.
+  const paramsMapping = useParamsMapping();
+  const trends = useMemo(
+    () => selectTrends(config, paramsMapping),
+    [config, paramsMapping],
+  );
 
   if (isLoading && trends.length === 0) {
     return (
