@@ -50,8 +50,15 @@ const HIDE_CONTROLS_DELAY_MS = 2600;
  *  clipping wrapper, and the Skia clip so all three stay in register. */
 const VIEWPORT_RADIUS = normalizeWidth(16);
 
-const clamp = (v: number, min: number, max: number) =>
-  Math.min(Math.max(v, min), max);
+// `'worklet'` so the pinch gesture's onUpdate (which runs on the UI thread)
+// can call this. Without the directive it lives only on the JS thread, and
+// the pinch worklet crashes with "Tried to synchronously call a non-worklet
+// function `clamp` on the UI thread." The directive is harmless for the
+// JS-thread callers (fit math, +/- zoom buttons) — they call it normally.
+const clamp = (v: number, min: number, max: number) => {
+  'worklet';
+  return Math.min(Math.max(v, min), max);
+};
 
 interface SLDViewportProps {
   graph: SLDGraph;
