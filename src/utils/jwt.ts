@@ -15,6 +15,13 @@ export interface CognitoIdTokenClaims {
   iss?: string;
   exp: number;
   iat: number;
+  /**
+   * Epoch SECONDS of the user's actual sign-in (password entry). Unlike
+   * `iat`, Cognito carries it over unchanged into every refreshed ID token,
+   * so it stays the real sign-in instant across silent refreshes and cold
+   * starts. Optional — older tokens / other issuers may omit it.
+   */
+  auth_time?: number;
   token_use?: 'id' | 'access';
 
   // Custom Pragmatic claims

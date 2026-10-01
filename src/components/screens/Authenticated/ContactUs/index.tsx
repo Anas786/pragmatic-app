@@ -1,190 +1,182 @@
-import React, { FC, useMemo } from 'react';
-import {
-  Alert,
-  Linking,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  View,
-} from 'react-native';
+import React, { FC, memo, useCallback } from 'react';
+import { ScrollView, StatusBar, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
 import {
   AppText,
-  HeroGradientCard,
-  HeroLiveBadge,
-  HeroTopRow,
-  IconButton,
-  IconWell,
-  OverlineLabel,
   PressableScale,
-  PulseDot,
   ScreenContainer,
+  ScreenHeader,
   Surface,
-  TopBar,
 } from 'src/components/common';
-import { energyPalette, duration, space, useScheme } from 'src/theme';
 import {
-  FONT_SIZE_MD,
-  FONT_SIZE_SM,
-  FONT_SIZE_XS,
-  FONT_SIZE_XL,
-  ICON_SIZE_LG,
-  ICON_SIZE_SM,
-  display,
-  inspectError,
-} from 'src/utils';
+  duration,
+  radius,
+  Scheme,
+  space,
+  useScheme,
+  useThemedStyles,
+} from 'src/theme';
+import { IconProps } from 'src/types';
+import { SUPPORT_EMAIL, WEBSITE_URL } from 'src/utils/constants/company';
+import { openExternalUrl } from 'src/utils/externalLinks';
+import { ICON_SIZE_MD, ICON_SIZE_SM } from 'src/utils/theme';
 import {
-  Back,
   EmailPlainIcon,
   MapMarkerIcon,
   PhoneIcon,
   RightIcon,
   WebIcon,
 } from 'src/assets/icons';
-import { IconProps } from 'src/types';
+
+type ContactKind = 'map' | 'phone' | 'email' | 'web';
 
 interface ContactItem {
-  Icon: FC<IconProps>;
-  color: string;
+  kind: ContactKind;
   title: string;
   value: string;
   url: string;
 }
 
-interface Office {
-  region: string;
+interface ContactGroup {
+  title: string;
   items: ContactItem[];
 }
 
-const WEBSITE_URL = 'https://pragmaticeng.com/';
+const KIND_ICON: Record<ContactKind, FC<IconProps>> = {
+  map: MapMarkerIcon,
+  phone: PhoneIcon,
+  email: EmailPlainIcon,
+  web: WebIcon,
+};
+
+/** What tapping the row does — spoken after the label. */
+const KIND_HINT: Record<ContactKind, string> = {
+  map: 'Opens Maps',
+  phone: 'Starts a call',
+  email: 'Opens Mail',
+  web: 'Opens website',
+};
+
+/** 'https://pragmaticeng.com/' → 'pragmaticeng.com' for display. */
+const displayHost = (url: string): string =>
+  url.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+
+// Office details (addresses, phone numbers, the UAE desk's mailbox) are
+// specific to this screen; app-wide identity strings come from company.ts.
+const GROUPS: ContactGroup[] = [
+  {
+    title: 'Pakistan office',
+    items: [
+      {
+        kind: 'map',
+        title: 'Location',
+        value:
+          'Office# B-201 Blossom Trade Center, Gulistan-e-Jauhar, Block 1, Karachi',
+        url: 'https://maps.google.com/?q=Blossom+Trade+Center+Gulistan-e-Jauhar+Karachi',
+      },
+      {
+        kind: 'phone',
+        title: 'Call us',
+        value: '+92 308 4222864',
+        url: 'tel:+923084222864',
+      },
+      {
+        kind: 'email',
+        title: 'Email us',
+        value: SUPPORT_EMAIL,
+        url: `mailto:${SUPPORT_EMAIL}`,
+      },
+    ],
+  },
+  {
+    title: 'UAE office',
+    items: [
+      {
+        kind: 'map',
+        title: 'Location',
+        value: 'Villa-724, Arabian Ranches-3, Joy, Dubai, United Arab Emirates',
+        url: 'https://maps.google.com/?q=Arabian+Ranches+3+Joy+Dubai',
+      },
+      {
+        kind: 'phone',
+        title: 'Call us',
+        value: '+971 56 1186427',
+        url: 'tel:+971561186427',
+      },
+      {
+        kind: 'email',
+        title: 'Email us',
+        value: 'sk@pragmaticeng.com',
+        url: 'mailto:sk@pragmaticeng.com',
+      },
+    ],
+  },
+  {
+    title: 'Online',
+    items: [
+      {
+        kind: 'web',
+        title: 'Website',
+        value: displayHost(WEBSITE_URL),
+        url: WEBSITE_URL,
+      },
+    ],
+  },
+];
+
+/** Entrance stagger cap (§19) — later rows mount without animation. */
+const ANIM_LIMIT = 8;
 
 const enter = (i: number) =>
-  FadeInDown.delay(120 + i * 70)
-    .duration(duration.base)
-    .springify()
-    .damping(18);
+  i < ANIM_LIMIT
+    ? FadeInDown.delay(80 + i * 60)
+        .duration(duration.base)
+        .springify()
+        .damping(18)
+    : undefined;
 
-const ContactRow: FC<{ item: ContactItem }> = ({ item }) => {
+const ContactRow: FC<{ item: ContactItem }> = memo(({ item }) => {
   const scheme = useScheme();
-  const { Icon, color, title, value, url } = item;
-
-  const handlePress = () => {
-    // No canOpenURL gating: on Android 11+ it returns false without a
-    // <queries> manifest entry even when a handler exists. Catch-based
-    // feedback only — openURL rejects when no app can handle the scheme.
-    Linking.openURL(url).catch(err => {
-      display('ContactUs.openURL ERROR', inspectError(err), undefined, true);
-      const action = url.startsWith('tel:')
-        ? 'make calls'
-        : url.startsWith('mailto:')
-          ? 'send email'
-          : 'open this link';
-      Alert.alert(
-        'Unable to open',
-        `No app is available on this device to ${action}.`,
-      );
-    });
-  };
+  const themed = useThemedStyles(createStyles);
+  const { kind, title, value, url } = item;
+  const Icon = KIND_ICON[kind];
+  const onPress = useCallback(() => openExternalUrl(url), [url]);
 
   return (
-    <PressableScale onPress={handlePress} accessibilityLabel={`${title}: ${value}`}>
-      <Surface elevation="md" radius="xl" padding={space.lg} bordered>
+    <PressableScale
+      onPress={onPress}
+      scaleTo={0.98}
+      role="link"
+      accessibilityLabel={`${title}, ${value}`}
+      accessibilityHint={KIND_HINT[kind]}>
+      <Surface elevation="sm" radius="xl" padding={space.lg} bordered>
         <View style={styles.row}>
-          <IconWell color={color} size={48} radius={14}>
-            <Icon size={ICON_SIZE_LG} color={color} />
-          </IconWell>
+          <View style={themed.iconWell}>
+            <Icon size={ICON_SIZE_MD} color={scheme.textPrimary} />
+          </View>
           <View style={styles.rowText}>
-            <OverlineLabel color={scheme.textTertiary}>{title}</OverlineLabel>
-            <AppText
-              fontSize={FONT_SIZE_SM}
-              semi_bold
-              color={scheme.textPrimary}
-              lineHeight={20}>
+            <AppText variant="caption" tone="secondary">
+              {title}
+            </AppText>
+            <AppText variant="body" medium={kind !== 'map'}>
               {value}
             </AppText>
           </View>
-          <IconWell color={color} size={28} radius={14} alpha="14">
-            <RightIcon size={ICON_SIZE_SM} color={color} />
-          </IconWell>
+          <RightIcon size={ICON_SIZE_SM} color={scheme.textTertiary} />
         </View>
       </Surface>
     </PressableScale>
   );
-};
+});
+ContactRow.displayName = 'ContactRow';
 
 const ContactUs: FC = () => {
   const navigation = useNavigation();
   const scheme = useScheme();
+  const goBack = useCallback(() => navigation.goBack(), [navigation]);
 
-  const offices = useMemo<Office[]>(
-    () => [
-      {
-        region: 'Pakistan Office',
-        items: [
-          {
-            Icon: MapMarkerIcon,
-            color: energyPalette.grid,
-            title: 'Location',
-            value:
-              'Office# B-201 Blossom Trade Center, Gulistan-e-Jauhar, Block 1, Karachi',
-            url: 'https://maps.google.com/?q=Blossom+Trade+Center+Gulistan-e-Jauhar+Karachi',
-          },
-          {
-            Icon: PhoneIcon,
-            color: energyPalette.genset,
-            title: 'Call Us',
-            value: '+92 308 4222864',
-            url: 'tel:+923084222864',
-          },
-          {
-            Icon: EmailPlainIcon,
-            color: scheme.brand,
-            title: 'Email Us',
-            value: 'info@pragmaticeng.com',
-            url: 'mailto:info@pragmaticeng.com',
-          },
-        ],
-      },
-      {
-        region: 'UAE Office',
-        items: [
-          {
-            Icon: MapMarkerIcon,
-            color: energyPalette.grid,
-            title: 'Location',
-            value: 'Villa-724, Arabian Ranches-3, Joy, Dubai, United Arab Emirates',
-            url: 'https://maps.google.com/?q=Arabian+Ranches+3+Joy+Dubai',
-          },
-          {
-            Icon: PhoneIcon,
-            color: energyPalette.genset,
-            title: 'Call Us',
-            value: '+971 56 1186427',
-            url: 'tel:+971561186427',
-          },
-          {
-            Icon: EmailPlainIcon,
-            color: scheme.brand,
-            title: 'Email Us',
-            value: 'sk@pragmaticeng.com',
-            url: 'mailto:sk@pragmaticeng.com',
-          },
-        ],
-      },
-    ],
-    [scheme.brand],
-  );
-
-  const websiteItem: ContactItem = {
-    Icon: WebIcon,
-    color: energyPalette.wind,
-    title: 'Website',
-    value: 'pragmaticeng.com',
-    url: WEBSITE_URL,
-  };
-
-  let rowIndex = 0;
+  let animIndex = 0;
 
   return (
     <ScreenContainer>
@@ -193,93 +185,69 @@ const ContactUs: FC = () => {
         backgroundColor={scheme.bg}
       />
 
-      <TopBar>
-        <IconButton
-          onPress={() => navigation.goBack()}
-          accessibilityLabel="Go back">
-          <Back size={ICON_SIZE_LG} color={scheme.textPrimary} />
-        </IconButton>
-        <AppText fontSize={FONT_SIZE_MD} bold color={scheme.textPrimary}>
-          Contact Us
-        </AppText>
-        <View style={styles.headerSpacer} />
-      </TopBar>
+      <ScreenHeader title="Contact us" onBack={goBack} />
 
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
-        <Animated.View
-          entering={FadeInDown.duration(duration.base).springify().damping(18)}>
-          <HeroGradientCard>
-            <HeroTopRow>
-              <HeroLiveBadge>
-                <PulseDot color={scheme.heroOnGradient} size={8} />
-                <OverlineLabel color={scheme.heroOnGradient}>
-                  GET IN TOUCH
-                </OverlineLabel>
-              </HeroLiveBadge>
-            </HeroTopRow>
-            <View style={styles.heroBody}>
-              <AppText fontSize={FONT_SIZE_XL} bold color={scheme.heroOnGradient}>
-                Let's talk
-              </AppText>
-              <AppText
-                fontSize={FONT_SIZE_XS}
-                color={scheme.heroOnGradientMuted}
-                lineHeight={18}>
-                Questions or need support? Reach us at any of our offices — tap
-                to connect instantly.
-              </AppText>
-            </View>
-          </HeroGradientCard>
-        </Animated.View>
+        <AppText variant="body" tone="secondary" style={styles.intro}>
+          Questions or need support? Tap any option below to reach us.
+        </AppText>
 
-        {offices.map(office => (
-          <View key={office.region} style={styles.group}>
-            <Animated.View entering={enter(rowIndex++)}>
-              <OverlineLabel
-                color={scheme.textTertiary}
-                style={styles.groupHeader}>
-                {office.region}
-              </OverlineLabel>
-            </Animated.View>
-            {office.items.map(item => (
-              <Animated.View key={item.title} entering={enter(rowIndex++)}>
+        {GROUPS.map(group => (
+          <View key={group.title} style={styles.group}>
+            <AppText
+              variant="overline"
+              semi_bold
+              tone="secondary"
+              accessibilityRole="header"
+              style={styles.groupHeader}>
+              {group.title}
+            </AppText>
+            {group.items.map(item => (
+              <Animated.View key={item.url} entering={enter(animIndex++)}>
                 <ContactRow item={item} />
               </Animated.View>
             ))}
           </View>
         ))}
-
-        <View style={styles.group}>
-          <Animated.View entering={enter(rowIndex++)}>
-            <OverlineLabel color={scheme.textTertiary} style={styles.groupHeader}>
-              Online
-            </OverlineLabel>
-          </Animated.View>
-          <Animated.View entering={enter(rowIndex++)}>
-            <ContactRow item={websiteItem} />
-          </Animated.View>
-        </View>
       </ScrollView>
     </ScreenContainer>
   );
 };
 
 const styles = StyleSheet.create({
-  headerSpacer: { width: 36, height: 36 },
   scroll: { flex: 1 },
-  scrollContent: { padding: space.lg, gap: space.md },
-  heroBody: { marginTop: space.lg, gap: 6 },
+  scrollContent: {
+    padding: space.lg,
+    paddingBottom: space['3xl'],
+    gap: space.xl,
+  },
+  intro: { paddingHorizontal: space.xs },
   group: { gap: space.sm },
-  groupHeader: { marginTop: space.xs, marginLeft: space.xs },
+  groupHeader: {
+    marginLeft: space.xs,
+    textTransform: 'uppercase',
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: space.md,
   },
-  rowText: { flex: 1, gap: 2 },
+  rowText: { flex: 1, minWidth: 0, gap: space['2xs'] },
 });
+
+const createStyles = (scheme: Scheme) =>
+  StyleSheet.create({
+    iconWell: {
+      width: 44,
+      height: 44,
+      borderRadius: radius.md,
+      backgroundColor: scheme.surfaceMuted,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+  });
 
 export default ContactUs;

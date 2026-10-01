@@ -1,76 +1,78 @@
-import React, { FC, useMemo } from 'react';
-import { Image, ScrollView, StatusBar, StyleSheet, View } from 'react-native';
+import React, { FC, useCallback } from 'react';
+import { ScrollView, StatusBar, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
 import {
   AppText,
   GlassChip,
   HeroGradientCard,
-  HeroLiveBadge,
   HeroTopRow,
-  IconButton,
-  IconWell,
   OverlineLabel,
+  PESLogo,
   ScreenContainer,
+  ScreenHeader,
   Surface,
-  TopBar,
 } from 'src/components/common';
-import { Logo } from 'src/assets';
-import { duration, energyPalette, glass, space, useScheme } from 'src/theme';
 import {
-  FONT_SIZE_MD,
-  FONT_SIZE_SM,
-  FONT_SIZE_XS,
-  FONT_SIZE_XXS,
-  FONT_SIZE_XXL,
-  ICON_SIZE_LG,
-  ICON_SIZE_MD,
-} from 'src/utils';
-import { Back, EyeIcon, SproutIcon, Users } from 'src/assets/icons';
+  duration,
+  glass,
+  radius,
+  Scheme,
+  space,
+  useScheme,
+  useThemedStyles,
+} from 'src/theme';
 import { IconProps } from 'src/types';
+import { APP_VERSION_LABEL } from 'src/utils/constants/app';
+import { COMPANY_NAME } from 'src/utils/constants/company';
+import { ICON_SIZE_MD } from 'src/utils/theme';
+import { EyeIcon, SproutIcon, Users } from 'src/assets/icons';
 
 interface AboutSection {
   Icon: FC<IconProps>;
-  color: string;
   title: string;
   body: string;
 }
 
-const SOURCE_CHIPS = ['Solar', 'Wind', 'Grid', 'Battery'];
+const SECTIONS: AboutSection[] = [
+  {
+    Icon: Users,
+    title: 'Who we are',
+    body: `${COMPANY_NAME} is a leading provider of energy management and monitoring systems. We design intelligent solutions for solar, wind, battery storage, and grid integration that empower businesses to optimize energy usage and reduce costs.`,
+  },
+  {
+    Icon: SproutIcon,
+    title: 'Our mission',
+    body: 'To deliver innovative, reliable, and sustainable energy solutions that drive operational efficiency and environmental stewardship for industries worldwide.',
+  },
+  {
+    Icon: EyeIcon,
+    title: 'Our vision',
+    body: 'A future where every industry operates on clean, efficient, and intelligently managed energy systems — contributing to a greener planet.',
+  },
+];
+
+/** Long-form reading text may grow further than UI text (1.3×). */
+const LONG_FORM_MAX_SCALE = 1.6;
+/** Entrance stagger cap (§19) — later blocks mount without animation. */
+const ANIM_LIMIT = 6;
+const LOGO_W = 44;
+const LOGO_H = 21;
+const COPYRIGHT = `© ${new Date().getFullYear()} ${COMPANY_NAME}`;
 
 const enter = (i: number) =>
-  FadeInDown.delay(80 + i * 80)
-    .duration(duration.base)
-    .springify()
-    .damping(18);
+  i < ANIM_LIMIT
+    ? FadeInDown.delay(80 + i * 80)
+        .duration(duration.base)
+        .springify()
+        .damping(18)
+    : undefined;
 
 const AboutUs: FC = () => {
   const navigation = useNavigation();
   const scheme = useScheme();
-
-  const sections = useMemo<AboutSection[]>(
-    () => [
-      {
-        Icon: Users,
-        color: scheme.brand,
-        title: 'Who We Are',
-        body: 'Pragmatic Engineering Solutions is a leading provider of energy management and monitoring systems. We design intelligent solutions for solar, wind, battery storage, and grid integration that empower businesses to optimize energy usage and reduce costs.',
-      },
-      {
-        Icon: SproutIcon,
-        color: energyPalette.solar,
-        title: 'Our Mission',
-        body: 'To deliver innovative, reliable, and sustainable energy solutions that drive operational efficiency and environmental stewardship for industries worldwide.',
-      },
-      {
-        Icon: EyeIcon,
-        color: energyPalette.wind,
-        title: 'Our Vision',
-        body: 'A future where every industry operates on clean, efficient, and intelligently managed energy systems — contributing to a greener planet.',
-      },
-    ],
-    [scheme.brand],
-  );
+  const themed = useThemedStyles(createStyles);
+  const goBack = useCallback(() => navigation.goBack(), [navigation]);
 
   return (
     <ScreenContainer>
@@ -79,17 +81,7 @@ const AboutUs: FC = () => {
         backgroundColor={scheme.bg}
       />
 
-      <TopBar>
-        <IconButton
-          onPress={() => navigation.goBack()}
-          accessibilityLabel="Go back">
-          <Back size={ICON_SIZE_LG} color={scheme.textPrimary} />
-        </IconButton>
-        <AppText fontSize={FONT_SIZE_MD} bold color={scheme.textPrimary}>
-          About Us
-        </AppText>
-        <View style={styles.headerSpacer} />
-      </TopBar>
+      <ScreenHeader title="About" onBack={goBack} />
 
       <ScrollView
         style={styles.scroll}
@@ -99,78 +91,52 @@ const AboutUs: FC = () => {
           entering={FadeInDown.duration(duration.base).springify().damping(18)}>
           <HeroGradientCard>
             <HeroTopRow>
-              <HeroLiveBadge>
-                <OverlineLabel color={scheme.heroOnGradient}>
-                  ABOUT
-                </OverlineLabel>
-              </HeroLiveBadge>
+              <OverlineLabel color={scheme.heroOnGradient}>About</OverlineLabel>
               <GlassChip>
-                <AppText
-                  fontSize={FONT_SIZE_XXS}
-                  bold
-                  color={scheme.heroOnGradient}>
-                  v1.0.0
+                <AppText variant="caption" semi_bold tone="onHero">
+                  {APP_VERSION_LABEL}
                 </AppText>
               </GlassChip>
             </HeroTopRow>
 
             <View style={styles.heroBody}>
+              {/* White-ink vector mark straight on the glass well: the
+                  bundled logo.png is light-background artwork and
+                  disappears on the dark gradient. */}
               <View style={styles.logoWell}>
-                <Image
-                  source={Logo}
-                  style={styles.logo}
-                  resizeMode="contain"
-                />
+                <PESLogo width={LOGO_W} height={LOGO_H} tone="dark" />
               </View>
-              <AppText
-                fontSize={FONT_SIZE_XXL}
-                bold
-                color={scheme.heroOnGradient}
-                style={styles.heroTitle}>
-                Pragmatic Engineering Solutions
+              <AppText variant="h2" tone="onHero" accessibilityRole="header">
+                {COMPANY_NAME}
               </AppText>
-              <AppText
-                fontSize={FONT_SIZE_XS}
-                color={scheme.heroOnGradientMuted}
-                lineHeight={18}>
+              <AppText variant="bodySm" tone="onHeroMuted">
                 Intelligent energy management for solar, wind, storage & grid.
               </AppText>
-            </View>
-
-            <View style={styles.chipRow}>
-              {SOURCE_CHIPS.map(chip => (
-                <GlassChip key={chip}>
-                  <AppText
-                    fontSize={FONT_SIZE_XXS}
-                    medium
-                    color={scheme.heroOnGradient}>
-                    {chip}
-                  </AppText>
-                </GlassChip>
-              ))}
             </View>
           </HeroGradientCard>
         </Animated.View>
 
-        {sections.map(({ Icon, color, title, body }, i) => (
+        {SECTIONS.map(({ Icon, title, body }, i) => (
           <Animated.View key={title} entering={enter(i)}>
-            <Surface elevation="md" radius="xl" padding={space.lg} bordered>
+            <Surface elevation="sm" radius="xl" padding={space.lg} bordered>
               <View style={styles.cardRow}>
-                <IconWell color={color} size={44} radius={14}>
-                  <Icon size={ICON_SIZE_MD} color={color} />
-                </IconWell>
+                <View style={themed.iconWell}>
+                  <Icon size={ICON_SIZE_MD} color={scheme.brandText} />
+                </View>
                 <AppText
-                  fontSize={FONT_SIZE_SM}
-                  bold
-                  color={scheme.textPrimary}
+                  variant="bodyLg"
+                  semi_bold
+                  accessibilityRole="header"
+                  maxFontSizeMultiplier={LONG_FORM_MAX_SCALE}
                   style={styles.cardTitle}>
                   {title}
                 </AppText>
               </View>
               <AppText
-                fontSize={FONT_SIZE_XS}
-                color={scheme.textSecondary}
-                lineHeight={20}
+                variant="body"
+                tone="secondary"
+                lineHeight={22}
+                maxFontSizeMultiplier={LONG_FORM_MAX_SCALE}
                 style={styles.cardBody}>
                 {body}
               </AppText>
@@ -178,12 +144,9 @@ const AboutUs: FC = () => {
           </Animated.View>
         ))}
 
-        <Animated.View entering={enter(sections.length)}>
-          <AppText
-            center
-            fontSize={FONT_SIZE_XXS}
-            color={scheme.textTertiary}>
-            Pragmatic Engineering Solution · All rights reserved
+        <Animated.View entering={enter(SECTIONS.length)}>
+          <AppText center variant="caption" tone="tertiary">
+            {COPYRIGHT}
           </AppText>
         </Animated.View>
       </ScrollView>
@@ -192,39 +155,46 @@ const AboutUs: FC = () => {
 };
 
 const styles = StyleSheet.create({
-  headerSpacer: { width: 36, height: 36 },
   scroll: { flex: 1 },
-  scrollContent: { padding: space.lg, gap: space.lg },
+  scrollContent: {
+    padding: space.lg,
+    paddingBottom: space['3xl'],
+    gap: space.lg,
+  },
   heroBody: {
     marginTop: space.lg,
-    gap: 8,
+    gap: space.sm,
   },
   logoWell: {
     width: 64,
     height: 64,
     borderRadius: 18,
-    backgroundColor: glass.strong,
+    backgroundColor: glass.medium,
     borderWidth: 1,
     borderColor: glass.borderSubtle,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
-  },
-  logo: { width: 42, height: 30 },
-  heroTitle: { marginTop: 2 },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: space.lg,
+    marginBottom: space.xs,
   },
   cardRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: space.md,
   },
   cardTitle: { flex: 1 },
-  cardBody: { marginTop: 12 },
+  cardBody: { marginTop: space.md },
 });
+
+const createStyles = (scheme: Scheme) =>
+  StyleSheet.create({
+    iconWell: {
+      width: 44,
+      height: 44,
+      borderRadius: radius.md,
+      backgroundColor: scheme.brandSoft,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+  });
 
 export default AboutUs;

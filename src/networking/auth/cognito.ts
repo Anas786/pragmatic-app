@@ -338,27 +338,64 @@ const mapNextStep = (
   };
 };
 
-/** Friendly error mapper for UI alerts. */
+/** Shown when nothing more specific is known about a sign-in failure. */
+export const SIGN_IN_FALLBACK_MESSAGE =
+  "We couldn't sign you in. Try again, or contact support if it keeps happening.";
+
+const TOO_MANY_ATTEMPTS =
+  'Too many attempts. Wait a few minutes, then try again.';
+
+/**
+ * Plain-language copy for a sign-in / set-password failure, shown in the
+ * Login screen's inline banner. Never shows a raw error name, message or
+ * status to the user: unknown failures get SIGN_IN_FALLBACK_MESSAGE, and the
+ * raw detail is appended only in dev builds (it is always logged by the
+ * caller via display()).
+ */
 export const cognitoErrorMessage = (err: unknown): string => {
-  if (err instanceof AuthError) {
-    switch (err.name) {
-      case 'NotAuthorizedException':
-        return 'Incorrect email or password.';
-      case 'UserNotFoundException':
-        return 'No account found for this email.';
-      case 'UserNotConfirmedException':
-        return 'Please confirm your account before signing in.';
-      case 'PasswordResetRequiredException':
-        return 'You must reset your password before signing in.';
-      case 'NetworkError':
-        return 'Network error. Check your connection and try again.';
-    }
-    const cause = (err as any).underlyingError ?? (err as any).cause;
-    const causeMsg =
-      cause instanceof Error ? `${cause.name}: ${cause.message}` : '';
-    return [err.name, err.message, causeMsg].filter(Boolean).join(' — ');
+  const name =
+    typeof (err as { name?: unknown } | null | undefined)?.name === 'string'
+      ? (err as { name: string }).name
+      : '';
+  const message =
+    typeof (err as { message?: unknown } | null | undefined)?.message ===
+    'string'
+      ? (err as { message: string }).message
+      : '';
+
+  switch (name) {
+    case 'NotAuthorizedException':
+      // Cognito reuses this name for its lockout after repeated failures.
+      return /attempts exceeded/i.test(message)
+        ? TOO_MANY_ATTEMPTS
+        : 'Incorrect email or password.';
+    case 'UserNotFoundException':
+      return 'No account found for this email.';
+    case 'UserNotConfirmedException':
+      return 'Your account is not confirmed yet. Contact support to finish setting it up.';
+    case 'PasswordResetRequiredException':
+      return 'Your password must be reset before you can sign in. Contact support for help.';
+    case 'InvalidPasswordException':
+      return "That password doesn't meet the requirements. Check the list and try again.";
+    case 'LimitExceededException':
+    case 'TooManyRequestsException':
+    case 'TooManyFailedAttemptsException':
+      return TOO_MANY_ATTEMPTS;
+    case 'EmptySignInUsername':
+    case 'EmptySignInPassword':
+      return 'Enter your email and password.';
+    case 'NetworkError':
+      return "You're offline. Check your internet connection, then try again.";
   }
-  if (err instanceof Error) return `${err.name}: ${err.message}`;
-  if (typeof err === 'string') return err;
-  return 'Unable to sign in.';
+
+  if (!__DEV__) return SIGN_IN_FALLBACK_MESSAGE;
+  const cause =
+    (err as { underlyingError?: unknown; cause?: unknown } | null)
+      ?.underlyingError ?? (err as { cause?: unknown } | null)?.cause;
+  const causeMsg =
+    cause instanceof Error ? `${cause.name}: ${cause.message}` : '';
+  const detail = [name, message, causeMsg].filter(Boolean).join(' — ');
+  return detail
+    ? `${SIGN_IN_FALLBACK_MESSAGE} (${detail})`
+    : SIGN_IN_FALLBACK_MESSAGE;
 };

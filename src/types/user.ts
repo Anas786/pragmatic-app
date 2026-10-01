@@ -5,7 +5,13 @@ export interface IUser {
   phone?: string;
   company_id?: string | number;
   company?: string;
-  login_date: Date;
+  /**
+   * When the user actually signed in — the ID token's `auth_time`, NOT the
+   * moment this record was built (a cold-start session restore must not
+   * look like a fresh sign-in). Undefined when the claim is absent; the
+   * Profile screen then hides its "Signed in" row.
+   */
+  login_date?: Date;
   image?: string;
 
   // Cognito-specific
