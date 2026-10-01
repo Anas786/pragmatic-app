@@ -381,6 +381,46 @@ SiteDetail subscribes via `useSiteData(siteId)`, `useSiteConfig(siteId)`,
 `useReportMapping()` — these are typically synchronous reads from cache because
 of step 3.
 
+### Refresh = really fresh — `src/networking/freshFetch.ts`
+
+The API marks responses cacheable: `/protected/data/all` and
+`/protected/config/site` `max-age=600, s-maxage=900`, `/protected/data/v2/trends`
+`max-age=600, s-maxage=1800`, `/private/user/site-list` `max-age=60`
+(report: `max-age=0`). RN's device HTTP caches honour that (Android OkHttp
+has a 10 MB cache; iOS NSURLCache stores small responses) and CloudFront
+serves a shared copy, so a pull-to-refresh used to return the same data and
+the same "x min ago" for up to 10–15 min.
+
+- Every protected GET sends `Cache-Control: no-cache` + `Pragma: no-cache`
+  (request interceptor) — React Query is the app's cache, never the device.
+- **User refreshes** (pull-to-refresh, any refresh icon, Retry — never
+  mount / focus / resume / stale-time) run inside `runUserRefresh(fn)`;
+  while one is in flight, protected GETs carry a unique `_r=<ms>` param →
+  CDN miss → origin. Verified 2026-10-01: every protected endpoint ignores
+  unknown params, and `_r` IS in the CDN cache key (a new value always went
+  to origin, a repeated one was served from cache). Automatic fetches keep
+  the CDN. `/public/*` untouched. A user refresh must START its requests
+  (`cancelRefetch: true`) — joining an in-flight automatic fetch would hand
+  back the CDN copy. Offline it opens no window (the fetch pauses until
+  reconnect; the reconnect burst must keep the CDN) and joins the paused
+  fetch instead.
+- When a user refresh settles, the shared `useNow` clock ticks at once, so
+  every "x min ago" re-derives immediately.
+- **SiteDetail**: header button / pull / Retry share `startRefresh`, provided
+  to the tabs as `SiteRefreshContext` (`useSiteRefresh(refetch)` in
+  `SiteDetail/siteRefresh.ts`) — a tab's own refresh icon refetches
+  `/data/all` (the header stamp) + every mounted tab query. Dashboard pull
+  and its error Retry wrap `useSiteList().refresh` in `runUserRefresh`;
+  `refresh` itself stays CDN-neutral because the automatic foreground-resume
+  refresh (list > 5 min old) calls it too.
+- If the age doesn't drop after a refresh, the SITE hasn't synced: origin's
+  `live.metadata.last_update` is the truth (Lucky Cement sat at 20:04 for
+  25+ min on 2026-10-01 even with a cache-busting request).
+- `pullToRefreshGate.ts` is now wired: a child that owns vertical drags (the
+  unlocked SLD viewport) disables pull (`RefreshControl enabled`, Android;
+  ScrollView `bounces`, iOS — never drop the RefreshControl, on Android it
+  wraps the ScrollView and removing it remounts the body).
+
 ### React Query cache keys
 
 | Hook | Key |
@@ -513,13 +553,30 @@ compact-K via `formatCompact` for hero / chip contexts.
     (`dataUpdatedAt`), "30 Sep, 14:05" after 24 h — never a bare clock time;
     a reading older than `FRESH_LIVE_MS` is marked stale. Only the header
     status line ticks (`useNow`); the PulseDot pulses only while live.
-  - Monochrome `Pill` category filters with counts (energy palette is for
-    sources only); search spans ALL categories; one Sort control cycles 5
-    orders; impossible readings (≥1e15) render in e-notation.
+  - `Pill` category filters with counts, each with its category glyph;
+    search spans ALL categories; one Sort control cycles 5 orders;
+    impossible readings (≥1e15) render in e-notation.
 - Auto-categorises parameters by name keyword: `power` / `voltage` / `current` /
   `energy` / `temperature` / `frequency` / `other`.
-- **2-col bento grid**: name (2 lines) + value + unit + time on a flat surface
-  (the old gradient sweep and per-tile category pill are gone).
+- **2-col bento grid, v7 colour + icon tiles** (user feedback: the flat v6
+  tiles looked "old, not eye catching"): icon well + time on top, name
+  (2 lines), value + unit at the bottom.
+  - **Icon = measurement category** (`LIVE_CATEGORY_ICON`, MaterialIcons:
+    energy `electric-meter`, power `bolt`, voltage `electrical-services`,
+    current `cable`, temperature `device-thermostat`, frequency `graphic-eq`,
+    other `sensors`) — the same glyph leads the category pill.
+  - **Colour = the ENERGY SOURCE the parameter's name names**
+    (`liveSourceFromName` = the SLD grouping's tag rules: "DG 1 …" → genset
+    orange, "PV …" → solar lime, "WTG …"/"Wind …" → wind cyan, "Grid …" →
+    grid blue, "BESS …" → battery purple): a `LinearGradient` diagonal sweep
+    (`fill+'24'` → transparent) + the `IconWell` in that colour
+    (`energyInk` glyph). No source (load, bus, WHR …) → a flat, neutral
+    tile whose icon well alone is brand-tinted (`brandText` glyph) — a full
+    brand sweep read as solar / "OK" (§22.2). Categories never get colours.
+    One per-theme accent table (WeakMap on the scheme singleton), so tiles
+    allocate nothing per render. A missing reading is neutral throughout.
+  - The time row stays full-width under the value — a stale reading's date
+    ("30 Sep, 02:05 PM") must never be cut off.
 - **Skeleton** placeholders on initial load.
 - **Deferred render** via `InteractionManager.runAfterInteractions` — the tile
   grid only mounts after the tab transition finishes (the legacy "all params
@@ -555,15 +612,33 @@ compact-K via `formatCompact` for hero / chip contexts.
   `value`/`focused` state internally + debounces internally, only emitting the
   **debounced** value upward via `onDebouncedChange`. This prevents Dashboard
   re-renders during typing.
-- **SiteCard v3 (Oct 2026)** is driven by the pure `buildSiteCardModel(site)`
-  (`Dashboard/siteCardModel.ts`): `SiteLogo` + name + `FreshnessStatus`
-  (backend `state` + age, the same wording as every other screen) + capacity,
-  a `PowerMixBar` when the cards are additive, and up to 4 metric chips
-  (+N toggle, exposed as an accessibility action). Each figure is the
-  backend site-list card **verbatim** (`siteComponents.sitelist` → processed
-  `ed_solar/ed_grid/ed_genset/ed_wind`) — never summed or derived. The old
-  hero sparkline was ONE hard-coded curve drawn on every site and is
-  deleted; no pulsing LIVE on list cards.
+- **SiteCard — the v2 look, restored (Oct 2026; user preference over the
+  compact v3 card, see memory `feedback_card_visual_style`)**, driven by the
+  pure `buildSiteCardModel(site)` (`Dashboard/siteCardModel.ts`):
+  - Round 52pt avatar with a status ring (brand only while live), name, a
+    status row (dot + text from `siteStatus()` in `utils/freshness.ts` —
+    "Live · 3 min ago", "Delayed · 39 min ago", "Offline · last data 28 Sep"),
+    gold "Controller" pill for controller sites.
+  - **Hero tile** = the card's largest metric (compared in base units, so
+    2 MWh beats 500 kWh), tinted with its source colour (`heroTint`: light
+    starts at `20`, dark `2E` — AA for `energyInk` on every stop, checked in
+    `tokenContrast.test.ts`), static dot + overline + big value + unit. The
+    right side is deliberately EMPTY — the old hero sparkline was one
+    hard-coded curve drawn on every site and is deleted.
+  - Up to 3 satellite `MetricChip`s ("● SOLAR 76.4 MWh"), then the
+    full-width "Show all N" / "Show less" toggle (also an accessibility
+    action). A chip's period, when the card mixes periods, is its own
+    `caption` line — never appended to the 1-line label.
+  - Honesty rules kept from v3: values are the backend site-list cards
+    **verbatim** (`siteComponents.sitelist` → processed `ed_*`), compact via
+    `formatQuantity` ("3.21 MWh", never "3.2K kWh"), missing/NA → muted "—";
+    never summed or derived; no PulseDot and never "LIVE" on list cards; a
+    period only when the backend NAME states one (`periodFromName`). Plain
+    source names become the uppercase source word ("SOLAR · TODAY"); other
+    backend names keep their own case ("Grid Import Today").
+  - Perf: `React.memo` with the site/index comparator, entrance animation
+    frozen at first mount (`ANIM_LIMIT`), only the status row rides the
+    `useNow` ticker. Tests: `__tests__/siteCardModel.test.ts`.
 - ⚠️ Backend inconsistency (not an app bug): the site-list "Energy Today"
   cards (processed `ed_*`) differ from the site's own Cards-tab "Energy
   Today" (live counters `p2`, `p10391`) — e.g. Lucky Cement solar 63K vs
