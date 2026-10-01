@@ -175,6 +175,7 @@ Pulled out as part of the refactor. **Use these instead of hand-rolling.**
 | `GlassChip` | Translucent white pill for hero contexts (count chips, period chips, param pills). Uses `glass.medium` bg + `glass.borderSubtle` border |
 | `PowerMixBar` | Segmented horizontal flex bar visualising a source/severity mix. Props: `segments` (`[{key, color, weight}, ...]`), `height`, `radius`, `trackColor`, `minWeight`, `gap` |
 | `HeroGradientCard` | The premium 3-layer gradient hero (shadow / clip / content). Props: `variant` (`'brand'` \| `'danger'`), `hideSheen`, `padding`. Used on every redesigned tab's top card |
+| *(v4)* | `ScreenHeader`, `Pill`/`PillGroup`, `FreshnessStatus`, `HeroStatusBadge`, `SiteLogo`, `Avatar`, `IconButton`, `EmptyStateCard` kind — see **§22.2** |
 | `PESLogo` | The PES brand mark as vector art (`width`, `height`, `tone: 'auto'\|'light'\|'dark'`). **Theme-aware ink** from the `brandMark` token: white on dark, `#092819` on light. Use it wherever the logo sits directly on the themed background — the bundled `logo.png` is light-background artwork and vanishes in dark mode (Login uses PESLogo; Dashboard/AboutUs keep the PNG on their white/glass tiles). Same glyph paths as the splash (`PESLogo/glyphs.ts`) |
 
 ### 4.4 Shared helpers — `src/utils/sources.ts`
@@ -191,6 +192,8 @@ Re-exported from `src/utils` so you can `import { formatCompact } from 'src/util
 ### 4.5 Haptics — `src/utils/haptics.ts`
 
 `haptics.tap()` / `select()` / `success()` / `warning()` / `error()`.
+
+**v4: `PressableScale` haptics default OFF** — see §22.2.
 
 Currently a no-op on iOS + Vibration fallback on Android. To upgrade to true
 Taptic Engine: `yarn add react-native-haptic-feedback` + `cd ios && pod install`,
@@ -269,8 +272,8 @@ src/
 │           │       ├── DateFilterHeader.tsx      ← v2: section-overline pattern, NOT a bar
 │           │       ├── DateRangePickerModal.tsx  (Custom range, max 1 month — still uses @react-native-community/datetimepicker)
 │           │       ├── MonthYearPickerModal.tsx  (Month / Year picker)
-│           │       ├── PerformanceReportCard.tsx ← HeroGradientCard + donut + source list + stacked bar
-│           │       ├── InverterTableCard.tsx     ← HeroGradientCard (fleet aggregates) + filter pills + animated bars
+│           │       ├── PerformanceReportCard.tsx ← period hero + Sources card + stacked bar (v4, §8)
+│           │       ├── InverterTableCard.tsx     ← fleet hero + compact InverterRows (v4, §8)
 │           │       ├── TrendAnalysisCard.tsx     (line chart, gifted-charts)
 │           │       ├── SLDDiagram.tsx
 │           │       ├── GradientRangeBar.tsx      ← v2: Surface elevation, semantic gradient
@@ -417,36 +420,34 @@ Each card holds its own `startDate`, `endDate`, `selectedMonth: MonthSelection`,
 `selectedYear: number`, `activeFilter: InverterFilterOption` state. They feed
 `buildReportFilter(...)` which produces the discriminated `ReportFilter`.
 
-### Performance Report (Reports tab) — v3
+### Performance Report (Reports tab) — v4 (Oct 2026)
 
-**Layout flow (control → snapshot → detail):**
-1. `DateFilterHeader` (`title="Energy Mix"`)
-2. Filter pills
-3. **HeroGradientCard** — `●LIVE · ENERGY` + `Σ N` GlassChip + `TOTAL GENERATED`
-   big number + `POWER MIX` overline + `PowerMixBar` segmented bar
-4. **Surface (`DISTRIBUTION`)** — donut chart with center label showing the
-   selected source's short name + percentage + compact value
-5. **Source cards** — interactive `PressableScale` rows, brand-soft tint when
-   active, percentage badge on the right
-6. **Surface (`ENERGY OVER TIME`)** — stacked bar chart with zoom controls
-   (`PressableScale` brand-soft fill) + compact legend
+**Layout flow:** `DateFilterHeader` "Energy mix" → `PillGroup` (Custom /
+Month / Year / Lifetime) → **period hero** (`HeroStatusBadge mode='period'` —
+never LIVE/pulsing, this is historical data; "N sources"; **TOTAL ENERGY**
+— not "generated": the mix includes grid import; "Updated hh:mm"; POWER MIX
+"Mostly X · %") → **Sources** card (one ≥48pt row per source, share %) →
+one **Energy over time** stacked-bar WebView. The DISTRIBUTION donut and its
+slice-select code are **removed** (one view per fact). Every returned bucket
+is kept, zero-production days included (`formatNoProductionCaption`), so
+outages are never hidden. Previous period's data stays visible while a new
+period loads (`placeholderData`, same site only). The selected period is
+persisted per site + card (`useReportPeriodStore`). Labels: "1 Sep – 1 Oct
+2026", "September 2026", "Lifetime"; axis "1 Sep" / "1" / "Sep".
+Backend note: daily buckets are cut on **UTC** days, so a PKT range returns
+one extra leading bucket (e.g. 32 bars for 31 days) — both web and app.
 
-**Chart styling note**: bar chart uses `chartAxisLabel` style (Poppins-Medium
-10pt textSecondary) + dashed `scheme.border` gridlines.
+### Inverter Table (Tables tab) — v4 (Oct 2026)
 
-### Inverter Table (Tables tab) — v3
-
-**Layout flow:**
-1. `DateFilterHeader` (`title="Inverter Fleet"`)
-2. Filter pills (above the hero, matches Tables UX)
-3. **HeroGradientCard** — `●LIVE · FLEET` + count + `FLEET AVERAGE PR` (with
-   status pill `EXCELLENT`/`GOOD`/`FAIR`/`POOR`) + divider + best/worst/total rows
-4. **Inverter cards** — each row has:
-   - Color-coded inverter badge (cycles through `energyPalette` by inverter num)
-   - `EXCELLENT/GOOD/FAIR/POOR` status pill (PR thresholds 90/80/70)
-   - Production + Yield metric tiles
-   - Two **animated horizontal progress bars** (Reanimated `withTiming`) for PR + Uptime
-   - First `ANIM_LIMIT=10` get FadeInDown stagger entrance; rest plain View
+`DateFilterHeader` "Inverter fleet" → PillGroup → fleet hero (period badge,
+FLEET AVERAGE PR + status, best / worst / total; an "Offline / 0% PR"
+row when any inverter is 0) → **compact `InverterRow`s** (64–72pt, hairline
+separators, neutral number badge — the energy palette is reserved for
+sources) with PR + uptime mini-bars and sort (worst first / number /
+energy). PR/uptime are `number | null`: a missing value shows "—" and is
+never coerced to 0 (a dead inverter must be able to be WORST). PR status
+bands stay 90/80/70 (`PR_STATUS_THRESHOLDS`); the web colours its PR bars at
+40/62/82 — product decision pending.
 
 ---
 
@@ -499,12 +500,26 @@ compact-K via `formatCompact` for hero / chip contexts.
 
 ## 11. Live Parameters tab
 
+- **v6 (Oct 2026), logic in `src/utils/liveParams.ts`** (direct import):
+  - **Names resolve like the web**: the site's own `siteConfig.globalParams.live`
+    name first (p1000005 → "Captive Plant kW"), then
+    `/public/config/params-mapping` (which only says "Custom Parameter 5"),
+    then the raw code — `resolveLiveParamName` / `buildSiteParamNames`. The
+    Trend legends use the same order (`selectTrends`).
+  - **Units** come from `buildParamUnitIndex` (card configs → SLD keys → trend
+    config → a trailing "(unit)" in the name; trend `payload.unit` is a time
+    granularity, never a unit). Unknown units render nothing — never guessed.
+  - **Honest ages**: per-tile time is relative and anchored to the fetch
+    (`dataUpdatedAt`), "30 Sep, 14:05" after 24 h — never a bare clock time;
+    a reading older than `FRESH_LIVE_MS` is marked stale. Only the header
+    status line ticks (`useNow`); the PulseDot pulses only while live.
+  - Monochrome `Pill` category filters with counts (energy palette is for
+    sources only); search spans ALL categories; one Sort control cycles 5
+    orders; impossible readings (≥1e15) render in e-notation.
 - Auto-categorises parameters by name keyword: `power` / `voltage` / `current` /
   `energy` / `temperature` / `frequency` / `other`.
-- **Filter pills** with per-category counts, hide categories with 0 items.
-- **2-col bento grid** of tiles, each with category-tinted gradient sweep + pill
-  badge + name + big value + relative time.
-- **Pulsing LIVE indicator** in the header (shared `PulseDot`).
+- **2-col bento grid**: name (2 lines) + value + unit + time on a flat surface
+  (the old gradient sweep and per-tile category pill are gone).
 - **Skeleton** placeholders on initial load.
 - **Deferred render** via `InteractionManager.runAfterInteractions` — the tile
   grid only mounts after the tab transition finishes (the legacy "all params
@@ -527,8 +542,10 @@ compact-K via `formatCompact` for hero / chip contexts.
   bare-array also supported via `normalizeSiteListResponse`.
 - Server-side search: `?q=<string>` (case-insensitive substring match against name).
   Length 1–128 enforced client-side.
-- Search input has a **350 ms debounce** AND a **4-character minimum** before
-  triggering. Below 4 chars, hook reverts to unfiltered list.
+- Search input has a **350 ms debounce** AND a **2-character minimum** (was 4
+  — site names are often short acronyms like "CCI"); the keyboard Search key
+  searches immediately from 1 character; 1 character shows "Keep typing to
+  search".
 - Pagination active during search too.
 - Dashboard FlatList virtualised (`initialNumToRender=6`, `windowSize=7`).
 - **Search bar is pinned outside the FlatList** (between the top bar and the
@@ -538,21 +555,33 @@ compact-K via `formatCompact` for hero / chip contexts.
   `value`/`focused` state internally + debounces internally, only emitting the
   **debounced** value upward via `onDebouncedChange`. This prevents Dashboard
   re-renders during typing.
-- **SiteCard** has: avatar with brand-emerald ring + `PRO` badge for controllers
-  + status row (live `state` + `formatRelativeTime(dataLastUpdate)`) + a
-  **`PowerMixBar`** with total + 3 `MetricChip`s with mini % bars. Expand toggle
-  for >3 sources.
-
-The mock `86.56%` efficiency row was dropped — real data drives the status row.
+- **SiteCard v3 (Oct 2026)** is driven by the pure `buildSiteCardModel(site)`
+  (`Dashboard/siteCardModel.ts`): `SiteLogo` + name + `FreshnessStatus`
+  (backend `state` + age, the same wording as every other screen) + capacity,
+  a `PowerMixBar` when the cards are additive, and up to 4 metric chips
+  (+N toggle, exposed as an accessibility action). Each figure is the
+  backend site-list card **verbatim** (`siteComponents.sitelist` → processed
+  `ed_solar/ed_grid/ed_genset/ed_wind`) — never summed or derived. The old
+  hero sparkline was ONE hard-coded curve drawn on every site and is
+  deleted; no pulsing LIVE on list cards.
+- ⚠️ Backend inconsistency (not an app bug): the site-list "Energy Today"
+  cards (processed `ed_*`) differ from the site's own Cards-tab "Energy
+  Today" (live counters `p2`, `p10391`) — e.g. Lucky Cement solar 63K vs
+  132K kWh on 2026-10-01.
 
 ---
 
 ## 13. Theme
 
-`useThemeStore` (Zustand, persisted) toggles `isDark`. **New code reads from
-`useScheme()`** (see §4.2). Legacy screens still use `useThemeStore().colors`
-which is auto-derived from the scheme tokens — they pick up the v2 palette
-automatically.
+`useThemeStore` (Zustand, persisted) holds a **preference** — `'system' |
+'light' | 'dark'` (default `'dark'`: dark-first brand + dark-locked splash;
+old persisted `isDark` migrates) — and the derived `isDark`. `'system'`
+follows OS Appearance live (events are ignored while backgrounded and
+re-read on resume). The appearance control lives in the drawer
+(Preferences) with a shortcut in the Dashboard header; the SiteDetail header
+has no theme toggle. **New code reads from `useScheme()`** (see §4.2).
+Legacy screens still use `useThemeStore().colors`, auto-derived from the
+scheme tokens.
 
 ---
 
@@ -991,8 +1020,106 @@ Android 15 emulator, no crashes):
   collect every `"Lcom/…;"` descriptor in the libs' `.h`/`.cpp` and check it
   isn't renamed in `app/build/outputs/mapping/release/mapping.txt`.
 
+- **`MainActivity.onCreate` calls `super.onCreate(null)`** (2026-10-01,
+  react-native-screens requirement). Without it any activity recreation —
+  a config change missing from `configChanges` such as the system font
+  size, "Don't keep activities", or process restore — crashed on launch with
+  "Unable to instantiate fragment com.swmansion.rnscreens…". Keep it when
+  re-syncing MainActivity with the RN template (the template omits it).
+
 **Keep `android/` in step with the installed `react-native` version** when
 upgrading — compare against `@react-native-community/template@<rn-version>`.
 Emulator builds: `./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a`
 with JDK 17 (full 4-ABI Release builds take 30+ min).
 
+
+---
+
+## 22. UI/UX v4 pass (Oct 2026) — rules every screen follows
+
+A multi-agent audit (90 findings) → 9 work packages (foundation + 8 screens),
+each independently reviewed. Screenshots of the before-state and the plan
+live outside the repo; this section is the durable summary.
+
+### 22.1 Web parity (test site: Lucky Cement Nooriabad, `146c5345-8f7f-40e9-9e32-b065e085235d`)
+
+- **Values never change, only presentation.** Summary, Cards, Reports and
+  Tables values were cross-checked against the web portal AND both API hosts
+  (web: `da2xkphekuara…/v1`, app: `d28614wxzuokob…`) — identical schemas and
+  values (the web host's live snapshot runs ~40 min staler). Tests pin the
+  Lucky Cement figures. Never change which field a number comes from or how
+  it is computed without checking the web.
+- **Freshness = the web's rule**: `src/utils/freshness.ts` is the ONLY
+  source — live ≤ 30 min, delayed ≤ 60 min, stale beyond (web: online / warning
+  / offline), offline when backend `state` says so. The site timestamp is
+  `/data/all live.metadata.last_update` first (what the web header uses),
+  then the newest live `update_at`, then the Dashboard's `dataLastUpdate`
+  (`siteDetailModel.headerLastUpdate`, `cards.siteLiveLastUpdate`).
+- **LIVE / PulseDot only for current values that are live** (Summary hero,
+  Live tab header). Never on list cards, Cards-tab header, Reports or Tables
+  (historical periods use `HeroStatusBadge mode='period'`).
+- **Units**: the lifetime yield `p24` is kWh on the wire; the app shows it
+  /1000 as **MWh** (web + old app said "mWh" — a casing typo).
+  `formatQuantity(v, unit, { mode, decimals, rescale })` formats everything;
+  `rescale:false` keeps the backend unit. Missing / NA / null → muted "—".
+- **Parameter names**: site `globalParams.live` → params-mapping → raw code
+  (Live + Trend).
+- **Known backend data issues** (do not "fix" in the app): coal offset is
+  kWh/2.086 = kg labelled "Tons" (1000× too high, web shows the same);
+  trees implausible; site-list `ed_*` vs live "today" counters disagree;
+  trend daily aggregation of `p10391` returns ~-1.3e34 and "Genset Energy"
+  is a lifetime counter; config maps PV-SG-CI-01 and -03 to the same param.
+
+### 22.2 Foundation (tokens + primitives + utils)
+
+- **Tokens**: new roles `textDisabled`, `brandText`, `borderStrong`, `scrim`,
+  `logoPlate`, `energyInk.<source>`, `statusInk.*`, `statusSoft.*`;
+  `textOnBrand` is dark ink in BOTH themes (white on emerald failed AA);
+  `touch.min` = 44 (iOS) / 48 (Android); micro type = 11pt; `LIGHT_SCHEME` /
+  `DARK_SCHEME` exported. `__tests__/tokenContrast.test.ts` computes WCAG
+  ratios for every declared pair — keep it green when touching colours.
+- **Energy palette = energy sources only** (dots, bars, series, tints).
+  Inverter badges, Live categories, PR status, load/other tiles are neutral
+  or semantic.
+- **New primitives** (`src/components/common`): `ScreenHeader` (stack
+  screens), `Pill` / `PillGroup` (radio semantics, select haptic on change),
+  `FreshnessStatus` (self-ticking via `useNow`, never pulses),
+  `HeroStatusBadge` (`live` | `period`), `SiteLogo`, `Avatar` (brand style,
+  never cyan); `IconButton` variant/size with a real ≥ touch.min box;
+  `EmptyStateCard` kind/size; `ErrorBoundary` resetKey + release-safe
+  fallback; `PulseDot active`; `TopBar` is a non-accessible container (it
+  used to swallow VoiceOver focus of the header buttons).
+- **AppText**: `variant` / `tone` / `fixedSize`; font scaling ON (cap 1.3×,
+  11pt floor; long-form body 1.6×); `normalizeFont` no longer subtracts 2 on
+  Android (`normalizeFontLegacy` only for `fixedSize`). Fixed-geometry
+  canvases (SLD node cards, splash caption) pass `fixedSize`.
+- **Utils**: `units.ts`, `freshness.ts`, `a11y.ts`, `errors.ts`
+  (`friendlyError` — raw messages only go to `display()`), `dates.ts`
+  (`formatDateRange` "1 Sep – 1 Oct 2026", never DD/MM/YY),
+  `constants/company.ts`, `APP_VERSION` in `constants/app.ts`.
+- **Haptics default OFF** on `PressableScale`; `select` only on selection
+  changes, success/error only from outcomes.
+
+### 22.3 Screens
+
+- **Shell**: drawer respects the safe area (it was drawn under the Dynamic
+  Island), brand Avatar, no fake "User"/"user@email.com"/"Company"
+  placeholders, "Signed in" uses the ID token's `auth_time` (it used to be
+  app-open time), "Sign in"/"Sign out" copy everywhere, Profile/About/
+  Contact/Terms on `ScreenHeader` inside the Dashboard stack.
+- **SiteDetail**: tab strip pinned outside the body ScrollView
+  (`TabStripSkeleton` holds its slot while loading); pull-to-refresh
+  refetches the site's queries; vertical drags in an unlocked SLD block it
+  (`usePullToRefreshBlock`, `SiteDetail/pullToRefreshGate.ts`); each tab body
+  has its own `ErrorBoundary` (resetKey `${siteId}:${tab}`).
+- **Summary**: hero "TOTAL PLANT YIELD … MWh" + "To date" + "Revenue · to
+  date" (currency from the backend only); impact cards say "Since
+  commissioning"; sites without a diagram get a compact `SLDEmptyState`;
+  fullscreen SLD has a Close button and an error boundary.
+- **Cards**: sections from `cardBucket()` — Power now / Energy today / Energy
+  this month|year|period / Energy lifetime / Other (YTD cards are no longer
+  filed under "Today"); labels wrap to 2 lines in the backend's case;
+  "No data" for missing values.
+- **Trend**: one heading per section (`trendCaption` drops a subHeading that
+  repeats it), a window label like "30 Sep 14:35 – 1 Oct 14:35", legend
+  height measured (`trendChartLayout`), previous data kept while refetching.
