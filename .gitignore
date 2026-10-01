@@ -73,3 +73,10 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# oh-my-claudecode runtime state (sessions, checkpoints, hook cooldowns) —
+# machine-local, created in whatever directory a hook runs in.
+.omc/
+
+# Claude Code machine-local permission settings
+.claude/settings.local.json
