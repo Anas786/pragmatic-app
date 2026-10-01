@@ -38,6 +38,7 @@ import DateFilterHeader from '../DateFilterHeader';
 import DateRangePickerModal from '../DateRangePickerModal';
 import TrendComboChart from './TrendComboChart';
 import { trendChartLayout, trendChartWidth } from './helpers';
+import { useSiteRefresh } from '../../siteRefresh';
 
 // Stable fallback while the query has no data yet — a fresh `[]` per
 // render would defeat TrendComboChart's React.memo bail-out.
@@ -239,9 +240,9 @@ const TrendSection: FC<TrendSectionProps> = ({
   const handleClosePicker = useCallback(() => setShowPicker(false), []);
   const handleOpenFullscreen = useCallback(() => setFullscreen(true), []);
   const handleCloseFullscreen = useCallback(() => setFullscreen(false), []);
-  const handleRefresh = useCallback(() => {
-    refetch();
-  }, [refetch]);
+  // The SiteDetail-wide refresh: every mounted trend section + /data/all
+  // (siteRefresh.ts).
+  const handleRefresh = useSiteRefresh(refetch);
 
   const slotStyle = useMemo(
     () => [styles.stateSlot, { height: layout.cardHeight }],

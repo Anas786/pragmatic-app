@@ -56,6 +56,7 @@ import { numericCardValue } from 'src/utils/sources';
 import { ICON_SIZE_LG, ICON_SIZE_MD } from 'src/utils/theme';
 import { formatQuantity } from 'src/utils/units';
 import { useSiteList, useSwitchActiveSite, useThemeStore } from 'src/hooks';
+import { runUserRefresh } from 'src/networking/freshFetch';
 import { DashboardStackParamList, ISite } from 'src/types';
 import { MoonIcon, SunIcon, UpArrow } from 'src/assets/icons';
 import { SiteCard } from './components/SiteCard';
@@ -252,7 +253,6 @@ const Dashboard: FC = () => {
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
-    refetch,
     refresh,
     error,
     isPaused,
@@ -277,7 +277,13 @@ const Dashboard: FC = () => {
       skipSpinnerRef.current = true;
       return;
     }
-    refresh().finally(() => setRefreshing(false));
+    // A user gesture: the request skips the CDN's shared copy
+    // (freshFetch.ts), so a pull really returns the server's current list.
+    runUserRefresh(refresh).finally(() => setRefreshing(false));
+  }, [refresh]);
+  // The full-screen error card's Retry is a user refresh too.
+  const handleErrorRetry = useCallback(() => {
+    runUserRefresh(refresh).catch(() => undefined);
   }, [refresh]);
 
   useEffect(() => {
@@ -474,7 +480,7 @@ const Dashboard: FC = () => {
           kind={copy.kind === 'offline' ? 'offline' : 'error'}
           title={copy.title}
           message={copy.message}
-          onRetry={() => refetch()}
+          onRetry={handleErrorRetry}
           retryLabel="Retry"
         />
       );
@@ -517,7 +523,7 @@ const Dashboard: FC = () => {
         }
       />
     );
-  }, [isLoading, error, isPaused, debouncedQuery, clearSearch, refetch, openContactUs]);
+  }, [isLoading, error, isPaused, debouncedQuery, clearSearch, handleErrorRetry, openContactUs]);
 
   // Content scrolls under the home indicator; the last card rests above it.
   const listContentStyle = useMemo<ViewStyle[]>(

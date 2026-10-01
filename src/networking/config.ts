@@ -6,6 +6,11 @@ import { queryClient } from 'src/queryClient';
 import { resetToLogin } from 'src/routes/navigationRef';
 import { cognitoSignOut, onSessionEnded } from './auth/cognito';
 import { getValidAccessToken } from './auth/session';
+import {
+  FRESH_PARAM,
+  isUserRefreshActive,
+  NO_DEVICE_CACHE_HEADERS,
+} from './freshFetch';
 
 export const appAxios = axios.create({
   baseURL: BASE_URL,
@@ -141,6 +146,16 @@ appAxios.interceptors.request.use(
     }
 
     config.headers.Authorization = `Bearer ${accessToken}`;
+
+    // Freshness (see freshFetch.ts): React Query is the app's cache, so the
+    // device HTTP cache must never answer a protected GET from its own copy;
+    // and a refresh the user asked for also skips the CDN's shared copy.
+    if ((config.method ?? 'get').toLowerCase() === 'get') {
+      config.headers.set(NO_DEVICE_CACHE_HEADERS);
+      if (isUserRefreshActive()) {
+        config.params = { ...(config.params ?? {}), [FRESH_PARAM]: Date.now() };
+      }
+    }
     return config;
   },
   (error) => Promise.reject(error),

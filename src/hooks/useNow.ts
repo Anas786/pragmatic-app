@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { AppState, AppStateStatus, NativeEventSubscription } from 'react-native';
+import { onUserRefreshSettled } from 'src/networking/freshFetch';
 
 /**
  * Shared "current time" for relative-age labels ('3 min ago', 'Live').
@@ -9,7 +10,9 @@ import { AppState, AppStateStatus, NativeEventSubscription } from 'react-native'
  * itself without re-rendering its parent), the interval only exists while
  * something is subscribed AND the app is active, and on return to
  * 'active' the time is refreshed immediately — a label never shows a
- * minutes-old age after resume.
+ * minutes-old age after resume. A user refresh (pull / refresh icon) that
+ * settles also ticks at once, so every "x min ago" is re-derived from
+ * the just-fetched data and the real time instead of waiting up to 30 s.
  */
 export const NOW_TICK_MS = 30_000;
 
@@ -22,6 +25,9 @@ const emit = () => {
   now = Date.now();
   listeners.forEach(l => l());
 };
+
+// Module-lifetime subscription (the clock itself is module-global).
+onUserRefreshSettled(emit);
 
 const startTicker = () => {
   if (timer === null) timer = setInterval(emit, NOW_TICK_MS);

@@ -50,6 +50,7 @@ import ReportFilterPill from './PerformanceReport/ReportFilterPill';
 import SourceRow from './PerformanceReport/SourceRow';
 import SectionCard from './PerformanceReport/SectionCard';
 import ChartFullscreenModal from './ChartFullscreenModal';
+import { useSiteRefresh } from '../siteRefresh';
 
 type SiteDetailRouteProp = RouteProp<DashboardStackParamList, 'SiteDetail'>;
 
@@ -213,11 +214,10 @@ const PerformanceReportCard: FC = () => {
     [fullscreen, stack, chartTheme, fullscreenW],
   );
 
-  // Header refresh + error-card retry (never forwards the press event
-  // into refetch's options argument).
-  const handleRefetch = useCallback(() => {
-    refetch();
-  }, [refetch]);
+  // Header refresh + error-card retry: the SiteDetail-wide refresh (this
+  // report + /data/all, caches bypassed — siteRefresh.ts). Never forwards
+  // the press event into refetch's options argument.
+  const handleRefetch = useSiteRefresh(refetch);
   const openFullscreen = useCallback(() => setFullscreen(true), []);
   const closeFullscreen = useCallback(() => setFullscreen(false), []);
   const pillHandlers = useMemo(

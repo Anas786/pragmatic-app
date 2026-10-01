@@ -1,4 +1,4 @@
-import React, { FC, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { FC, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -54,6 +54,7 @@ import {
 } from './InverterTable/helpers';
 import { InverterRow } from './InverterTable/InverterCard';
 import ReportFilterPill from './PerformanceReport/ReportFilterPill';
+import { useSiteRefresh } from '../siteRefresh';
 
 type SiteDetailRouteProp = RouteProp<DashboardStackParamList, 'SiteDetail'>;
 
@@ -158,9 +159,8 @@ const InverterTableCard: FC = () => {
     [rows, revealCount],
   );
 
-  const handleRefresh = useCallback(() => {
-    refetch();
-  }, [refetch]);
+  // The SiteDetail-wide refresh: this table + /data/all (siteRefresh.ts).
+  const handleRefresh = useSiteRefresh(refetch);
   const periodHandlers = useMemo(
     () =>
       Object.fromEntries(inverterFilters.map(f => [f, () => onFilterPress(f)])) as Record<

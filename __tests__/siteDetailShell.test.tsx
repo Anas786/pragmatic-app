@@ -70,9 +70,25 @@ jest.mock('../src/components/screens/Authenticated/SiteDetail/components/TrendVi
 jest.mock('../src/components/screens/Authenticated/SiteDetail/components/ReportsView', () =>
   tabStub('Reports'),
 );
-jest.mock('../src/components/screens/Authenticated/SiteDetail/components/TablesView', () =>
-  tabStub('Tables'),
-);
+// The Tables stand-in exercises the shell's contexts like a real tab: its
+// own refresh icon (useSiteRefresh) and an SLD-style pull block.
+const mockTabBlocksPull = { value: false };
+jest.mock('../src/components/screens/Authenticated/SiteDetail/components/TablesView', () => () => {
+  const RN = jest.requireActual('react-native') as typeof import('react-native');
+  const { usePullToRefreshBlock } = jest.requireActual(
+    '../src/components/screens/Authenticated/SiteDetail/pullToRefreshGate',
+  ) as typeof import('../src/components/screens/Authenticated/SiteDetail/pullToRefreshGate');
+  const { useSiteRefresh } = jest.requireActual(
+    '../src/components/screens/Authenticated/SiteDetail/siteRefresh',
+  ) as typeof import('../src/components/screens/Authenticated/SiteDetail/siteRefresh');
+  usePullToRefreshBlock(mockTabBlocksPull.value);
+  const refresh = useSiteRefresh(() => Promise.resolve());
+  return (
+    <RN.Pressable accessibilityLabel="Tab refresh" onPress={refresh}>
+      <RN.Text>Tables body</RN.Text>
+    </RN.Pressable>
+  );
+});
 
 import SiteDetail from '../src/components/screens/Authenticated/SiteDetail';
 import ViewsContent from '../src/components/screens/Authenticated/SiteDetail/components/ViewsContent';
@@ -427,6 +443,50 @@ describe('SiteDetail screen — header + refresh paths', () => {
     await settle(2);
     expect(texts(t.root)).toContain('Live body');
     expect(texts(t.root)).not.toContain('Summary body');
+  });
+
+  const openTables = async (t: ReactTestRenderer) => {
+    const chips = tabPressables(t.root);
+    act(() => chips.find(c => c.props.accessibilityLabel === 'Tables')?.props.onPress());
+    await settle(2);
+    expect(texts(t.root)).toContain('Tables body');
+  };
+
+  it("a tab's own refresh icon runs the shell refresh: /data/all + the header stamp", async () => {
+    const t = mount();
+    await settle();
+    await openTables(t);
+    expect(mockGetSiteAllData).toHaveBeenCalledTimes(1);
+    const tabRefresh = t.root
+      .findAllByType(Pressable)
+      .find(p => p.props.accessibilityLabel === 'Tab refresh');
+    act(() => {
+      tabRefresh?.props.onPress();
+    });
+    // The header button spins with it — one refresh, one guard.
+    const header = t.root
+      .findAllByType(Pressable)
+      .find(p => p.props.accessibilityLabel === 'Refresh site data');
+    expect(header?.props.accessibilityState.busy).toBe(true);
+    await settle();
+    expect(mockGetSiteAllData).toHaveBeenCalledTimes(2);
+  });
+
+  it('a tab that owns vertical drags switches pull-to-refresh off (Android enabled, iOS bounces)', async () => {
+    mockTabBlocksPull.value = true;
+    try {
+      const t = mount();
+      await settle();
+      expect(t.root.findByType(RefreshControl).props.enabled).toBe(true);
+      await openTables(t);
+      expect(t.root.findByType(RefreshControl).props.enabled).toBe(false);
+      // The body ScrollView (the one carrying the RefreshControl), not the
+      // tab strip's horizontal scroller.
+      const body = t.root.findAllByType(ScrollView).find(v => v.props.refreshControl);
+      expect(body?.props.bounces).toBe(false);
+    } finally {
+      mockTabBlocksPull.value = false;
+    }
   });
 
   it('a failed initial load shows friendly copy and Retry recovers', async () => {

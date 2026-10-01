@@ -53,6 +53,7 @@ import {
   useSiteConfig,
   useSiteData,
 } from 'src/hooks';
+import { runUserRefresh } from 'src/networking/freshFetch';
 import { DashboardStackParamList } from 'src/types';
 import { RefreshIcon } from 'src/assets/icons';
 import ViewsContent from './components/ViewsContent';
@@ -71,6 +72,8 @@ import {
   siteDetailPhase,
   siteHeaderA11yLabel,
 } from './siteDetailModel';
+import { PullToRefreshGateContext, usePullToRefreshGate } from './pullToRefreshGate';
+import { SiteRefreshContext } from './siteRefresh';
 
 type SiteDetailRouteProp = RouteProp<DashboardStackParamList, 'SiteDetail'>;
 
@@ -123,11 +126,16 @@ const SiteDetail: FC = () => {
     [liveData.data, dataLastUpdate],
   );
 
-  /* ── refresh: header button, pull-to-refresh and Retry share one path.
-     `cancelRefetch: false` joins an in-flight (or paused) fetch instead of
-     cancelling it, and the in-flight ref drops repeat triggers, so each
-     refresh issues exactly one /data/all request. Mounted per-tab report
-     queries for this site are refreshed with it. ── */
+  /* ── refresh: header button, pull-to-refresh, Retry AND every tab's own
+     refresh icon (via SiteRefreshContext) share one path, refetching
+     /data/all plus this site's mounted per-tab queries. It runs as a user
+     refresh: the requests bypass the device + CDN caches (freshFetch.ts)
+     and the shared clock re-derives every "x min ago" as soon as it
+     settles. Online it STARTS fresh requests (`cancelRefetch: true`): a
+     joined automatic fetch — focus / resume / mount — was sent without the
+     bypass and could hand back the CDN's copy. Offline it joins the paused
+     fetch instead (`cancelRefetch: false`), so reconnect sends one request
+     per query. The in-flight ref drops repeat triggers. ── */
   const { refetch: refetchLive } = liveData;
   const { refetch: refetchConfig } = siteConfig;
   const configMissingRef = useRef(false);
@@ -150,20 +158,23 @@ const SiteDetail: FC = () => {
       refreshGen.current += 1;
       const gen = refreshGen.current;
       setRefreshSource(source);
-      const tasks: Promise<unknown>[] = [
-        refetchLive({ cancelRefetch: false }),
-        queryClient.refetchQueries(
-          {
-            type: 'active',
-            predicate: query => isSiteTabQuery(query.queryKey, siteId),
-          },
-          { cancelRefetch: false },
-        ),
-      ];
-      if (configMissingRef.current) {
-        tasks.push(refetchConfig({ cancelRefetch: false }));
-      }
-      Promise.all(tasks)
+      const cancelRefetch = onlineManager.isOnline();
+      runUserRefresh(() => {
+        const tasks: Promise<unknown>[] = [
+          refetchLive({ cancelRefetch }),
+          queryClient.refetchQueries(
+            {
+              type: 'active',
+              predicate: query => isSiteTabQuery(query.queryKey, siteId),
+            },
+            { cancelRefetch },
+          ),
+        ];
+        if (configMissingRef.current) {
+          tasks.push(refetchConfig({ cancelRefetch }));
+        }
+        return Promise.all(tasks);
+      })
         .catch(() => undefined)
         .finally(() => {
           if (gen !== refreshGen.current) return; // released early (offline)
@@ -179,8 +190,8 @@ const SiteDetail: FC = () => {
   // the spinner + guard on the next frame (the native pull spinner needs
   // its true → false to land in separate commits, as on the Dashboard);
   // the Offline strip / card says why. The paused fetch still resumes by
-  // itself on reconnect, and a later trigger joins it (cancelRefetch:
-  // false) — still one /data/all request.
+  // itself on reconnect, and a later offline trigger joins it
+  // (cancelRefetch: false) — still one /data/all request.
   useEffect(() => {
     if (refreshSource === null || !offlineNow) return;
     const id = requestAnimationFrame(() => {
@@ -243,17 +254,25 @@ const SiteDetail: FC = () => {
     [setScrolledIfChanged],
   );
 
+  // A child that owns vertical drags (the unlocked SLD viewport) switches
+  // pull-to-refresh off while it does. The RefreshControl itself stays
+  // mounted — on Android it wraps the ScrollView, so dropping it would
+  // remount the whole body: Android disables it (`enabled`), iOS stops the
+  // top overscroll that a pull needs (`bounces`).
+  const { acquire: acquirePullBlock, blocked: pullBlocked } = usePullToRefreshGate();
+
   const refreshControl = useMemo(
     () => (
       <RefreshControl
         refreshing={refreshSource === 'pull'}
         onRefresh={handlePullRefresh}
+        enabled={!pullBlocked}
         tintColor={scheme.brand}
         colors={[scheme.brand]}
         progressBackgroundColor={scheme.surfaceRaised}
       />
     ),
-    [refreshSource, handlePullRefresh, scheme],
+    [refreshSource, handlePullRefresh, pullBlocked, scheme],
   );
 
   const contentStyle = useMemo(
@@ -309,7 +328,11 @@ const SiteDetail: FC = () => {
           onRetry={handleRetry}
         />
         <ContentFade>
-          <ViewsContent tab={renderedTab} />
+          <PullToRefreshGateContext.Provider value={acquirePullBlock}>
+            <SiteRefreshContext.Provider value={handleHeaderRefresh}>
+              <ViewsContent tab={renderedTab} />
+            </SiteRefreshContext.Provider>
+          </PullToRefreshGateContext.Provider>
         </ContentFade>
       </>
     );
@@ -357,6 +380,7 @@ const SiteDetail: FC = () => {
         onScrollEndDrag={handleBodyScroll}
         onMomentumScrollEnd={handleBodyScroll}
         scrollEventThrottle={32}
+        bounces={!pullBlocked}
         refreshControl={refreshControl}>
         {body}
       </ScrollView>

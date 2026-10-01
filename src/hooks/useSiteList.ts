@@ -167,7 +167,9 @@ export const useSiteList = (
   // Pull-to-refresh: drop every cached page beyond the first, THEN refetch.
   // The remaining page keeps the list rendered (no skeleton flash) and the
   // refetch only fires a single page-1 request instead of replaying the
-  // whole pagination history serially.
+  // whole pagination history serially. CDN-neutral on purpose: the
+  // Dashboard's automatic foreground-resume refresh calls it too; the
+  // user gestures wrap it in `runUserRefresh` (freshFetch.ts) themselves.
   //
   // `setQueryData` is a manual 'success' write that stamps the query with
   // Date.now() — so with nothing to prune the updater returns undefined
