@@ -1,445 +1,348 @@
 /**
- * LiveParameterView — v5 (modern bento, crash-safe, render-cheap).
+ * LiveParameterView — v6 (honest ages, units, flat tiles, global search).
  *
- * Lessons baked in from previous iterations that crashed:
- *   - No per-tile `Animated.View` / `FadeInDown`. At 100+ tiles the
- *     concurrent worklets + Reanimated's commit hook recursing across
- *     the shadow tree triggered a `ShadowTree::commit` assertion abort
- *     (SIGABRT) on iOS. Tiles render as plain Views — they appear with
- *     React's normal mount and that's plenty modern.
- *   - No `layout=`/`LinearTransition` anywhere. Same reason — that's
- *     the path that ran `cloneShadowTreeWithNewPropsRecursive` deep on
- *     every tab change.
- *   - No `Surface elevation="md"` on tiles. iOS shadow rasterization is
- *     a per-tile offscreen pass; at 100+ tiles it has OOM'd the app.
- *     Depth comes from a tinted `LinearGradient` sweep + 1px border.
- *   - No `adjustsFontSizeToFit` — that does a synchronous text-measure
- *     on every render. `numberOfLines={1}` truncates instead.
- *   - `PressableScale` is used only on interactive controls (refresh,
- *     filter pills, sort chips, clear). The scale animation fires on
- *     press, not on mount/scroll, so it's bounded.
- *   - Single file. Prior subdirectory split made it hard to reason
- *     about which pieces were animated.
+ * Crash / perf lessons that still hold (see CLAUDE.md §11, §19):
+ *   - No per-tile `Animated.View` / `entering`. At 100+ tiles concurrent
+ *     worklets + Reanimated's commit hook triggered a `ShadowTree::commit`
+ *     SIGABRT on iOS. Tiles are plain Views; only the four section
+ *     wrappers below animate in.
+ *   - No `layout=` / `LinearTransition` anywhere.
+ *   - No `Surface elevation` on tiles (per-tile shadow rasterisation has
+ *     OOM'd the app) — a flat surface + 1px border instead.
+ *   - No `adjustsFontSizeToFit` (synchronous text measure per render). A
+ *     long value steps down one size, decided once per fetch.
+ *   - `ParamTile` is `React.memo`'d with props that are identity-stable per
+ *     derivation: every display string (value, unit, age, a11y label) is
+ *     precomputed in `extractLiveParams` (src/utils/liveParams.ts). No
+ *     per-tile timers: ages are computed against `dataUpdatedAt`, re-anchored
+ *     at most once per AGE_REANCHOR_MS (`AgeClock`) while the tab stays open
+ *     without a refetch — so tiles turn stale alongside the header instead
+ *     of saying 'Just now' forever.
+ *   - Tiles mount progressively, MOUNT_CHUNK per frame, after
+ *     `useInteractionReady`; the reveal restarts on category, search and
+ *     sort changes so no single commit exceeds ~20 tiles.
+ *   - Only two tiny memo'd children ride the shared 30 s `useNow` ticker:
+ *     the header status line, and `AgeClock` (renders nothing; wakes the
+ *     parent only when a 5-min bucket passes). The grid never re-renders
+ *     per tick.
+ *   - The status line reads the SAME site-level stamp as the SiteDetail
+ *     header and Summary hero (`headerLastUpdate`: the web's 'last sync'
+ *     first), so one fast-updating parameter can't make a delayed site
+ *     pulse 'Live' here while the header says 'Delayed'.
+ *   - A failed background refresh over cached readings is reported by THIS
+ *     tab's one-line strip, worded exactly like the shell's
+ *     RefreshStatusStrip. The shell yields on Live
+ *     (`TABS_WITH_OWN_REFRESH_STATUS`, siteDetailModel.ts), so one failure
+ *     shows one notice with one Retry.
  *
- * v5 additions (re-render + commit-size budget):
- *   - `ParamTile` is `React.memo`'d and receives only referentially
- *     stable props (`param`, `themed`); scheme colors come from its own
- *     `useScheme()` call. Keystrokes / pill taps / sort taps no longer
- *     re-render every mounted tile.
- *   - Display strings (`displayValue` / `displayTime`) and the per-tile
- *     gradient color pair are precomputed once per fetch inside
- *     `extractLiveParams` against ONE module-level `Intl.NumberFormat`.
- *     Hermes builds a fresh collator per `toLocaleString` call, so doing
- *     that inside 142 tile renders was pure waste — tiles now render
- *     plain strings with zero `Intl`/`Date` work.
- *   - The search `TextInput` stays instantly controlled, but the value
- *     that feeds `filtered` is a ~200 ms debounced copy — filtering
- *     142 params per keystroke is gone.
- *   - Tiles mount progressively: after `useInteractionReady`, a
- *     `requestAnimationFrame` counter reveals ~20 tiles per frame until
- *     all are shown, so no single React commit exceeds ~20 tiles. The
- *     counter resets when the category / search changes.
- *
- * Category selection:
- *   There is no "All" pill — the grid always shows exactly one category.
- *   The default is Energy, falling back to Power when the site reports no
- *   energy registers, and to the first non-empty category when it reports
- *   neither. Because that depends on data which isn't present on the first
- *   render, the default is DERIVED (see `activeCategory`) rather than
- *   seeded into `useState` — an effect would flash the wrong category for
- *   a frame before correcting itself.
+ * Categories: normal mode shows exactly one category (no 'All' pill) —
+ * Energy, else Power, else the first non-empty one. A non-empty search
+ * covers EVERY category: pills show match counts (0 → disabled), an 'All'
+ * pill appears, the grid is grouped by category and tiles show their
+ * category tag.
  *
  *  ┌────────────────────────────────────────────────┐
- *  │ ● LIVE METRICS · 142          [⟳]              │
- *  ├────────────────────────────────────────────────┤
- *  │ [🔍 Search…                          ✕]        │
- *  ├────────────────────────────────────────────────┤
- *  │ [Energy 41][Power 38][Voltage 22][Current 18]… │
- *  │  Sort:  [Name][Value][Time]                    │
- *  ├────────────────────────────────────────────────┤
- *  │ ┌──────────┐ ┌──────────┐                      │
- *  │ │ ●POWER   │ │ ●POWER   │                      │
- *  │ │ Solar 1  │ │ Wind 2   │                      │
- *  │ │ 21,385   │ │ 462.86   │                      │
- *  │ │ 02:55am  │ │ 02:55am  │                      │
- *  │ └──────────┘ └──────────┘                      │
+ *  │ Energy · 27 of 162                        [⟳]  │
+ *  │ ● Live · 3 min ago                             │
+ *  │ [🔍 Search parameters                     ✕]   │
+ *  │ (Energy 27)(Power 64)(Voltage 3)… [≡ Sort: Name]│
+ *  │ ┌──────────────┐ ┌──────────────┐              │
+ *  │ │ PV Energy Day│ │ Energy       │              │
+ *  │ │              │ │ Consumed     │              │
+ *  │ │ 144,141.90kWh│ │ 1,188,328,1… │              │
+ *  │ │ Just now     │ │ ◷ 2 h ago    │              │
+ *  │ └──────────────┘ └──────────────┘              │
  *  └────────────────────────────────────────────────┘
  */
 
 import React, {
   FC,
+  memo,
   ReactNode,
   useCallback,
   useEffect,
   useMemo,
   useState,
 } from 'react';
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { ActivityIndicator, StyleSheet, View, ViewStyle } from 'react-native';
 import { useRoute, RouteProp } from '@react-navigation/native';
-import LinearGradient from 'react-native-linear-gradient';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import {
   AppText,
   AppTextInput,
-  Dot,
-  OverlineLabel,
+  EmptyStateCard,
+  IconButton,
+  Pill,
+  PillGroup,
   PressableScale,
   PulseDot,
   Skeleton,
-  TintedPill,
 } from 'src/components/common';
 import {
   duration,
-  energyPalette,
   radius as radiusTokens,
   Scheme,
   space,
+  touch,
   useScheme,
   useThemedStyles,
 } from 'src/theme';
 import {
-  FONT_SIZE_LG,
-  FONT_SIZE_XS,
-  FONT_SIZE_XXS,
+  dataFreshness,
+  formatRelativeTime,
+  freshnessDot,
+  freshnessSpoken,
+  freshnessText,
+  friendlyError,
   ICON_SIZE_MD,
   ICON_SIZE_XS,
-  tryNumber,
 } from 'src/utils';
-import { useInteractionReady, useParamsMapping, useSiteData } from 'src/hooks';
+import {
+  buildLiveGrid,
+  buildParamUnitIndex,
+  buildSiteParamNames,
+  extractLiveParams,
+  LIVE_CATEGORIES,
+  LIVE_CATEGORY_LABEL,
+  LIVE_SORT_LABEL,
+  LIVE_SORT_SPOKEN,
+  LiveCategoryKey,
+  LiveParameter,
+  LiveSearchScope,
+  LiveSortKey,
+  nextLiveSort,
+} from 'src/utils/liveParams';
+import {
+  useInteractionReady,
+  useNow,
+  useParamsMapping,
+  useSiteConfig,
+  useSiteData,
+} from 'src/hooks';
+import { headerLastUpdate } from 'src/components/screens/Authenticated/SiteDetail/siteDetailModel';
 import { DashboardStackParamList } from 'src/types';
 import { Close, Magnify, RefreshIcon } from 'src/assets/icons';
 
 type SiteDetailRouteProp = RouteProp<DashboardStackParamList, 'SiteDetail'>;
-
-type SortKey = 'name' | 'value' | 'time';
-
-type CategoryKey =
-  | 'power'
-  | 'voltage'
-  | 'current'
-  | 'energy'
-  | 'temperature'
-  | 'frequency'
-  | 'other';
-
-interface CategoryDef {
-  key: CategoryKey;
-  label: string;
-  color: string;
-  match: (name: string) => boolean;
-}
-
-interface LiveParameter {
-  code: string;
-  name: string;
-  value: number | string | null | undefined;
-  updateAt: number | undefined;
-  category: CategoryKey;
-  categoryColor: string;
-  categoryLabel: string;
-  /** Precomputed in `extractLiveParams` — tiles render this verbatim. */
-  displayValue: string;
-  /** Precomputed in `extractLiveParams` — tiles render this verbatim. */
-  displayTime: string;
-  /** Precomputed `[tint, transparent]` pair for the tile's gradient sweep. */
-  gradientColors: [string, string];
-}
-
-const SORT_LABELS: Record<SortKey, string> = {
-  name: 'Name',
-  value: 'Value',
-  time: 'Time',
-};
-
-const GRADIENT_TL = { x: 0, y: 0 } as const;
-const GRADIENT_BR = { x: 1, y: 1 } as const;
+type Themed = ReturnType<typeof createStyles>;
 
 /** Debounce window between a search keystroke and the filter pass. */
 const SEARCH_DEBOUNCE_MS = 200;
 
-/** Max tiles added per frame during the progressive reveal (task 4). */
+/** Max tiles added per frame during the progressive reveal. */
 const MOUNT_CHUNK = 20;
 
-/**
- * ONE shared formatter. On Hermes, `value.toLocaleString(undefined, opts)`
- * constructs a fresh `Intl.NumberFormat` per call — fine once, brutal
- * inside 142 tile renders. Hoisted to module scope and reused for every
- * parameter during extraction.
- */
-const VALUE_FORMATTER = new Intl.NumberFormat(undefined, {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
+/** Skeleton tiles — four rows, about one screenful. */
+const SKELETON_TILES = 8;
+
+/** Value size for numbers longer than LONG_VALUE_CHARS (else h3 = 18). */
+const LONG_VALUE_FONT = 15;
 
 /**
- * Section-level entrance animation. Five wrappers max (header, search,
- * filter row, sort row, body) → at most five concurrent Reanimated
- * worklets on mount, which is the safe regime. Tuned for snappy
- * sub-tab switching — `duration.fast` + 30ms step lands the full
- * stagger in ~300ms instead of the original ~560ms.
+ * While the tab stays open without a refetch (useSiteData has no
+ * refetchInterval), tile ages are re-derived at most this often — a tile
+ * can't keep saying 'Just now' while the header reads 'Last data 20 min
+ * ago'. One re-derivation re-renders the mounted tiles once, like a
+ * refetch does.
+ */
+const AGE_REANCHOR_MS = 5 * 60_000;
+const ageBucket = (ms: number) => Math.floor(ms / AGE_REANCHOR_MS) * AGE_REANCHOR_MS;
+
+/** Refresh-failed copy — the same words as the shell's RefreshStatusStrip
+ *  on every other tab. */
+const STRIP_TEXT = {
+  offline: 'Offline · showing the last data received',
+  failed: "Couldn't refresh · showing the last data received",
+} as const;
+
+/**
+ * Section-level entrance animation. Four wrappers (header, search,
+ * controls, body) → at most four concurrent worklets on mount.
  */
 const stagger = (i: number) =>
   FadeInDown.delay(30 * i).duration(duration.fast).springify().damping(20);
 
-/* ─────────────── helpers ─────────────── */
-
-const isObject = (v: unknown): v is Record<string, unknown> =>
-  typeof v === 'object' && v !== null && !Array.isArray(v);
-
-const pickString = (
-  obj: Record<string, unknown>,
-  keys: string[],
-): string | undefined => {
-  for (const k of keys) {
-    const v = obj[k];
-    if (typeof v === 'string' && v.trim() !== '') return v;
-  }
-  return undefined;
-};
-
-const resolveParamName = (
-  mapping: unknown,
-  code: string,
-): string | undefined => {
-  if (!isObject(mapping)) return undefined;
-  const entry = mapping[code];
-  if (typeof entry === 'string' && entry.trim() !== '') return entry;
-  if (isObject(entry)) {
-    return pickString(entry, ['display', 'displayName', 'name', 'label']);
-  }
-  return undefined;
-};
-
-/** Called once per parameter during extraction — never from render. */
-const formatValue = (value: LiveParameter['value']): string => {
-  if (value === null || value === undefined || value === '') return '—';
-  if (typeof value === 'number') return VALUE_FORMATTER.format(value);
-  return String(value);
-};
-
-/** Called once per parameter during extraction — never from render. */
-const formatClockTime = (ms: number | undefined): string => {
-  if (!ms || !Number.isFinite(ms) || ms <= 0) return '—';
-  const d = new Date(ms);
-  if (Number.isNaN(d.getTime())) return '—';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  let hours = d.getHours();
-  const minutes = pad(d.getMinutes());
-  const ampm = hours >= 12 ? 'pm' : 'am';
-  hours = hours % 12 || 12;
-  return `${pad(hours)}:${minutes} ${ampm}`;
-};
-
-const matchCategory = (
-  name: string,
-  categories: CategoryDef[],
-): CategoryDef => {
-  for (const c of categories) {
-    if (c.key === 'other') continue;
-    try {
-      if (c.match(name)) return c;
-    } catch {
-      // bad regex shouldn't poison the rest of the list
-    }
-  }
-  return categories[categories.length - 1];
-};
-
-/* ─────────────── extraction ─────────────── */
-
-const extractLiveParams = (
-  liveData: unknown,
-  mapping: unknown,
-  categories: CategoryDef[],
-): LiveParameter[] => {
-  if (!isObject(liveData)) return [];
-  const liveBranch = liveData.live;
-  if (!isObject(liveBranch)) return [];
-  const dataEnvelope = liveBranch.data;
-  if (!isObject(dataEnvelope)) return [];
-  const inner = dataEnvelope.live;
-  if (!isObject(inner)) return [];
-
-  const out: LiveParameter[] = [];
-  for (const [code, entry] of Object.entries(inner)) {
-    let value: LiveParameter['value'] = null;
-    let updateAt: number | undefined;
-    if (isObject(entry)) {
-      const rawVal = entry.value;
-      const num = tryNumber(rawVal);
-      value = num !== undefined ? num : (rawVal as LiveParameter['value']);
-      updateAt =
-        tryNumber(entry.update_at) ??
-        tryNumber((entry as Record<string, unknown>).updateAt);
-    }
-    const name = resolveParamName(mapping, code) ?? code;
-    const cat = matchCategory(name, categories);
-    out.push({
-      code,
-      name,
-      value,
-      updateAt,
-      category: cat.key,
-      categoryColor: cat.color,
-      categoryLabel: cat.label,
-      // Bake the display strings + gradient pair here, once per fetch,
-      // so the (memoised) tiles do zero Intl/Date/concat work in render.
-      displayValue: formatValue(value),
-      displayTime: formatClockTime(updateAt),
-      gradientColors: [cat.color + '22', cat.color + '00'],
-    });
-  }
-  return out;
-};
-
-/* ─────────────── child components (module-scope, no inline defs) ─────────────── */
+/* ─────────────── tiles ─────────────── */
 
 interface ParamTileProps {
   param: LiveParameter;
-  themed: ReturnType<typeof useThemedStyles<ReturnType<typeof createStyles>>>;
+  /** Cross-category search results show which category a tile is in. */
+  showCategory: boolean;
+  themed: Themed;
 }
 
 /**
- * Memoised — both props are referentially stable (`param` objects survive
- * filter/sort re-shuffles; `themed` is a memoised StyleSheet), so search
- * keystrokes and pill/sort taps skip every already-mounted tile. Scheme
- * colors are read via the tile's own `useScheme()` (stable frozen object)
- * instead of a prop, so the memo doesn't depend on the parent's scheme.
+ * One accessible element. Props are identity-stable per fetch (`param`
+ * objects survive filter / sort / search re-shuffles; `themed` is a
+ * cached StyleSheet), so keystrokes and pill taps skip mounted tiles.
  */
-const ParamTile: FC<ParamTileProps> = React.memo(({ param, themed }) => {
+const ParamTile: FC<ParamTileProps> = memo(({ param, showCategory, themed }) => {
   const scheme = useScheme();
+  let valueColor = scheme.textPrimary;
+  if (param.isMissing) valueColor = scheme.textTertiary;
+  else if (param.implausible) valueColor = scheme.statusInk.warning;
+  else if (param.stale) valueColor = scheme.textSecondary;
+  const timeTone = param.updateAt === null ? 'tertiary' : param.stale ? 'warning' : 'secondary';
   return (
-    <View style={themed.tile}>
-      <LinearGradient
-        colors={param.gradientColors}
-        start={GRADIENT_TL}
-        end={GRADIENT_BR}
-        style={StyleSheet.absoluteFillObject}
-        pointerEvents="none"
-      />
-      <TintedPill color={param.categoryColor} alpha="24" row paddingY={3}>
-        <Dot color={param.categoryColor} size={6} />
-        <AppText fontSize={FONT_SIZE_XXS} bold color={param.categoryColor}>
-          {param.categoryLabel.toUpperCase()}
+    <View
+      style={themed.tile}
+      accessible
+      accessibilityLabel={
+        showCategory ? `${param.a11yLabel}, ${param.categoryLabel}` : param.a11yLabel
+      }>
+      <View style={styles.tileTop}>
+        {showCategory ? (
+          <View style={themed.categoryTag}>
+            <AppText variant="micro" tone="secondary" numberOfLines={1}>
+              {param.categoryLabel}
+            </AppText>
+          </View>
+        ) : null}
+        <AppText variant="caption" medium tone="secondary" numberOfLines={2}>
+          {param.name}
         </AppText>
-      </TintedPill>
-      <AppText
-        fontSize={FONT_SIZE_XXS}
-        medium
-        color={scheme.textTertiary}
-        numberOfLines={2}
-        style={styles.tileName}>
-        {param.name}
-      </AppText>
-      <AppText
-        fontSize={FONT_SIZE_LG}
-        bold
-        color={scheme.textPrimary}
-        numberOfLines={1}>
-        {param.displayValue}
-      </AppText>
-      <AppText fontSize={FONT_SIZE_XXS} color={scheme.textSecondary}>
-        {param.displayTime}
+      </View>
+      <View style={styles.tileBottom}>
+        <View style={styles.valueRow}>
+          <AppText
+            variant="h3"
+            fontSize={param.longValue ? LONG_VALUE_FONT : undefined}
+            color={valueColor}
+            numberOfLines={2}
+            style={styles.valueText}>
+            {param.displayValue}
+          </AppText>
+          {param.displayUnit ? (
+            <AppText variant="caption" tone="secondary" numberOfLines={1}>
+              {param.displayUnit}
+            </AppText>
+          ) : null}
+        </View>
+        <View style={styles.timeRow}>
+          {param.stale ? (
+            <Icon name="schedule" size={12} color={scheme.statusInk.warning} />
+          ) : null}
+          <AppText variant="caption" tone={timeTone} numberOfLines={1} style={styles.shrink}>
+            {param.displayTime}
+          </AppText>
+        </View>
+      </View>
+    </View>
+  );
+});
+ParamTile.displayName = 'ParamTile';
+
+/** Mirrors ParamTile's geometry so nothing shifts when data lands. */
+const SkeletonTile: FC<{ themed: Themed }> = ({ themed }) => (
+  <View style={themed.tile}>
+    <View style={styles.tileTop}>
+      <Skeleton width="85%" height={12} radius="sm" />
+      <Skeleton width="55%" height={12} radius="sm" />
+    </View>
+    <View style={styles.tileBottom}>
+      <Skeleton width="65%" height={20} radius="sm" />
+      <Skeleton width="40%" height={12} radius="sm" />
+    </View>
+  </View>
+);
+
+/* ─────────────── header status ─────────────── */
+
+/**
+ * '● Live · 3 min ago' with the pulse while the site's last sync is live;
+ * otherwise a static dot and 'Last data 41 min ago'. `lastUpdate` is the
+ * SiteDetail header's stamp (`headerLastUpdate`), so both say the same
+ * age. Rides the shared 30 s `useNow` ticker on its own, so the pulse
+ * can't outlive the data.
+ */
+const LiveStatusLine: FC<{ lastUpdate: number | null }> = memo(({ lastUpdate }) => {
+  const scheme = useScheme();
+  const now = useNow();
+  const fresh = dataFreshness(lastUpdate, now);
+  const live = fresh.level === 'live';
+
+  let text: string;
+  if (live) text = freshnessText('live', fresh.ageMs, 'status', now);
+  else if (fresh.ageMs === null || lastUpdate === null) text = 'Last update unknown';
+  else text = `Last data ${formatRelativeTime(lastUpdate, now)}`;
+
+  const dot = freshnessDot(fresh.level, scheme);
+  const dotStyle = useMemo<ViewStyle>(
+    () =>
+      dot.hollow
+        ? { ...styles.statusDot, borderWidth: 1.5, borderColor: dot.color }
+        : { ...styles.statusDot, backgroundColor: dot.color },
+    [dot.hollow, dot.color],
+  );
+
+  return (
+    <View
+      style={styles.statusRow}
+      accessible
+      accessibilityLabel={freshnessSpoken(fresh.level, fresh.ageMs, now)}>
+      {live ? <PulseDot color={scheme.brand} size={8} /> : <View style={dotStyle} />}
+      <AppText variant="caption" tone="secondary" numberOfLines={1} style={styles.shrink}>
+        {text}
       </AppText>
     </View>
   );
 });
+LiveStatusLine.displayName = 'LiveStatusLine';
 
-interface SkeletonTileProps {
-  themed: ReturnType<typeof useThemedStyles<ReturnType<typeof createStyles>>>;
+/**
+ * Renders nothing. Rides the shared `useNow` ticker and reports the
+ * current AGE_REANCHOR_MS bucket; the effect (and so the parent's state
+ * update) only fires when the bucket changes — the parent re-renders at
+ * most once per bucket, never per 30 s tick.
+ */
+const AgeClock: FC<{ onBucket: (bucket: number) => void }> = memo(({ onBucket }) => {
+  const bucket = ageBucket(useNow());
+  useEffect(() => {
+    onBucket(bucket);
+  }, [bucket, onBucket]);
+  return null;
+});
+AgeClock.displayName = 'AgeClock';
+
+/* ─────────────── sort control ─────────────── */
+
+interface SortButtonProps {
+  sortKey: LiveSortKey;
+  onPress: () => void;
+  themed: Themed;
 }
 
 /**
- * Placeholder card shown in the bento grid while the first-load fetch
- * is in flight. Matches the live tile's outer dimensions exactly so
- * the layout doesn't shift when real data arrives.
+ * One compact control that cycles the five orders. The visible 'Sort:'
+ * prefix keeps it from reading as another category chip in the same row.
  */
-const SkeletonTile: FC<SkeletonTileProps> = ({ themed }) => (
-  <View style={themed.tile}>
-    <Skeleton width={56} height={14} radius="pill" />
-    <Skeleton width="80%" height={10} radius="sm" />
-    <Skeleton width="60%" height={20} radius="sm" />
-    <Skeleton width="40%" height={10} radius="sm" />
-  </View>
-);
-
-interface FilterPillProps {
-  active: boolean;
-  color: string;
-  label: string;
-  count: number;
-  onPress: () => void;
-  scheme: Scheme;
-  themed: ReturnType<typeof useThemedStyles<ReturnType<typeof createStyles>>>;
-}
-
-const FilterPill: FC<FilterPillProps> = ({
-  active,
-  color,
-  label,
-  count,
-  onPress,
-  scheme,
-  themed,
-}) => {
-  const bg = active ? color : scheme.surface;
-  const fg = active ? scheme.textOnBrand : scheme.textSecondary;
-  const dotColor = active ? scheme.textOnBrand : color;
+const SortButton: FC<SortButtonProps> = ({ sortKey, onPress, themed }) => {
+  const scheme = useScheme();
+  const a11yValue = useMemo(() => ({ text: LIVE_SORT_SPOKEN[sortKey] }), [sortKey]);
   return (
     <PressableScale
       onPress={onPress}
       haptic="select"
-      scaleTo={0.94}
-      accessibilityLabel={`${label} filter, ${count} items`}
-      style={[
-        themed.filterPill,
-        { backgroundColor: bg, borderColor: active ? color : scheme.hairline },
-      ]}>
-      <Dot color={dotColor} size={6} />
-      <AppText fontSize={FONT_SIZE_XS} semi_bold color={fg}>
-        {label}
+      scaleTo={0.95}
+      hitSlop={SORT_HIT_SLOP}
+      accessibilityLabel={`Sort, ${LIVE_SORT_LABEL[sortKey]}`}
+      accessibilityValue={a11yValue}
+      accessibilityHint="Changes to the next sort order"
+      style={themed.sortButton}>
+      <Icon name="sort" size={16} color={scheme.textSecondary} />
+      <AppText variant="bodySm" tone="secondary" numberOfLines={1}>
+        Sort:
       </AppText>
-      <AppText fontSize={FONT_SIZE_XXS} color={fg} style={styles.filterCount}>
-        {count}
+      <AppText variant="bodySm" medium tone="primary" numberOfLines={1}>
+        {LIVE_SORT_LABEL[sortKey]}
       </AppText>
     </PressableScale>
   );
 };
 
-interface SortChipProps {
-  active: boolean;
-  label: string;
-  onPress: () => void;
-  scheme: Scheme;
-  themed: ReturnType<typeof useThemedStyles<ReturnType<typeof createStyles>>>;
-}
-
-const SortChip: FC<SortChipProps> = ({
-  active,
-  label,
-  onPress,
-  scheme,
-  themed,
-}) => (
-  <PressableScale
-    onPress={onPress}
-    haptic="select"
-    scaleTo={0.94}
-    accessibilityLabel={`Sort by ${label}`}
-    style={active ? themed.sortChipActive : themed.sortChipInactive}>
-    <AppText
-      fontSize={FONT_SIZE_XXS}
-      semi_bold
-      color={active ? scheme.textOnBrand : scheme.textSecondary}>
-      {label}
-    </AppText>
-  </PressableScale>
-);
+const SORT_SLOP = Math.max(0, Math.ceil((touch.min - touch.pillVisual) / 2));
+const SORT_HIT_SLOP = { top: SORT_SLOP, bottom: SORT_SLOP, left: 0, right: 0 };
 
 /* ─────────────── main component ─────────────── */
 
@@ -449,358 +352,329 @@ const LiveParameterView: FC = () => {
   const route = useRoute<SiteDetailRouteProp>();
   const { siteId } = route.params;
 
-  const { data: liveData, isLoading, isFetching, isError, refetch } =
-    useSiteData(siteId);
+  const {
+    data: liveData,
+    dataUpdatedAt,
+    error,
+    isLoading,
+    isFetching,
+    isError,
+    refetch,
+  } = useSiteData(siteId);
+  // Already observed (and prefetched) by SiteDetail — no extra request.
+  const { data: siteConfig } = useSiteConfig(siteId);
   const paramsMapping = useParamsMapping();
-  // Defer the tile-grid mount so the tab-switch animation and the
-  // (cheap) header always commit first. On first visit the user sees
-  // the header + skeleton instantly; once interactions settle the
-  // tiles stream in MOUNT_CHUNK per frame (see the chunked progressive
-  // mount block below) instead of landing as one 100+-tile commit.
+  // Defer the tile grid so the tab-switch animation and the header commit
+  // first; tiles then stream in MOUNT_CHUNK per frame.
   const ready = useInteractionReady();
 
   const [query, setQuery] = useState('');
-  // Debounced copy of `query` — the TextInput stays instantly controlled
-  // while the (filter + sort over 100+ params) pass runs at most once per
-  // SEARCH_DEBOUNCE_MS instead of per keystroke.
+  // Debounced copy of `query` feeds the (filter + sort over 100+ params)
+  // pass at most once per SEARCH_DEBOUNCE_MS instead of per keystroke.
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [sortKey, setSortKey] = useState<SortKey>('name');
-  // null until the user taps a pill; `activeCategory` below resolves it
-  // against the data-derived default (Energy → Power → first non-empty).
-  const [pickedCategory, setPickedCategory] = useState<CategoryKey | null>(
-    null,
-  );
+  const [sortKey, setSortKey] = useState<LiveSortKey>('name');
+  // null until the user picks; the grid model resolves it against the
+  // data-derived default (Energy → Power → first non-empty).
+  const [pickedCategory, setPickedCategory] = useState<LiveCategoryKey | null>(null);
+  const [searchScope, setSearchScope] = useState<LiveSearchScope>('all');
+  // Re-anchors tile ages every AGE_REANCHOR_MS (see AgeClock).
+  const [ageAnchor, setAgeAnchor] = useState(() => ageBucket(Date.now()));
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [query]);
 
-  const categories: CategoryDef[] = useMemo(
-    () => [
-      // Energy is tested BEFORE power: standard meter registers like
-      // "Active Energy Import (kWh)" / "Reactive Energy" must land in
-      // Energy, not get claimed by a power keyword first. kvarh/kvah
-      // (reactive/apparent energy registers) are energy too.
-      {
-        key: 'energy',
-        label: 'Energy',
-        color: scheme.brand,
-        match: n => /\b(energy|kwh|mwh|gwh|kvarh|kvah)\b/i.test(n),
-      },
-      {
-        key: 'power',
-        label: 'Power',
-        color: energyPalette.solar,
-        // No bare active|reactive|apparent alternation — "Active Power"
-        // already matches \bpower\b, and the bare words misclassified
-        // energy/current registers ("Reactive Energy", "Reactive Current").
-        match: n => /\b(power|kw|kvar|kva|pf)\b/i.test(n),
-      },
-      {
-        key: 'voltage',
-        label: 'Voltage',
-        color: energyPalette.wind,
-        // kv needs a trailing boundary or it claims kVArh/kVAh registers.
-        match: n => /\b(volt|voltage|kv\b|^v\b)/i.test(n),
-      },
-      {
-        key: 'current',
-        label: 'Current',
-        color: energyPalette.grid,
-        match: n => /\b(current|amp|amps|^a\b)/i.test(n),
-      },
-      {
-        key: 'temperature',
-        label: 'Temp',
-        color: energyPalette.genset,
-        match: n => /(temp|temperature|°c|°f)/i.test(n),
-      },
-      {
-        key: 'frequency',
-        label: 'Freq',
-        color: energyPalette.battery,
-        match: n => /\b(freq|frequency|hz)\b/i.test(n),
-      },
-      {
-        key: 'other',
-        label: 'Other',
-        color: scheme.textSecondary,
-        match: () => true,
-      },
-    ],
-    [scheme.brand, scheme.textSecondary],
-  );
+  // Every search starts across ALL categories: drop any narrowing when a
+  // search begins or ends (state-from-render, no flash).
+  const searching = debouncedQuery.trim() !== '';
+  const [wasSearching, setWasSearching] = useState(searching);
+  if (wasSearching !== searching) {
+    setWasSearching(searching);
+    setSearchScope('all');
+  }
 
+  /* ── per-fetch derivation ── */
+  const siteNames = useMemo(() => buildSiteParamNames(siteConfig), [siteConfig]);
+  const unitIndex = useMemo(
+    () => buildParamUnitIndex(siteConfig, paramsMapping),
+    [siteConfig, paramsMapping],
+  );
+  // Ages are "as of the fetch", re-anchored once a 5-min bucket passes
+  // without a refetch — never later than the real clock.
+  const ageNow = Math.max(dataUpdatedAt, ageAnchor);
   const params = useMemo(
-    () => extractLiveParams(liveData, paramsMapping, categories),
-    [liveData, paramsMapping, categories],
+    () =>
+      extractLiveParams(liveData, {
+        mapping: paramsMapping,
+        siteNames,
+        unitIndex,
+        fetchNow: ageNow,
+      }),
+    [liveData, paramsMapping, siteNames, unitIndex, ageNow],
+  );
+  // The SiteDetail header's stamp (site-level 'last sync' first) — the
+  // status line must not contradict the header right above it.
+  const routeLastUpdate = route.params.dataLastUpdate;
+  const lastUpdate = useMemo(
+    () => headerLastUpdate(liveData, routeLastUpdate),
+    [liveData, routeLastUpdate],
   );
 
-  const countsByCategory = useMemo(() => {
-    const counts: Record<CategoryKey, number> = {
-      power: 0,
-      voltage: 0,
-      current: 0,
-      energy: 0,
-      temperature: 0,
-      frequency: 0,
-      other: 0,
-    };
-    for (const p of params) counts[p.category] += 1;
-    return counts;
-  }, [params]);
-
-  const visibleCategories = useMemo(
-    () => categories.filter(c => countsByCategory[c.key] > 0),
-    [categories, countsByCategory],
+  const grid = useMemo(
+    () =>
+      buildLiveGrid({
+        params,
+        query: debouncedQuery,
+        pickedCategory,
+        searchScope,
+        sortKey,
+      }),
+    [params, debouncedQuery, pickedCategory, searchScope, sortKey],
   );
 
-  /**
-   * Energy first, Power when the site has no energy registers, otherwise
-   * the leftmost pill that actually has parameters. Null only while
-   * `params` is empty (loading / no data), which the render branches above
-   * the grid already handle.
-   */
-  const defaultCategory: CategoryKey | null = useMemo(() => {
-    if (countsByCategory.energy > 0) return 'energy';
-    if (countsByCategory.power > 0) return 'power';
-    return visibleCategories[0]?.key ?? null;
-  }, [countsByCategory, visibleCategories]);
+  /* ── handlers (stable) ── */
+  const clearSearch = useCallback(() => {
+    setQuery('');
+    setDebouncedQuery('');
+  }, []);
+  const handleRefresh = useCallback(() => {
+    refetch();
+  }, [refetch]);
+  const cycleSort = useCallback(() => setSortKey(nextLiveSort), []);
+  const selectAllMatches = useCallback(() => setSearchScope('all'), []);
+  const pickHandlers = useMemo(
+    () =>
+      Object.fromEntries(
+        LIVE_CATEGORIES.map(c => [c.key, () => setPickedCategory(c.key)]),
+      ) as Record<LiveCategoryKey, () => void>,
+    [],
+  );
+  // While searching a pill narrows the results — and is also remembered
+  // as the category to land on once the search is cleared.
+  const scopeHandlers = useMemo(
+    () =>
+      Object.fromEntries(
+        LIVE_CATEGORIES.map(c => [
+          c.key,
+          () => {
+            setSearchScope(c.key);
+            setPickedCategory(c.key);
+          },
+        ]),
+      ) as Record<LiveCategoryKey, () => void>,
+    [],
+  );
 
-  // A pick only survives while its category still has parameters — a
-  // refetch that empties it also removes its pill, so honouring the stale
-  // pick would strand the user on "Nothing in this category" with no pill
-  // to tap back out of.
-  const activeCategory: CategoryKey | null =
-    pickedCategory && countsByCategory[pickedCategory] > 0
-      ? pickedCategory
-      : defaultCategory;
-
-  const filtered = useMemo(() => {
-    const q = debouncedQuery.trim().toLowerCase();
-    let list = activeCategory
-      ? params.filter(p => p.category === activeCategory)
-      : params;
-    if (q) {
-      list = list.filter(
-        p =>
-          p.name.toLowerCase().includes(q) ||
-          p.code.toLowerCase().includes(q),
-      );
-    }
-    const sorted = [...list].sort((a, b) => {
-      if (sortKey === 'name') return a.name.localeCompare(b.name);
-      if (sortKey === 'value') {
-        const an =
-          typeof a.value === 'number' ? a.value : Number.NEGATIVE_INFINITY;
-        const bn =
-          typeof b.value === 'number' ? b.value : Number.NEGATIVE_INFINITY;
-        return bn - an;
-      }
-      return (b.updateAt ?? 0) - (a.updateAt ?? 0);
-    });
-    return sorted;
-  }, [params, debouncedQuery, sortKey, activeCategory]);
-
-  const clearSearch = useCallback(() => setQuery(''), []);
+  const friendly = useMemo(() => (error ? friendlyError(error) : null), [error]);
 
   /* ── chunked progressive mount ─────────────────────────────────
    * A nested FlatList can't virtualise inside the parent SiteDetail
-   * ScrollView (same orientation), so ALL filtered tiles used to land
-   * in one commit. Instead, reveal them MOUNT_CHUNK at a time: the
-   * counter advances one chunk per frame via requestAnimationFrame
-   * until everything is mounted. Keyed on category + search so a
-   * filter change resets the window synchronously (state-from-render
-   * pattern) — no oversized intermediate commit. Sort changes keep
-   * the window: tiles are already mounted, React just reorders them. */
-  const revealKey = `${activeCategory}|${debouncedQuery}`;
+   * ScrollView (same orientation), so tiles are revealed MOUNT_CHUNK at a
+   * time, one chunk per frame. Keyed on category, search scope, query and
+   * sort so any change restarts the window synchronously (state-from-
+   * render) — no oversized intermediate commit. */
+  const revealKey = `${grid.searching ? 's' : 'n'}|${grid.activeCategory}|${grid.scope}|${debouncedQuery}|${sortKey}`;
   const [reveal, setReveal] = useState({ key: revealKey, count: MOUNT_CHUNK });
   if (reveal.key !== revealKey) {
     setReveal({ key: revealKey, count: MOUNT_CHUNK });
   }
+  const tileCount = grid.tiles.length;
 
   useEffect(() => {
-    if (!ready || reveal.count >= filtered.length) return;
+    if (!ready || reveal.count >= tileCount) return;
     const frame = requestAnimationFrame(() => {
       setReveal(s =>
-        s.count >= filtered.length
-          ? s
-          : { ...s, count: Math.min(s.count + MOUNT_CHUNK, filtered.length) },
+        s.count >= tileCount ? s : { ...s, count: Math.min(s.count + MOUNT_CHUNK, tileCount) },
       );
     });
     return () => cancelAnimationFrame(frame);
-  }, [ready, reveal, filtered.length]);
+  }, [ready, reveal, tileCount]);
 
   const visibleTiles = useMemo(
-    () =>
-      filtered.length > reveal.count
-        ? filtered.slice(0, reveal.count)
-        : filtered,
-    [filtered, reveal.count],
+    () => (grid.tiles.length > reveal.count ? grid.tiles.slice(0, reveal.count) : grid.tiles),
+    [grid.tiles, reveal.count],
   );
 
-  /* ── render branches ───────────────────────────────────────── */
+  /* ── render branches ── */
 
+  // Refresh failed but cached readings exist: a one-line, non-blocking
+  // strip (the shell's own strip stays off this tab while errored).
+  const refreshFailed = isError && !isFetching && params.length > 0 && friendly;
+
+  const loading = !ready || (isLoading && params.length === 0);
   let body: ReactNode;
-  if (!ready || (isLoading && params.length === 0)) {
-    // Render a 6-tile skeleton grid that mirrors the real bento layout
-    // so the user sees the shape of what's about to land. Same
-    // skeleton covers both the brief mount-defer window and the
-    // first-load fetch.
+  if (loading) {
     body = (
-      <View style={styles.grid}>
-        {Array.from({ length: 6 }).map((_, i) => (
+      <View style={styles.grid} accessible accessibilityLabel="Loading live parameters">
+        {Array.from({ length: SKELETON_TILES }).map((_, i) => (
           <SkeletonTile key={i} themed={themed} />
         ))}
       </View>
     );
   } else if (params.length === 0) {
-    // A failed fetch is NOT "no parameters available" — don't assert a
-    // definitive empty state when we simply couldn't load the data.
-    // The header refresh button also recovers, but an explicit retry
-    // here is the discoverable path.
-    body = (
-      <View style={styles.statusBlock}>
-        <AppText fontSize={FONT_SIZE_XS} color={scheme.textSecondary} center>
-          {isError
-            ? "Couldn't load live parameters."
-            : 'No live parameters available for this site.'}
-        </AppText>
-        {isError ? (
-          <PressableScale
-            onPress={() => refetch()}
-            haptic="tap"
-            accessibilityLabel="Retry loading live parameters"
-            style={themed.retryButton}>
-            <AppText fontSize={FONT_SIZE_XXS} semi_bold color={scheme.textOnBrand}>
-              Retry
-            </AppText>
-          </PressableScale>
-        ) : null}
-      </View>
-    );
-  } else if (filtered.length === 0) {
-    body = (
-      <View style={styles.statusBlock}>
-        <AppText fontSize={FONT_SIZE_XS} color={scheme.textSecondary} center>
-          {debouncedQuery
-            ? `No parameters match "${debouncedQuery}".`
-            : 'Nothing in this category.'}
-        </AppText>
-      </View>
+    // A failed fetch is NOT "no parameters" — say what happened instead.
+    body =
+      isError && friendly ? (
+        <EmptyStateCard
+          kind={friendly.kind === 'offline' ? 'offline' : 'error'}
+          title={friendly.title}
+          message={friendly.message}
+          onRetry={handleRefresh}
+          retryLabel="Retry"
+        />
+      ) : (
+        <EmptyStateCard
+          kind="empty"
+          title="No live parameters"
+          message="This site isn't reporting any live parameters yet."
+        />
+      );
+  } else if (grid.tiles.length === 0) {
+    body = grid.searching ? (
+      <EmptyStateCard
+        kind="noMatch"
+        size="inline"
+        title={`No parameters match "${debouncedQuery.trim()}"`}
+        message="Check the spelling, or search by another name."
+        onRetry={clearSearch}
+        retryLabel="Clear search"
+      />
+    ) : (
+      <EmptyStateCard kind="empty" size="inline" title="Nothing in this category" />
     );
   } else {
     body = (
       <View style={styles.grid}>
         {visibleTiles.map(p => (
-          <ParamTile key={p.code} param={p} themed={themed} />
+          <ParamTile key={p.code} param={p} showCategory={grid.searching} themed={themed} />
         ))}
+        {/* An odd last tile shares its row with an invisible twin, so it
+            keeps the column width instead of stretching. */}
+        {visibleTiles.length % 2 === 1 ? <View style={styles.tileSpacer} /> : null}
       </View>
     );
   }
 
+  // Search + pills only make sense with parameters (or their skeleton,
+  // so nothing jumps when the first fetch lands).
+  const showControls = loading || params.length > 0;
+
   return (
     <View style={styles.container}>
+      <AgeClock onBucket={setAgeAnchor} />
       {/* ── Header ── */}
       <Animated.View entering={stagger(0)} style={styles.header}>
-        <View style={styles.headerLeft}>
-          <PulseDot color={scheme.brand} size={8} />
-          <OverlineLabel color={scheme.brand}>LIVE METRICS</OverlineLabel>
-          <AppText fontSize={FONT_SIZE_XS} color={scheme.textSecondary}>
-            ·{' '}
-            {filtered.length === params.length
-              ? `${params.length}`
-              : `${filtered.length} / ${params.length}`}
+        <View style={styles.headerText}>
+          <AppText variant="h3" accessibilityRole="header" numberOfLines={2}>
+            {grid.title}
           </AppText>
+          {params.length > 0 ? <LiveStatusLine lastUpdate={lastUpdate} /> : null}
         </View>
-        <PressableScale
-          onPress={() => refetch()}
-          haptic="tap"
+        <IconButton
+          variant="soft"
+          onPress={handleRefresh}
           disabled={isFetching}
-          accessibilityLabel="Refresh live parameters"
-          style={themed.refreshButton}>
+          busy={isFetching}
+          accessibilityLabel="Refresh live parameters">
           {isFetching ? (
-            <ActivityIndicator size="small" color={scheme.brand} />
+            <ActivityIndicator size="small" color={scheme.brandText} />
           ) : (
-            <RefreshIcon size={ICON_SIZE_MD} color={scheme.brand} />
+            <RefreshIcon size={ICON_SIZE_MD} color={scheme.brandText} />
           )}
-        </PressableScale>
+        </IconButton>
       </Animated.View>
 
-      {/* ── Search ── */}
-      <Animated.View entering={stagger(1)} style={themed.searchBar}>
-        <Magnify size={ICON_SIZE_MD} color={scheme.textTertiary} />
-        <AppTextInput
-          style={styles.searchInput}
-          placeholder="Search parameters"
-          value={query}
-          onChangeText={setQuery}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="search"
-        />
-        {query.length > 0 ? (
+      {refreshFailed ? (
+        <View style={themed.strip} accessibilityLiveRegion="polite">
+          <AppText variant="caption" tone="secondary" numberOfLines={2} style={styles.shrink}>
+            {STRIP_TEXT[friendly.kind === 'offline' ? 'offline' : 'failed']}
+          </AppText>
           <PressableScale
-            onPress={clearSearch}
-            haptic="tap"
-            hitSlop={8}
-            accessibilityLabel="Clear search"
-            style={styles.clearButton}>
-            <Close size={ICON_SIZE_XS} color={scheme.textSecondary} />
+            onPress={handleRefresh}
+            accessibilityLabel="Retry"
+            accessibilityHint="Refreshes the live parameters"
+            style={styles.stripRetry}>
+            <AppText variant="caption" semi_bold tone="brand">
+              Retry
+            </AppText>
           </PressableScale>
-        ) : null}
-      </Animated.View>
+        </View>
+      ) : null}
 
-      {/* ── Category filter pills ── */}
-      <Animated.View entering={stagger(2)}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterRow}>
-          {visibleCategories.map(cat => (
-            <FilterPill
-              key={cat.key}
-              active={activeCategory === cat.key}
-              color={cat.color}
-              label={cat.label}
-              count={countsByCategory[cat.key]}
-              onPress={() => setPickedCategory(cat.key)}
-              scheme={scheme}
-              themed={themed}
+      {showControls ? (
+        <>
+          {/* ── Search ── */}
+          <Animated.View entering={stagger(1)} style={themed.searchBar}>
+            <Magnify size={ICON_SIZE_MD} color={scheme.textSecondary} />
+            <AppTextInput
+              style={styles.searchInput}
+              placeholder="Search parameters"
+              accessibilityLabel="Search parameters"
+              value={query}
+              onChangeText={setQuery}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
             />
-          ))}
-        </ScrollView>
-      </Animated.View>
+            {query.length > 0 ? (
+              <PressableScale
+                onPress={clearSearch}
+                accessibilityLabel="Clear search"
+                style={styles.clearButton}>
+                <Close size={ICON_SIZE_XS} color={scheme.textSecondary} />
+              </PressableScale>
+            ) : null}
+          </Animated.View>
 
-      {/* ── Sort chips ── */}
-      <Animated.View entering={stagger(3)} style={styles.sortRow}>
-        <AppText
-          fontSize={FONT_SIZE_XXS}
-          medium
-          color={scheme.textTertiary}
-          style={styles.sortLabel}>
-          Sort
-        </AppText>
-        {(Object.keys(SORT_LABELS) as SortKey[]).map(key => (
-          <SortChip
-            key={key}
-            active={key === sortKey}
-            label={SORT_LABELS[key]}
-            onPress={() => setSortKey(key)}
-            scheme={scheme}
-            themed={themed}
-          />
-        ))}
-      </Animated.View>
+          {/* ── Category pills + sort ── */}
+          <Animated.View entering={stagger(2)} style={styles.controlsRow}>
+            {params.length === 0 ? (
+              <View style={styles.pillSkeletonRow}>
+                <Skeleton width={96} height={touch.pillVisual} radius="pill" />
+                <Skeleton width={88} height={touch.pillVisual} radius="pill" />
+                <Skeleton width={96} height={touch.pillVisual} radius="pill" />
+              </View>
+            ) : (
+              <>
+                <PillGroup label="Parameter category" scroll style={styles.pillScroll}>
+                  {grid.searching ? (
+                    <Pill
+                      key="all"
+                      label="All"
+                      count={grid.matchTotal}
+                      selected={grid.scope === 'all'}
+                      onPress={selectAllMatches}
+                    />
+                  ) : null}
+                  {grid.categories.map(key => (
+                    <Pill
+                      key={key}
+                      label={LIVE_CATEGORY_LABEL[key]}
+                      count={grid.counts[key]}
+                      selected={grid.searching ? grid.scope === key : grid.activeCategory === key}
+                      disabled={grid.searching && grid.counts[key] === 0}
+                      onPress={grid.searching ? scopeHandlers[key] : pickHandlers[key]}
+                    />
+                  ))}
+                </PillGroup>
+                <SortButton sortKey={sortKey} onPress={cycleSort} themed={themed} />
+              </>
+            )}
+          </Animated.View>
+        </>
+      ) : null}
 
       {/* ── Body ── */}
-      <Animated.View entering={stagger(4)}>{body}</Animated.View>
+      <Animated.View entering={stagger(3)}>{body}</Animated.View>
     </View>
   );
 };
 
 /* ─────────────── styles ─────────────── */
+
+/** Tile flex-basis: low enough that two always fit beside the gap. */
+const TILE_BASIS = '40%';
 
 const styles = StyleSheet.create({
   container: {
@@ -810,116 +684,148 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: space.md,
     paddingHorizontal: space.xs,
   },
-  headerLeft: {
+  headerText: {
+    flex: 1,
+    gap: 2,
+  },
+  statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.sm,
+    gap: 6,
+    minWidth: 0,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  shrink: {
+    flexShrink: 1,
+  },
+  stripRetry: {
+    minHeight: touch.min,
+    minWidth: touch.min,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: space.sm,
   },
   searchInput: {
     flex: 1,
   },
   clearButton: {
-    padding: 2,
+    width: touch.min,
+    height: touch.min,
+    // The bar's right padding is space.md; pull the 44pt box flush with
+    // the bar's edge so the icon keeps its old position.
+    marginRight: -space.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  filterRow: {
-    flexDirection: 'row',
-    gap: space.sm,
-    paddingHorizontal: space.xs,
-    paddingVertical: 4,
-  },
-  filterCount: {
-    marginLeft: 2,
-    opacity: 0.85,
-  },
-  sortRow: {
+  controlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
-    paddingHorizontal: space.xs,
+    minHeight: touch.min,
   },
-  sortLabel: {
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+  pillScroll: {
+    flex: 1,
+  },
+  pillSkeletonRow: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: space.sm,
+    overflow: 'hidden',
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: space.md,
   },
-  tileName: {
-    minHeight: 28,
+  tileSpacer: {
+    flexBasis: TILE_BASIS,
+    flexGrow: 1,
   },
-  statusBlock: {
-    paddingVertical: space['2xl'],
+  tileTop: {
+    gap: space.xs,
+  },
+  tileBottom: {
+    gap: 2,
+  },
+  valueRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'baseline',
+    columnGap: space.xs,
+  },
+  valueText: {
+    flexShrink: 1,
+  },
+  timeRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: space.sm,
+    gap: space.xs,
   },
 });
 
 const createStyles = (scheme: Scheme) =>
   StyleSheet.create({
-    refreshButton: {
-      width: 40,
-      height: 40,
-      borderRadius: radiusTokens.pill,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: scheme.brandSoft,
-    },
-    retryButton: {
-      paddingHorizontal: space.xl,
-      paddingVertical: space.sm,
-      borderRadius: radiusTokens.pill,
-      backgroundColor: scheme.brand,
-    },
     searchBar: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: space.sm,
-      height: 44,
+      minHeight: touch.min,
       paddingHorizontal: space.md,
       borderRadius: radiusTokens.pill,
       backgroundColor: scheme.surfaceMuted,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: scheme.border,
+      borderWidth: 1,
+      borderColor: scheme.borderStrong,
     },
-    filterPill: {
+    strip: {
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'space-between',
       gap: space.sm,
+      paddingLeft: space.md,
+      borderRadius: radiusTokens.md,
+      backgroundColor: scheme.statusSoft.warning,
+    },
+    sortButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: space.xs,
+      minHeight: touch.pillVisual,
+      minWidth: touch.min,
       paddingHorizontal: space.md,
-      paddingVertical: 8,
       borderRadius: radiusTokens.pill,
       borderWidth: 1,
-    },
-    sortChipActive: {
-      paddingHorizontal: space.md,
-      paddingVertical: 6,
-      borderRadius: radiusTokens.pill,
-      backgroundColor: scheme.brand,
-    },
-    sortChipInactive: {
-      paddingHorizontal: space.md,
-      paddingVertical: 6,
-      borderRadius: radiusTokens.pill,
-      backgroundColor: scheme.surface,
-      borderWidth: StyleSheet.hairlineWidth,
       borderColor: scheme.border,
+      backgroundColor: scheme.surface,
     },
     tile: {
-      flexBasis: '48%',
+      // Two columns at any width: 2 × 40% + gap always fits, and grow
+      // splits the rest evenly. An odd last tile gets a `tileSpacer` twin.
+      flexBasis: TILE_BASIS,
       flexGrow: 1,
-      minHeight: 130,
-      gap: 6,
-      padding: space.lg,
-      borderRadius: radiusTokens.xl,
+      minHeight: 100,
+      justifyContent: 'space-between',
+      gap: space.sm,
+      padding: space.md,
+      borderRadius: radiusTokens.lg,
       backgroundColor: scheme.surface,
       borderWidth: 1,
       borderColor: scheme.border,
-      overflow: 'hidden',
+    },
+    categoryTag: {
+      alignSelf: 'flex-start',
+      paddingHorizontal: 6,
+      paddingVertical: 1,
+      borderRadius: radiusTokens.pill,
+      backgroundColor: scheme.surfaceMuted,
     },
   });
 
-export default React.memo(LiveParameterView);
+export default memo(LiveParameterView);
