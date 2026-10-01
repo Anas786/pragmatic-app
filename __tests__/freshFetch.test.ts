@@ -21,7 +21,7 @@ import {
   type AxiosResponse,
   type InternalAxiosRequestConfig,
 } from 'axios';
-import { onlineManager } from '@tanstack/react-query';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { appAxios } from '../src/networking/config';
 import {
   FRESH_PARAM,
@@ -30,6 +30,7 @@ import {
   runUserRefresh,
 } from '../src/networking/freshFetch';
 import { useNow } from '../src/hooks/useNow';
+import { resetActiveSite, useSwitchActiveSite } from '../src/hooks/useSwitchActiveSite';
 import {
   SiteRefreshContext,
   useSiteRefresh,
@@ -239,5 +240,43 @@ describe('useSiteRefresh', () => {
     });
     expect(fallback).toHaveBeenCalledTimes(1);
     expect(bypassed).toBe(true);
+  });
+});
+
+/* ───────────── opening a site ───────────── */
+
+describe('opening a site (useSwitchActiveSite)', () => {
+  it('fetches its live data past the CDN; config keeps the CDN', async () => {
+    const prev = appAxios.defaults.adapter;
+    appAxios.defaults.adapter = adapter;
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    let tree: ReactTestRenderer | undefined;
+    try {
+      const out: { open?: (id: string) => void } = {};
+      const Probe = () => {
+        out.open = useSwitchActiveSite();
+        return null;
+      };
+      act(() => {
+        tree = renderer.create(
+          React.createElement(QueryClientProvider, { client }, React.createElement(Probe)),
+        );
+      });
+      await act(async () => {
+        out.open?.('site-9');
+        for (let i = 0; i < 5; i += 1) await new Promise(r => setTimeout(r, 0));
+      });
+      const data = sent.find(c => c.url?.includes('/protected/data/all/site-9'));
+      const config = sent.find(c => c.url?.includes('/protected/config/site/site-9'));
+      expect(data).toBeDefined();
+      expect(typeof data?.params?.[FRESH_PARAM]).toBe('number');
+      expect(config).toBeDefined();
+      expect(config?.params?.[FRESH_PARAM]).toBeUndefined();
+    } finally {
+      if (tree) act(() => tree?.unmount());
+      client.clear();
+      resetActiveSite();
+      appAxios.defaults.adapter = prev;
+    }
   });
 });

@@ -413,6 +413,11 @@ the same "x min ago" for up to 10–15 min.
   and its error Retry wrap `useSiteList().refresh` in `runUserRefresh`;
   `refresh` itself stays CDN-neutral because the automatic foreground-resume
   refresh (list > 5 min old) calls it too.
+- **Opening a site** (`useSwitchActiveSite`) fetches its `/data/all` with
+  `getSiteAllData(id, { bypassCdn: true })` — a per-request `_r`, no global
+  window, so the config / report-mapping prefetches sent alongside keep the
+  CDN. Without it the first paint showed the CDN copy (seen: "13 min ago"
+  while origin had 3 min). Same-site re-tap within staleTime sends nothing.
 - If the age doesn't drop after a refresh, the SITE hasn't synced: origin's
   `live.metadata.last_update` is the truth (Lucky Cement sat at 20:04 for
   25+ min on 2026-10-01 even with a cache-busting request).

@@ -1,6 +1,7 @@
 import { ISiteAllData, ISiteConfig, TrendDataResponse } from 'src/types';
 import { display, inspectError } from 'src/utils';
 import { appAxios } from '../config';
+import { FRESH_PARAM } from '../freshFetch';
 
 /**
  * GET /protected/data/all/{siteId}
@@ -14,15 +15,22 @@ import { appAxios } from '../config';
  * interceptor via `getValidAccessToken()`. 401s trigger a single
  * refresh-and-retry before the user is signed out.
  *
+ * `bypassCdn`: send this one request with a unique cache-busting param
+ * (freshFetch.ts) so CloudFront's shared copy — up to s-maxage = 15 min
+ * old — is skipped. Used when the user OPENS a site (useSwitchActiveSite),
+ * so the header age is accurate from the first paint.
+ *
  * Spec: openapi.yaml#/paths/protected/data/all/{id}/get
  */
 export const getSiteAllData = async (
   siteId: string,
+  options?: { bypassCdn?: boolean },
 ): Promise<ISiteAllData> => {
   if (!siteId) throw new Error('getSiteAllData: siteId is required');
   try {
     const { data } = await appAxios.get<ISiteAllData>(
       `/protected/data/all/${encodeURIComponent(siteId)}`,
+      options?.bypassCdn ? { params: { [FRESH_PARAM]: Date.now() } } : undefined,
     );
     return {
       live: data?.live ?? null,

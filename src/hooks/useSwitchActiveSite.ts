@@ -64,9 +64,14 @@ export const useSwitchActiveSite = () => {
     // drifted shorter value here made a same-site re-tap refire the large
     // /protected/data/all payload mid-navigation while the mounting
     // useSiteData observer simultaneously served the cache as fresh.
+    // Opening a site is a user action: its live data skips the CDN's
+    // shared copy (up to 15 min old), so the header's "Updated x min ago"
+    // is right from the first paint. Within staleTime (same-site re-tap)
+    // the cache still answers and nothing is sent. Config / report-mapping
+    // change rarely and keep the CDN.
     queryClient.prefetchQuery({
       queryKey: siteDataQueryKey(siteId),
-      queryFn: () => getSiteAllData(siteId),
+      queryFn: () => getSiteAllData(siteId, { bypassCdn: true }),
       staleTime: SITE_DATA_STALE_TIME,
     });
     queryClient.prefetchQuery({
