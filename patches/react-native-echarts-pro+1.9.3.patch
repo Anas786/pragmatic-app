@@ -1,0 +1,19 @@
+diff --git a/node_modules/react-native-echarts-pro/src/components/Echarts/index.js b/node_modules/react-native-echarts-pro/src/components/Echarts/index.js
+index c319b69..18081e8 100755
+--- a/node_modules/react-native-echarts-pro/src/components/Echarts/index.js
++++ b/node_modules/react-native-echarts-pro/src/components/Echarts/index.js
+@@ -50,6 +50,14 @@ function Echarts(props, ref) {
+      * @param {object} params
+      */
+     async getInstance(functionName, params) {
++      // PATCH (patches/react-native-echarts-pro+1.9.3.patch):
++      // Drop any cached result for this function BEFORE asking the WebView
++      // for a new one. Without this, the poll below finds the PREVIOUS
++      // call's value already sitting in `latestResult` and resolves with it
++      // ~50ms later, long before the fresh reply arrives — so every call
++      // after the first returns the previous render. For getDataURL that
++      // means Export always saved the chart's previous zoom/legend state.
++      delete latestResult.current[functionName];
+       eChartRef.current?.postMessage(
+         JSON.stringify({ type: "getInstance", functionName, params })
+       );

@@ -1,0 +1,63 @@
+diff --git a/node_modules/react-native-reanimated/Common/cpp/reanimated/LayoutAnimations/LayoutAnimationsManager.cpp b/node_modules/react-native-reanimated/Common/cpp/reanimated/LayoutAnimations/LayoutAnimationsManager.cpp
+index d7d3e8b..5d37f28 100644
+--- a/node_modules/react-native-reanimated/Common/cpp/reanimated/LayoutAnimations/LayoutAnimationsManager.cpp
++++ b/node_modules/react-native-reanimated/Common/cpp/reanimated/LayoutAnimations/LayoutAnimationsManager.cpp
+@@ -116,8 +116,19 @@ void LayoutAnimationsManager::startLayoutAnimation(
+   std::shared_ptr<Shareable> config, viewShareable;
+   {
+     auto lock = std::unique_lock<std::recursive_mutex>(animationsMutex_);
++    // patch-package (PES): backport of upstream #6920 (shipped in 3.17.0).
++    // The start is scheduled on the UI thread; if the view was removed in the
++    // meantime, clearLayoutAnimationConfig() already erased its config and the
++    // old operator[] read inserted + dereferenced a null shared_ptr (SIGSEGV).
++    if (!collection::contains(getConfigsForType(type), tag)) {
++      return;
++    }
+     config = getConfigsForType(type)[tag];
+   }
++  // patch-package (PES): same null guard as upstream 4.x startLayoutAnimation.
++  if (config == nullptr) {
++    return;
++  }
+   // TODO: cache the following!!
+   jsi::Value layoutAnimationRepositoryAsValue =
+       rt.global()
+diff --git a/node_modules/react-native-reanimated/Common/cpp/reanimated/LayoutAnimations/LayoutAnimationsProxy.cpp b/node_modules/react-native-reanimated/Common/cpp/reanimated/LayoutAnimations/LayoutAnimationsProxy.cpp
+index 8102462..cffa426 100644
+--- a/node_modules/react-native-reanimated/Common/cpp/reanimated/LayoutAnimations/LayoutAnimationsProxy.cpp
++++ b/node_modules/react-native-reanimated/Common/cpp/reanimated/LayoutAnimations/LayoutAnimationsProxy.cpp
+@@ -630,6 +630,14 @@ void LayoutAnimationsProxy::startEnteringAnimation(
+         Rect window{};
+         {
+           auto lock = std::unique_lock<std::recursive_mutex>(mutex);
++          // patch-package (PES): the view was removed before this job ran
++          // (startAnimationsRecursively cleared its config under this mutex).
++          // Don't start or record anything: for a deleted view nothing would
++          // ever end or cancel the entry, so it would leak with its views.
++          if (!layoutAnimationsManager_->hasLayoutAnimation(
++                  tag, LayoutAnimationType::ENTERING)) {
++            return;
++          }
+           layoutAnimations_.insert_or_assign(
+               tag, LayoutAnimation{finalView, current, parent, opacity});
+           window =
+@@ -698,6 +706,19 @@ void LayoutAnimationsProxy::startLayoutAnimation(
+     Rect window{};
+     {
+       auto lock = std::unique_lock<std::recursive_mutex>(mutex);
++      // patch-package (PES): the LAYOUT config disappeared before this job
++      // ran (view removed, or `layout` prop cleared). createLayoutAnimation()
++      // would record an entry (or bump an ongoing one's count) that no
++      // animation ever ends; if `layout` is set again, later Updates for this
++      // tag are then swallowed by updateOngoingAnimationTarget(). Only
++      // retarget an ongoing animation, like the no-layout-change Update path.
++      if (!layoutAnimationsManager_->hasLayoutAnimation(
++              tag, LayoutAnimationType::LAYOUT)) {
++        if (layoutAnimations_.contains(tag)) {
++          updateOngoingAnimationTarget(tag, mutation);
++        }
++        return;
++      }
+       createLayoutAnimation(mutation, oldView, surfaceId, tag);
+       window = surfaceManager.getWindow(surfaceId);
+     }
