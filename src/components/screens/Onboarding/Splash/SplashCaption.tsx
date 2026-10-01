@@ -140,7 +140,10 @@ function SplashCaption({
       <View style={styles.row}>
         {/* Poppins (the app's family): Regular for the line, SemiBold for
             the name — the web caption's 400 / 600 weights. */}
+        {/* fixedSize: the caption + Skia dots are a fixed-geometry layout
+            (baseline-aligned row), so it opts out of OS text scaling. */}
         <AppText
+          fixedSize
           numberOfLines={1}
           adjustsFontSizeToFit
           minimumFontScale={0.8}
@@ -148,7 +151,7 @@ function SplashCaption({
           {text.kind === 'named' ? (
             <>
               {`${SIGNING_IN}, `}
-              <AppText semi_bold style={styles.name}>
+              <AppText fixedSize semi_bold style={styles.name}>
                 {text.name}
               </AppText>
             </>
