@@ -1,34 +1,44 @@
 /**
- * SummaryView — v2 redesign.
+ * SummaryView — v3.
  *
  * Layout direction: command-center / glance-first.
  *
  *  ┌─────────────────────────────────────────┐
- *  │  PLANT YIELD · TODAY                    │  (hero card)
- *  │  4,628.32 mWh                  [icon]   │
- *  │  Revenue · USD 14,210.50                │
+ *  │ ● LIVE · YIELD             [To date] ⚡  │  (hero card)
+ *  │ TOTAL PLANT YIELD                       │
+ *  │ 142,781.74 MWh                          │
+ *  │ ─────────────────────────────────────── │
+ *  │ [icon] Revenue · to date                │
+ *  │        27,128,529.84 USD                │
  *  └─────────────────────────────────────────┘
  *
+ *  Environmental impact · Since commissioning
  *  ┌────────┐ ┌────────┐ ┌────────┐
- *  │ CO₂    │ │ COAL   │ │ TREES  │  (impact row)
- *  │ XX.XX  │ │ XX.XX  │ │ XX.XX  │
- *  │ Tons   │ │ Tons   │ │ Nos.   │
+ *  │ CO₂    │ │ Coal   │ │ Trees  │  (impact row, compact values)
+ *  │ 30.3K t│ │ 68.4M t│ │ 162M   │
  *  └────────┘ └────────┘ └────────┘
  *
+ *  Energy flow                       ● Live
  *  ┌─────────────────────────────────────────┐
- *  │ Energy Flow                             │
- *  │  ────────────────────────────           │
  *  │  [SLD diagram]                          │
  *  └─────────────────────────────────────────┘
  *
- * Data sources unchanged from the legacy implementation:
- *   - p24 (today's plant yield) drives every formula on this screen
- *   - site_info.revenue.tariff/currency drive the Revenue line
+ * Data (unchanged — every figure matches the web portal, rules O1–O3):
+ *   - p24 (`live.p24.value`) is the plant's CUMULATIVE yield counter, not
+ *     today's. The hero shows p24 / 1000 in MWh — the web prints the same
+ *     number with a lowercase 'mWh' typo — precise, never rescaled.
+ *   - Revenue = p24 × site_info.revenue.tariff, in site_info.revenue.currency
+ *     (from the backend; nothing is shown when it is missing).
+ *   - CO₂ / coal / trees are the same p24-based figures the web shows,
+ *     "since commissioning"; product owns their factors (O2).
+ *   - The LIVE / DELAYED badge and the Energy-flow Live tag read the site's
+ *     `live.metadata.last_update` via siteDetailModel's `headerLastUpdate` —
+ *     the SAME function the SiteDetail header uses, so the two can never
+ *     disagree, and the stamp the web portal shows (O6).
  */
 
-import React, { FC, ReactNode, useMemo } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import LottieView from 'lottie-react-native';
+import React, { FC, ReactNode, memo, useMemo } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import {
@@ -36,11 +46,10 @@ import {
   createBox,
   GlassChip,
   HeroGradientCard,
-  HeroLiveBadge,
+  HeroStatusBadge,
   HeroTopRow,
   HeroValueRow,
   OverlineLabel,
-  PulseDot,
 } from 'src/components/common';
 import {
   duration,
@@ -52,18 +61,15 @@ import {
   useThemedStyles,
 } from 'src/theme';
 import { BoltIcon } from 'src/assets/icons';
-import {
-  formatCardValue as formatCardValueLegacy,
-  formatNumber,
-  numericCardValue,
-  resolveCardValue,
-  FONT_SIZE_XXS,
-  FONT_SIZE_XS,
-  FONT_SIZE_SM,
-  FONT_SIZE_LG,
-  FONT_SIZE_XXL,
-} from 'src/utils';
+import { resolveCardValue } from 'src/utils/cards';
+import { numericCardValue } from 'src/utils/sources';
+import { formatQuantity } from 'src/utils/units';
+import { metricA11yLabel } from 'src/utils/a11y';
+import { dataFreshness } from 'src/utils/freshness';
+import { headerLastUpdate } from 'src/components/screens/Authenticated/SiteDetail/siteDetailModel';
+import { selectSldGraph } from 'src/utils/sld';
 import { useInteractionReady, useSiteConfig, useSiteData } from 'src/hooks';
+import { useNow } from 'src/hooks/useNow';
 import TabSkeleton from './TabSkeleton';
 import {
   DashboardStackParamList,
@@ -72,10 +78,10 @@ import {
   ISiteConfig,
 } from 'src/types';
 import { revenueLottie } from 'src/assets/lottie';
-import SLDDiagram from './SLDDiagram';
-import SummaryEnvImpact from './SummaryView/SummaryEnvImpact';
-
-void formatCardValueLegacy; // kept exported by utils; not consumed here
+import SLDDiagram, { SLDDiagramPlaceholder, SLDEmptyState } from './SLDDiagram';
+import SummaryEnvImpact, {
+  OneShotLottie,
+} from './SummaryView/SummaryEnvImpact';
 
 type SiteDetailRouteProp = RouteProp<DashboardStackParamList, 'SiteDetail'>;
 
@@ -99,14 +105,15 @@ const getP24 = (
 
 interface SummaryContext {
   tariff: number | undefined;
-  currency: string;
+  /** Backend currency code; undefined when the site config has none. */
+  currency: string | undefined;
 }
 
 const extractRevenueContext = (
   siteConfig: ISiteConfig | undefined | null,
 ): SummaryContext => {
   if (!siteConfig || typeof siteConfig !== 'object') {
-    return { tariff: undefined, currency: 'USD' };
+    return { tariff: undefined, currency: undefined };
   }
   const cfg = siteConfig as Record<string, unknown>;
   const siteInfo = cfg.site_info;
@@ -115,7 +122,7 @@ const extractRevenueContext = (
       ? (siteInfo as Record<string, unknown>).revenue
       : undefined;
   if (!revenueCfg || typeof revenueCfg !== 'object') {
-    return { tariff: undefined, currency: 'USD' };
+    return { tariff: undefined, currency: undefined };
   }
   const r = revenueCfg as Record<string, unknown>;
   return {
@@ -124,9 +131,9 @@ const extractRevenueContext = (
         ? r.tariff
         : undefined,
     currency:
-      typeof r.currency === 'string' && r.currency.length > 0
-        ? r.currency
-        : 'USD',
+      typeof r.currency === 'string' && r.currency.trim().length > 0
+        ? r.currency.trim()
+        : undefined,
   };
 };
 
@@ -152,9 +159,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  heroSectionLabel: {
+  heroYield: {
     marginTop: space.lg,
   },
+  // The ONE hero number: shrinks to fit (allowed for a single hero value)
+  // rather than truncating a digit.
   heroValueText: {
     flexShrink: 1,
   },
@@ -166,19 +175,20 @@ const styles = StyleSheet.create({
   heroRevenue: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: space.md,
   },
-  heroRevenueLeft: {
+  heroRevenueBody: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
+    gap: 2,
   },
-  heroRevenueRight: {
+  heroRevenueValueRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'baseline',
-    gap: 6,
+    columnGap: 6,
+  },
+  heroRevenueValue: {
+    flexShrink: 1,
   },
   smallLottie: {
     width: 28,
@@ -198,11 +208,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-  },
-  diagramPlaceholder: {
-    minHeight: 220,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });
 
@@ -233,15 +238,8 @@ const Container = createBox(styles.container, 'Container');
 const HeroTopRight = createBox(styles.heroTopRight, 'HeroTopRight');
 const HeroBoltWell = createBox(styles.heroBoltWell, 'HeroBoltWell');
 const HeroDivider = createBox(styles.heroDivider, 'HeroDivider');
-const HeroRevenue = createBox(styles.heroRevenue, 'HeroRevenue');
-const HeroRevenueLeft = createBox(styles.heroRevenueLeft, 'HeroRevenueLeft');
-const HeroRevenueRight = createBox(styles.heroRevenueRight, 'HeroRevenueRight');
 const SldHeader = createBox(styles.sldHeader, 'SldHeader');
 const LiveTag = createBox(styles.liveTag, 'LiveTag');
-const DiagramPlaceholder = createBox(
-  styles.diagramPlaceholder,
-  'DiagramPlaceholder',
-);
 
 const SmallIconWrap: FC<{ children?: ReactNode }> = ({ children }) => {
   const themed = useThemedStyles(createSummaryStyles);
@@ -254,6 +252,26 @@ const LiveDot: FC = () => {
   return <View style={themed.liveDot} />;
 };
 LiveDot.displayName = 'LiveDot';
+
+/**
+ * 'Live' tag beside the Energy-flow title — shown only while the data is
+ * live by the shared freshness model. A static dot: the hero badge is the
+ * screen's one pulsing element. Subscribes to the 30 s `useNow` tick on
+ * its own, so the Summary tree doesn't re-render on the tick.
+ */
+const SldLiveTag: FC<{ lastUpdate: number | null }> = memo(({ lastUpdate }) => {
+  const now = useNow();
+  if (dataFreshness(lastUpdate, now).level !== 'live') return null;
+  return (
+    <LiveTag accessible accessibilityLabel="Live data">
+      <LiveDot />
+      <AppText variant="caption" medium tone="brand">
+        Live
+      </AppText>
+    </LiveTag>
+  );
+});
+SldLiveTag.displayName = 'SldLiveTag';
 
 /* ─────────────── component ─────────────── */
 
@@ -269,7 +287,7 @@ const SummaryView: FC = () => {
   // LATER commit than the hero/env tree. InteractionManager.runAfterInteractions
   // fired on the next tick here — native-stack transitions and the tab-chip
   // morph register no JS interaction handles — so the "deferred" mount
-  // collapsed into the same commit as the rest of the tab and the spinner
+  // collapsed into the same commit as the rest of the tab and the
   // placeholder never showed. A second, longer mount-anchored timer is
   // deterministic: `ready` flips at 120 ms, the diagram at 300 ms, so the
   // heavy subtree never shares a commit with the main tree.
@@ -280,15 +298,49 @@ const SummaryView: FC = () => {
     [siteConfig],
   );
 
+  // Whether the site HAS a diagram is known from the config alone, so the
+  // section can show the compact empty state straight away instead of a
+  // 480pt placeholder that would collapse at the deferred mount.
+  const diagramState = useMemo<'unknown' | 'empty' | 'ready'>(() => {
+    if (siteConfig === undefined) return 'unknown';
+    return selectSldGraph(siteConfig) ? 'ready' : 'empty';
+  }, [siteConfig]);
+
+  // The SiteDetail header's own resolver (payload site stamp → newest
+  // parameter → the site-list value the Dashboard card showed), so the
+  // hero badge, the Energy-flow tag and the header show ONE age.
+  const routeLastUpdate = route.params.dataLastUpdate;
+  const lastUpdate = useMemo(
+    () => headerLastUpdate(liveData, routeLastUpdate),
+    [liveData, routeLastUpdate],
+  );
+
   const p24 = getP24(liveData);
 
   const yieldMwh = p24 !== undefined ? p24 * KWH_TO_MWH : undefined;
   const revenue =
-    p24 !== undefined && ctx.tariff !== undefined ? p24 * ctx.tariff : undefined;
+    p24 !== undefined && ctx.tariff !== undefined
+      ? p24 * ctx.tariff
+      : undefined;
 
   const co2Tons = p24 !== undefined ? p24 * 0.00021233 : undefined;
   const coalTons = p24 !== undefined ? p24 / 2.086 : undefined;
   const treesPlanted = p24 !== undefined ? p24 / 0.88 : undefined;
+
+  // Presentation only. Precise + the backend unit kept so the hero reads
+  // exactly like the web portal ('142,781.74 MWh', '27,128,529.84 USD').
+  const yieldQ = formatQuantity(yieldMwh, 'MWh', {
+    mode: 'precise',
+    rescale: false,
+  });
+  const revenueQ = formatQuantity(revenue, null, { mode: 'precise' });
+  const yieldA11y = metricA11yLabel('Total plant yield', yieldQ, ['to date']);
+  const revenueA11y = metricA11yLabel(
+    'Revenue to date',
+    revenueQ.isMissing || !ctx.currency
+      ? revenueQ
+      : { ...revenueQ, spoken: `${revenueQ.text} ${ctx.currency}` },
+  );
 
   // Open instantly → skeleton while the deferred mount settles or the
   // live payload is still loading from cache/API.
@@ -298,103 +350,96 @@ const SummaryView: FC = () => {
 
   return (
     <Container>
-      {/* ── Hero — Plant Yield + Revenue ── */}
+      {/* ── Hero — Plant Yield + Revenue (cumulative, "to date") ── */}
       <Animated.View
         entering={FadeInDown.duration(duration.fast).springify().damping(20)}>
         <HeroGradientCard>
           <HeroTopRow>
-            <HeroLiveBadge>
-              <PulseDot color={scheme.heroOnGradient} size={8} />
-              <OverlineLabel color={scheme.heroOnGradient}>
-                LIVE · YIELD
-              </OverlineLabel>
-            </HeroLiveBadge>
+            <HeroStatusBadge
+              mode="live"
+              label="Yield"
+              lastUpdate={lastUpdate}
+            />
             <HeroTopRight>
               <GlassChip>
-                <AppText
-                  fontSize={FONT_SIZE_XXS}
-                  bold
-                  color={scheme.heroOnGradient}>
-                  TODAY
+                <AppText variant="micro" semi_bold tone="onHero">
+                  To date
                 </AppText>
               </GlassChip>
-              <HeroBoltWell>
+              <HeroBoltWell
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants">
                 <BoltIcon size={18} color={scheme.heroOnGradient} />
               </HeroBoltWell>
             </HeroTopRight>
           </HeroTopRow>
 
-          <OverlineLabel
-            color={scheme.heroOnGradientMuted}
-            style={styles.heroSectionLabel}>
-            PLANT YIELD
-          </OverlineLabel>
-          <HeroValueRow>
-            <AppText
-              fontSize={FONT_SIZE_XXL}
-              bold
-              color={scheme.heroOnGradient}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.5}
-              style={styles.heroValueText}>
-              {formatNumber(yieldMwh)}
-            </AppText>
-            <AppText
-              fontSize={FONT_SIZE_SM}
-              color={scheme.heroOnGradientMuted}
-              medium>
-              mWh
-            </AppText>
-          </HeroValueRow>
+          <View
+            style={styles.heroYield}
+            accessible
+            accessibilityLabel={yieldA11y}>
+            <OverlineLabel color={scheme.heroOnGradientMuted}>
+              Total plant yield
+            </OverlineLabel>
+            <HeroValueRow>
+              <AppText
+                variant="numberLg"
+                bold
+                tone={yieldQ.isMissing ? 'onHeroMuted' : 'onHero'}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+                style={styles.heroValueText}>
+                {yieldQ.text}
+              </AppText>
+              {yieldQ.unit ? (
+                <AppText variant="body" medium tone="onHeroMuted">
+                  {yieldQ.unit}
+                </AppText>
+              ) : null}
+            </HeroValueRow>
+          </View>
 
           <HeroDivider />
 
-          <HeroRevenue>
-            <HeroRevenueLeft>
-              <SmallIconWrap>
-                <LottieView
-                  source={revenueLottie}
-                  autoPlay
-                  loop
-                  style={styles.smallLottie}
-                />
-              </SmallIconWrap>
-              <View>
-                <OverlineLabel color={scheme.heroOnGradientMuted}>
-                  REVENUE
-                </OverlineLabel>
+          <View
+            style={styles.heroRevenue}
+            accessible
+            accessibilityLabel={revenueA11y}>
+            <SmallIconWrap>
+              <OneShotLottie
+                source={revenueLottie}
+                style={styles.smallLottie}
+              />
+            </SmallIconWrap>
+            <View style={styles.heroRevenueBody}>
+              <AppText variant="caption" tone="onHeroMuted">
+                Revenue · to date
+              </AppText>
+              <View style={styles.heroRevenueValueRow}>
                 <AppText
-                  fontSize={FONT_SIZE_XS}
-                  color={scheme.heroOnGradient}>
-                  Today's earnings
+                  variant="numberMd"
+                  bold
+                  tone={revenueQ.isMissing ? 'onHeroMuted' : 'onHero'}
+                  style={styles.heroRevenueValue}>
+                  {revenueQ.text}
                 </AppText>
+                {ctx.currency && !revenueQ.isMissing ? (
+                  <AppText variant="caption" tone="onHeroMuted">
+                    {ctx.currency}
+                  </AppText>
+                ) : null}
               </View>
-            </HeroRevenueLeft>
-            <HeroRevenueRight>
-              <AppText
-                fontSize={FONT_SIZE_LG}
-                bold
-                color={scheme.heroOnGradient}
-                numberOfLines={1}>
-                {formatNumber(revenue)}
-              </AppText>
-              <AppText
-                fontSize={FONT_SIZE_XXS}
-                color={scheme.heroOnGradientMuted}>
-                {ctx.currency}
-              </AppText>
-            </HeroRevenueRight>
-          </HeroRevenue>
+            </View>
+          </View>
         </HeroGradientCard>
       </Animated.View>
 
-      {/* ── Environmental Impact — 3 cards ── */}
+      {/* ── Environmental impact — 3 cards ── */}
       <SummaryEnvImpact
         co2Tons={co2Tons}
         coalTons={coalTons}
         treesPlanted={treesPlanted}
-        formatNumber={formatNumber}
       />
 
       {/* ── Energy Flow Diagram (SLD) ──
@@ -409,22 +454,19 @@ const SummaryView: FC = () => {
           .damping(20)}
         style={styles.sldSection}>
         <SldHeader>
-          <OverlineLabel color={scheme.textTertiary}>
-            ENERGY FLOW
-          </OverlineLabel>
-          <LiveTag>
-            <LiveDot />
-            <AppText fontSize={FONT_SIZE_XXS} color={scheme.brand} medium>
-              Live
-            </AppText>
-          </LiveTag>
+          <AppText variant="h3" tone="primary" accessibilityRole="header">
+            Energy flow
+          </AppText>
+          {diagramState === 'ready' ? (
+            <SldLiveTag lastUpdate={lastUpdate} />
+          ) : null}
         </SldHeader>
-        {showDiagram ? (
+        {diagramState === 'empty' ? (
+          <SLDEmptyState />
+        ) : showDiagram && diagramState === 'ready' ? (
           <SLDDiagram />
         ) : (
-          <DiagramPlaceholder>
-            <ActivityIndicator color={scheme.brand} />
-          </DiagramPlaceholder>
+          <SLDDiagramPlaceholder />
         )}
       </Animated.View>
     </Container>

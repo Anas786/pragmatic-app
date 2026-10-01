@@ -22,19 +22,48 @@
  * and the mode pill.
  */
 
-import React, { FC, useCallback, useMemo, useState } from 'react';
+import React, { FC, useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import { StatusBar, StyleSheet, View } from 'react-native';
-import { useSafeAreaFrame, useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  useSafeAreaFrame,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { AppText } from 'src/components/common';
-import { Scheme, useScheme, useThemedStyles } from 'src/theme';
-import { FONT_SIZE_XS } from 'src/utils';
+import { ErrorBoundary, IconButton } from 'src/components/common';
+import { Scheme, space, useScheme, useThemedStyles } from 'src/theme';
+import { ICON_SIZE_MD } from 'src/utils';
 import { DashboardStackParamList } from 'src/types';
+import { Close } from 'src/assets/icons';
 import SLDViewport from './SLDViewport';
+import { SLDEmptyState } from './SLDDiagram';
 import { useSldModel } from './useSldModel';
 import { rotateInsets, SLD_FULLSCREEN_ROTATION_DEG } from './sldViewportFit';
 
-type SLDFullscreenRouteProp = RouteProp<DashboardStackParamList, 'SLDFullscreen'>;
+/**
+ * Renders nothing; reports whether the ErrorBoundary's children are
+ * COMMITTED. The parent's flag starts false and only this probe sets it
+ * true, so:
+ *   - healthy mount → true in a layout effect (before paint, so the Close
+ *     fallback button never flashes over the viewport);
+ *   - crash on the FIRST render → React discards the whole child tree, the
+ *     probe never commits and the flag stays false (Close shows);
+ *   - crash on a later update → the children unmount (→ false);
+ *   - 'Reload section' → the children remount (→ true).
+ */
+const ViewportMountProbe: FC<{
+  onMountedChange: (mounted: boolean) => void;
+}> = ({ onMountedChange }) => {
+  useLayoutEffect(() => {
+    onMountedChange(true);
+    return () => onMountedChange(false);
+  }, [onMountedChange]);
+  return null;
+};
+
+type SLDFullscreenRouteProp = RouteProp<
+  DashboardStackParamList,
+  'SLDFullscreen'
+>;
 
 const SLDFullscreenScreen: FC = () => {
   const scheme = useScheme();
@@ -49,12 +78,14 @@ const SLDFullscreenScreen: FC = () => {
   const { width: W, height: H } = useSafeAreaFrame();
   const { top, right, bottom, left } = useSafeAreaInsets();
   const contentInsets = useMemo(
-    () => rotateInsets({ top, right, bottom, left }, SLD_FULLSCREEN_ROTATION_DEG),
+    () =>
+      rotateInsets({ top, right, bottom, left }, SLD_FULLSCREEN_ROTATION_DEG),
     [top, right, bottom, left],
   );
 
   // Same model (and shared Grouped/Units mode) as the inline diagram.
-  const { graph, bounds, resolve, mode, setMode, canGroup } = useSldModel(siteId);
+  const { graph, bounds, resolve, mode, setMode, canGroup } =
+    useSldModel(siteId);
   // Owned here so they survive the keyed Grouped ⇄ Units remount below.
   const [locked, setLocked] = useState(true);
   const [orthogonal, setOrthogonal] = useState(true);
@@ -74,6 +105,20 @@ const SLDFullscreenScreen: FC = () => {
     [W, H, landscapeW, landscapeH],
   );
   const close = useCallback(() => navigation.goBack(), [navigation]);
+  // True only once the viewport subtree has committed (see
+  // ViewportMountProbe) — false while the ErrorBoundary below shows its
+  // fallback, including after a crash on the very first render.
+  const [viewportMounted, setViewportMounted] = useState(false);
+  const closeButtonStyle = useMemo(
+    () => [
+      styles.closeButton,
+      {
+        top: contentInsets.top + space.sm,
+        left: contentInsets.left + space.sm,
+      },
+    ],
+    [contentInsets.top, contentInsets.left],
+  );
 
   return (
     <View style={themed.root}>
@@ -81,34 +126,58 @@ const SLDFullscreenScreen: FC = () => {
       <View style={rotatedStyle}>
         {graph.nodes.length === 0 ? (
           <View style={themed.center}>
-            <AppText fontSize={FONT_SIZE_XS} color={scheme.textSecondary} center>
-              No energy-flow diagram configured for this site.
-            </AppText>
+            <SLDEmptyState onClose={close} />
           </View>
         ) : (
-          <SLDViewport
-            key={mode}
-            graph={graph}
-            bounds={bounds}
-            resolve={resolve}
-            width={landscapeW}
-            height={landscapeH}
-            fullscreen
-            rotated
-            onClose={close}
-            safeInsets={contentInsets}
-            groupMode={canGroup ? mode : undefined}
-            onGroupModeChange={setMode}
-            locked={locked}
-            onLockedChange={setLocked}
-            orthogonal={orthogonal}
-            onOrthogonalChange={setOrthogonal}
-          />
+          <View style={styles.fill}>
+            <ErrorBoundary label="Energy-flow diagram" resetKey={siteId}>
+              <ViewportMountProbe onMountedChange={setViewportMounted} />
+              <SLDViewport
+                key={mode}
+                graph={graph}
+                bounds={bounds}
+                resolve={resolve}
+                width={landscapeW}
+                height={landscapeH}
+                fullscreen
+                rotated
+                onClose={close}
+                safeInsets={contentInsets}
+                groupMode={canGroup ? mode : undefined}
+                onGroupModeChange={setMode}
+                locked={locked}
+                onLockedChange={setLocked}
+                orthogonal={orthogonal}
+                onOrthogonalChange={setOrthogonal}
+              />
+            </ErrorBoundary>
+          </View>
         )}
+        {graph.nodes.length > 0 && !viewportMounted ? (
+          <IconButton
+            variant="soft"
+            onPress={close}
+            accessibilityLabel="Close"
+            style={closeButtonStyle}>
+            <Close size={ICON_SIZE_MD} color={scheme.textPrimary} />
+          </IconButton>
+        ) : null}
       </View>
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  // Centres the boundary's fallback card; the viewport itself is exactly
+  // the frame's size, so it is unaffected.
+  fill: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  closeButton: {
+    position: 'absolute',
+  },
+});
 
 const createStyles = (scheme: Scheme) =>
   StyleSheet.create({
@@ -118,8 +187,8 @@ const createStyles = (scheme: Scheme) =>
     },
     center: {
       flex: 1,
-      alignItems: 'center',
       justifyContent: 'center',
+      paddingHorizontal: space['3xl'],
     },
   });
 

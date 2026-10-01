@@ -1,14 +1,22 @@
-import React, { FC, useState } from 'react';
+/**
+ * SourceTile — one Cards-tab metric.
+ *
+ *  ┌──────────────────────────┐
+ *  │ [icon well]              │  tinted by energy source; neutral for
+ *  │ Wind Energy              │  load / other. Label = backend name in its
+ *  │ 147,786.00 kWh           │  own case, wraps to 2 lines (never '…').
+ *  └──────────────────────────┘
+ *
+ * Every display string is precomputed once per fetch in CardsView
+ * (`ResolvedCard`), so a memoised tile renders with zero formatting work.
+ * The whole tile is ONE accessible element ('Wind Energy Today, 147,786.00
+ * kilowatt hours, wind').
+ */
+import React, { FC, memo, useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import {
-  AppText,
-  Dot,
-  IconWell,
-  Surface,
-  TintedPill,
-} from 'src/components/common';
+import { AppText, Dot, IconWell, Surface } from 'src/components/common';
 import {
   duration,
   radius as radiusTokens,
@@ -17,9 +25,10 @@ import {
   useScheme,
   useThemedStyles,
 } from 'src/theme';
-import { FONT_SIZE_LG, FONT_SIZE_XXS } from 'src/utils';
 import { LottieIcon } from 'src/assets/gif';
 import { ICardConfig } from 'src/types';
+import type { CardBucket } from 'src/utils/cards';
+import type { FormattedQuantity } from 'src/utils/units';
 
 /* Gradient direction constants — extracted so each render doesn't
    allocate a fresh `{ x, y }` object for every <LinearGradient>. */
@@ -28,12 +37,12 @@ const GRADIENT_BR = { x: 1, y: 1 } as const;
 
 const STAGGER_MS = 50;
 const STAGGER_CAP = 6;
-// Only the first ANIM_LIMIT tiles get the entrance worklet — the card
-// list is backend-config-driven and unbounded, and N concurrent mount
-// worklets in one commit is the regime that SIGABRT'd LiveParameterView
-// (see its file header). Same convention as SiteCard / InverterCard /
-// AlarmRow (§19).
-const ANIM_LIMIT = 10;
+// Only the first ANIM_LIMIT tiles (counted across ALL sections) get the
+// entrance worklet — the card list is backend-config-driven and unbounded,
+// and N concurrent mount worklets in one commit is the regime that
+// SIGABRT'd LiveParameterView (see its file header). Same convention as
+// SiteCard / InverterCard / AlarmRow (§19).
+export const ANIM_LIMIT = 10;
 
 export type SourceToken =
   | 'solar'
@@ -45,27 +54,26 @@ export type SourceToken =
   | 'other';
 
 export interface ResolvedCard {
+  /** Stable React key: `${objKey}:${name}` (de-duplicated). */
+  key: string;
   card: ICardConfig;
-  formatted: string;
-  numeric: number | null;
+  bucket: CardBucket;
+  /** Display label (context-redundant words stripped, original case). */
+  label: string;
+  /** Formatted value — `text` + `unit`, or `isMissing`. */
+  quantity: FormattedQuantity;
+  /** Composed screen-reader label for the whole tile. */
+  a11yLabel: string;
   lottie: LottieIcon | null;
   source: SourceToken;
-  accent: string;
-  bucket: 'now' | 'today' | 'other';
+  /** Energy-source fill (6-digit hex) — undefined for neutral tiles. */
+  accent: string | undefined;
 }
-
-const shortLabel = (name: string): string => {
-  const cleaned = name
-    .replace(/\s*-\s*RealTime/i, '')
-    .replace(/\s+Today$/i, '')
-    .replace(/\s+Generation$/i, '');
-  if (cleaned.length <= 18) return cleaned;
-  return cleaned.slice(0, 17) + '…';
-};
 
 const createTileStyles = (scheme: Scheme) =>
   StyleSheet.create({
     tile: {
+      flexGrow: 1,
       overflow: 'hidden',
       minHeight: 130,
       gap: space.sm,
@@ -83,17 +91,19 @@ const createTileStyles = (scheme: Scheme) =>
 
 interface SourceTileProps {
   resolved: ResolvedCard;
+  /** Position across the whole tab (drives the ANIM_LIMIT cap). */
   index: number;
 }
 
 const SourceTile: FC<SourceTileProps> = ({ resolved, index }) => {
   const scheme = useScheme();
   const themed = useThemedStyles(createTileStyles);
-  const { card, formatted, lottie, accent } = resolved;
+  const { label, quantity, lottie, accent, a11yLabel } = resolved;
   // Frozen at first mount: if `index` later crosses the ANIM_LIMIT
   // boundary (bucket re-shuffles on a data refresh), the wrapper element
   // type must not flip — that would remount the tile.
   const [animateEntrance] = useState(() => index < ANIM_LIMIT);
+  const missing = quantity.isMissing;
 
   const body = (
     <Surface
@@ -101,58 +111,61 @@ const SourceTile: FC<SourceTileProps> = ({ resolved, index }) => {
       radius="xl"
       background={scheme.surface}
       padding={space.lg}
+      accessible
+      accessibilityLabel={a11yLabel}
       style={themed.tile}>
-      {/* gradient sweep top-left → fade */}
-      <LinearGradient
-        colors={[accent + '24', accent + '00']}
-        start={GRADIENT_TL}
-        end={GRADIENT_BR}
-        style={StyleSheet.absoluteFillObject}
-        pointerEvents="none"
-      />
-      <View style={styles.tileHeader}>
-        <IconWell color={accent} alpha="1F" size={44} radius={radiusTokens.md}>
-          {lottie ? (
-            <Image
-              source={lottie.path}
-              style={styles.tileIconImage}
-              resizeMode="contain"
-              accessibilityLabel={lottie.name}
-            />
-          ) : (
-            <Dot color={accent} size={14} />
-          )}
-        </IconWell>
-        <TintedPill color={accent} alpha="" paddingX={space.sm} paddingY={3}>
-          <AppText fontSize={FONT_SIZE_XXS} bold color={scheme.textOnBrand}>
-            {resolved.source.toUpperCase()}
-          </AppText>
-        </TintedPill>
-      </View>
+      {/* Source tint sweep — energy sources with a value only. Neutral
+          (load / other) and 'No data' tiles stay flat. */}
+      {accent && !missing ? (
+        <LinearGradient
+          colors={[accent + '24', accent + '00']}
+          start={GRADIENT_TL}
+          end={GRADIENT_BR}
+          style={StyleSheet.absoluteFillObject}
+          pointerEvents="none"
+        />
+      ) : null}
+      <IconWell
+        color={accent ?? scheme.surfaceMuted}
+        alpha={accent ? '1F' : ''}
+        size={44}
+        radius={radiusTokens.md}>
+        {lottie ? (
+          <Image
+            source={lottie.path}
+            style={styles.tileIconImage}
+            resizeMode="contain"
+          />
+        ) : (
+          <Dot color={accent ?? scheme.textSecondary} size={14} />
+        )}
+      </IconWell>
 
       <AppText
-        fontSize={FONT_SIZE_XXS}
-        color={scheme.textTertiary}
+        variant="caption"
         medium
-        numberOfLines={1}
+        tone="secondary"
+        numberOfLines={2}
         style={styles.tileLabel}>
-        {shortLabel(card.name)}
+        {label}
       </AppText>
 
-      <View style={styles.tileValueRow}>
-        <AppText
-          fontSize={FONT_SIZE_LG}
-          bold
-          color={scheme.textPrimary}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.6}>
-          {formatted}
+      {missing ? (
+        <AppText variant="caption" tone="tertiary">
+          No data
         </AppText>
-        <AppText fontSize={FONT_SIZE_XXS} color={scheme.textSecondary}>
-          {card.unit}
-        </AppText>
-      </View>
+      ) : (
+        <View style={styles.tileValueRow}>
+          <AppText variant="h3" bold tone="primary" style={styles.tileValue}>
+            {quantity.text}
+          </AppText>
+          {quantity.unit ? (
+            <AppText variant="caption" tone="secondary">
+              {quantity.unit}
+            </AppText>
+          ) : null}
+        </View>
+      )}
     </Surface>
   );
 
@@ -171,31 +184,43 @@ const SourceTile: FC<SourceTileProps> = ({ resolved, index }) => {
   return <View style={styles.tileWrap}>{body}</View>;
 };
 
+/**
+ * Invisible half-width cell for an odd tile count — keeps the last tile
+ * at half width instead of letting it stretch across the row.
+ */
+export const SourceTileSpacer: FC = () => (
+  <View
+    style={styles.tileWrap}
+    accessible={false}
+    importantForAccessibility="no-hide-descendants"
+    accessibilityElementsHidden
+  />
+);
+SourceTileSpacer.displayName = 'SourceTileSpacer';
+
 const styles = StyleSheet.create({
   tileWrap: {
     flexBasis: '48%',
     flexGrow: 1,
-  },
-  tileHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: space.sm,
   },
   tileIconImage: {
     width: 26,
     height: 26,
   },
   tileLabel: {
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
     marginTop: space.xs,
   },
   tileValueRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'baseline',
-    gap: 6,
+    columnGap: 6,
+  },
+  // Shrinks (and, only at the largest text sizes, wraps) instead of
+  // overflowing the tile — a single fixed size, no adjustsFontSizeToFit.
+  tileValue: {
+    flexShrink: 1,
   },
 });
 
-export default SourceTile;
+export default memo(SourceTile);

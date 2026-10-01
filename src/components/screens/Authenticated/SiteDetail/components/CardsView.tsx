@@ -1,27 +1,27 @@
 /**
- * CardsView — v4 (no hero).
+ * CardsView — v5 (no hero, honest sections).
  *
- * The previous "TOTAL LOAD + POWER MIX" hero was removed because the
- * site's cards are heterogeneous (power, energy, temperature, voltage,
- * …) — summing them produces a meaningless "total", and a per-source
- * "mix" is fiction when the cards aren't all generation on the same
- * bus. The grid speaks for itself.
+ * The site's backend cards are heterogeneous (power, energy, irradiance,
+ * temperature, …), so the tab shows them as-is — no summed "total", no
+ * invented mix — grouped by the time window each card's NAME states
+ * (`cardBucket`, src/utils/cards.ts):
  *
- *  ┌── LIVE METRICS · 16 ──────────────────────┐
- *  │  ●                                        │
- *  ├───────────────────────────────────────────┤
- *  │ POWER NOW                                 │
- *  │ ┌──────┐ ┌──────┐                         │
- *  │ │ Solar│ │ Wind │ …                       │
- *  │ └──────┘ └──────┘                         │
- *  │                                           │
- *  │ TODAY'S ENERGY                            │
- *  │ ┌──────┐ ┌──────┐                         │
- *  │ └──────┘ └──────┘                         │
- *  │                                           │
- *  │ OTHER                                     │
- *  │ ┌──────┐                                  │
- *  └───────────────────────────────────────────┘
+ *  Key metrics                           17 metrics
+ *
+ *  POWER NOW            ← kW / MW readings
+ *  ┌──────┐ ┌──────┐
+ *  │ Wind │ │ Solar│ …
+ *  └──────┘ └──────┘
+ *  ENERGY TODAY         ← kWh + 'Today' in the name
+ *  ENERGY THIS YEAR     ← YTD / month / week counters ('… this period' if mixed)
+ *  ENERGY LIFETIME
+ *  ENERGY               ← kWh with no period in the name (we don't guess)
+ *  OTHER METRICS        ← W/m², °C, %, unitless, peaks
+ *
+ * No PulseDot here: this is a current-values grid, but the LIVE heartbeat
+ * belongs to the Summary hero and the Live tab (one pulse per screen).
+ * Values are the backend's own numbers and units ('147,786.00 kWh') so the
+ * tab reads exactly like the web portal.
  */
 
 import React, { FC, useMemo } from 'react';
@@ -31,30 +31,30 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import {
   AppText,
   EmptyStateCard,
-  TintedPill,
   OverlineLabel,
-  PulseDot,
   createBox,
 } from 'src/components/common';
+import { duration, energyPalette, space } from 'src/theme';
 import {
-  duration,
-  energyPalette,
-  space,
-  useScheme,
-} from 'src/theme';
-import {
+  cardBucket,
+  cardTileLabel,
   extractCardConfigs,
-  formatCardValue,
+  formatCardDisplay,
+  groupCardSections,
   resolveCardValue,
-  sourceTokenFromName,
-  FONT_SIZE_XXS,
-} from 'src/utils';
+} from 'src/utils/cards';
+import { sourceTokenFromName } from 'src/utils/sources';
+import { metricA11yLabel } from 'src/utils/a11y';
+import { friendlyError } from 'src/utils/errors';
 import { resolveLottieIcon } from 'src/assets/gif';
 import { useInteractionReady, useSiteConfig, useSiteData } from 'src/hooks';
 import TabSkeleton from './TabSkeleton';
 import { DashboardStackParamList } from 'src/types';
-import { BoltIcon } from 'src/assets/icons';
-import SourceTile, { ResolvedCard, SourceToken } from './CardsView/SourceTile';
+import SourceTile, {
+  ResolvedCard,
+  SourceTileSpacer,
+  SourceToken,
+} from './CardsView/SourceTile';
 
 type SiteDetailRouteProp = RouteProp<DashboardStackParamList, 'SiteDetail'>;
 
@@ -63,9 +63,9 @@ type SiteDetailRouteProp = RouteProp<DashboardStackParamList, 'SiteDetail'>;
 /**
  * Classify a card by its source via the shared `sourceTokenFromName`
  * dictionary (CLAUDE.md §4.4/§9). Only names actually containing "load"
- * get the LOAD badge — generation totals ("Total Plant Yield", "Total
- * Generation") are NOT load, so unmatched names fall to the neutral
- * 'other' token instead.
+ * are LOAD — generation totals ("Total Plant Yield", "Total Generation")
+ * are NOT load, so unmatched names fall to the neutral 'other' token.
+ * Display only (tint + spoken source), never a value path.
  */
 const sourceFor = (name: string): SourceToken => {
   const token = sourceTokenFromName(name);
@@ -74,44 +74,21 @@ const sourceFor = (name: string): SourceToken => {
   return 'other';
 };
 
-/**
- * Section bucket for a card.
- *
- *  - Power units (kW / MW)          → POWER NOW
- *  - Energy units (kWh / MWh / GWh) → TODAY'S ENERGY, unless the name
- *    marks it as a lifetime/cumulative counter (Total Plant Yield, …),
- *    which belongs under OTHER — a lifetime total is not today's
- *    production. "…Today"/"Daily…" wins when both match ("Plant Yield
- *    Today" stays in TODAY'S ENERGY).
- *  - Everything else                → OTHER
- */
-const bucketFor = (
-  name: string,
-  rawUnit: string | undefined,
-): ResolvedCard['bucket'] => {
-  const unit = (rawUnit ?? '').toLowerCase();
-  if (unit === 'kw' || unit === 'mw') return 'now';
-  if (/\b[kmg]?wh\b/.test(unit)) {
-    if (/today|daily/i.test(name)) return 'today';
-    if (/total|lifetime|cumulative|yield/i.test(name)) return 'other';
-    return 'today';
-  }
-  return 'other';
-};
+const accentFor = (token: SourceToken): string | undefined =>
+  token === 'load' || token === 'other' ? undefined : energyPalette[token];
 
-const accentFor = (token: SourceToken, brand: string): string => {
-  if (token === 'load' || token === 'other') return brand;
-  return energyPalette[token];
-};
+const metricsCaption = (n: number) => `${n} metric${n === 1 ? '' : 's'}`;
 
-// Snappy sub-tab entrance: full 4-step stagger lands in ~270ms.
+// Snappy section entrance: a handful of sections at most.
 const stagger = (i: number) =>
-  FadeInDown.delay(30 * i).duration(duration.fast).springify().damping(20);
+  FadeInDown.delay(30 * i)
+    .duration(duration.fast)
+    .springify()
+    .damping(20);
 
 /* ─────────────── component ─────────────── */
 
 const CardsView: FC = () => {
-  const scheme = useScheme();
   const route = useRoute<SiteDetailRouteProp>();
   const { siteId } = route.params;
 
@@ -119,69 +96,82 @@ const CardsView: FC = () => {
     data: siteConfig,
     isLoading: configLoading,
     isError: configError,
+    error: configErrorObj,
     refetch: refetchConfig,
   } = useSiteConfig(siteId);
+  // A failed BACKGROUND refresh of `/data/all` over cached values is
+  // reported once, for every tab, by SiteDetail's one-line
+  // RefreshStatusStrip (with its own Retry) — so this tab shows no second
+  // error card for it. (CardsView only mounts once both payloads exist.)
   const {
     data: liveData,
     isLoading: dataLoading,
     isError: dataError,
     refetch: refetchData,
   } = useSiteData(siteId);
-  // Defer the SourceTile grid (each tile mounts a Lottie animation,
-  // which is expensive when many sources are configured) so the tab
-  // opens instantly with a skeleton on a cold visit.
+  // Defer the SourceTile grid (each tile decodes an animated GIF, which
+  // is expensive when many cards are configured) so the tab opens
+  // instantly with a skeleton on a cold visit.
   const ready = useInteractionReady();
 
+  // Every display string is built here, once per fetch — the memoised
+  // tiles do no formatting work in render.
   const resolved: ResolvedCard[] = useMemo(() => {
-    const configs = extractCardConfigs(siteConfig);
-    return configs.map(card => {
-      const rawValue = resolveCardValue(card, liveData);
-      const lottie = resolveLottieIcon(card.icon);
+    const seen = new Map<string, number>();
+    return extractCardConfigs(siteConfig).map(card => {
+      const bucket = cardBucket(card);
       const source = sourceFor(card.name);
-      const accent = accentFor(source, scheme.brand);
-      const num =
-        typeof rawValue === 'number' && Number.isFinite(rawValue)
-          ? rawValue
-          : null;
-      const bucket = bucketFor(card.name, card.unit);
+      const quantity = formatCardDisplay(
+        resolveCardValue(card, liveData),
+        card.unit,
+      );
+      const baseKey = `${card.objKey}:${card.name}`;
+      const dup = seen.get(baseKey) ?? 0;
+      seen.set(baseKey, dup + 1);
+      const sourceWord = source === 'load' || source === 'other' ? '' : source;
       return {
+        key: dup === 0 ? baseKey : `${baseKey}#${dup}`,
         card,
-        formatted: formatCardValue(rawValue, 2),
-        numeric: num,
-        lottie,
-        source,
-        accent,
         bucket,
+        label: cardTileLabel(card.name, bucket),
+        quantity,
+        a11yLabel: metricA11yLabel(card.name, quantity, [sourceWord]),
+        lottie: resolveLottieIcon(card.icon),
+        source,
+        accent: accentFor(source),
       };
     });
-  }, [siteConfig, liveData, scheme.brand]);
+  }, [siteConfig, liveData]);
 
-  const { nowTiles, todayTiles, otherTiles } = useMemo(
-    () => ({
-      nowTiles: resolved.filter(r => r.bucket === 'now'),
-      todayTiles: resolved.filter(r => r.bucket === 'today'),
-      otherTiles: resolved.filter(r => r.bucket === 'other'),
-    }),
+  const sections = useMemo(
+    () => groupCardSections(resolved, r => r.card),
     [resolved],
   );
 
-  const liveCount = resolved.length;
+  // friendlyError logs in __DEV__ — compute once per error, not per render.
+  const configFriendly = useMemo(
+    () => (configError ? friendlyError(configErrorObj) : null),
+    [configError, configErrorObj],
+  );
+
+  const count = resolved.length;
 
   // Open instantly → skeleton while the deferred mount settles or data
   // is still loading from cache/API.
-  if (!ready || ((configLoading || dataLoading) && liveCount === 0)) {
+  if (!ready || ((configLoading || dataLoading) && count === 0)) {
     return <TabSkeleton />;
   }
 
-  if (liveCount === 0) {
+  if (count === 0) {
     // A failed config fetch means we simply don't KNOW the card list —
     // don't assert "no cards configured" (factually wrong) with no way
-    // to recover. Same error-card + retry pattern as InverterTableCard.
-    if (configError) {
+    // to recover.
+    if (configFriendly) {
       return (
         <EmptyStateCard
-          title="Couldn't load site cards"
-          message="Tap retry to try again."
+          kind={configFriendly.kind === 'offline' ? 'offline' : 'error'}
+          title={configFriendly.title}
+          message={configFriendly.message}
           onRetry={() => {
             refetchConfig();
             if (dataError) refetchData();
@@ -189,97 +179,49 @@ const CardsView: FC = () => {
         />
       );
     }
-    return <EmptyStateCard message="No cards configured for this site." />;
+    return (
+      <EmptyStateCard
+        kind="notConfigured"
+        title="No metrics for this site"
+        message="Your administrator can add metric cards in the web portal."
+      />
+    );
   }
 
   return (
     <Container>
-      {/* ── Honest live header — no aggregate value, just a heartbeat ── */}
+      {/* ── Static section title — the Live tab owns the LIVE heartbeat ── */}
       <Animated.View entering={stagger(0)}>
-        <LiveHeaderRow>
-          <LiveHeaderLeft>
-            <PulseDot color={scheme.brand} size={8} />
-            <OverlineLabel color={scheme.textTertiary}>
-              LIVE METRICS
-            </OverlineLabel>
-          </LiveHeaderLeft>
-          {/* TintedPill — GlassChip's translucent-white bg disappears
-              on the light page background. A brand-tinted pill reads
-              cleanly in both modes and matches the LIVE pulse-dot
-              tone. */}
-          <TintedPill color={scheme.brand} alpha="1F" row paddingX={space.sm}>
-            <BoltIcon size={11} color={scheme.brand} />
-            <AppText fontSize={FONT_SIZE_XXS} bold color={scheme.brand}>
-              {liveCount}
-            </AppText>
-          </TintedPill>
-        </LiveHeaderRow>
+        <TitleRow>
+          <AppText variant="h3" tone="primary" accessibilityRole="header">
+            Key metrics
+          </AppText>
+          <AppText variant="caption" tone="secondary">
+            {metricsCaption(count)}
+          </AppText>
+        </TitleRow>
       </Animated.View>
 
-      {/* Config resolved but the live-data fetch failed — the tiles
-          below show cached (possibly stale) or NA values. Surface the
-          failure + an in-place retry instead of failing silently. */}
-      {dataError ? (
-        <EmptyStateCard
-          padding="lg"
-          message="Live values couldn't be refreshed."
-          onRetry={() => refetchData()}
-        />
-      ) : null}
-
-      {/* ── Power now ─────────────────────────────────────────── */}
-      {ready && nowTiles.length > 0 ? (
-        <Animated.View entering={stagger(1)}>
-          {/* No hardcoded unit annotation — buckets mix kW/MW (and
-              kWh/MWh/GWh below); every tile shows its own card.unit. */}
-          <SectionHeader>
-            <OverlineLabel color={scheme.textTertiary}>POWER NOW</OverlineLabel>
+      {sections.map((section, s) => (
+        <Animated.View key={section.bucket} entering={stagger(s + 1)}>
+          <SectionHeader
+            accessible
+            accessibilityRole="header"
+            accessibilityLabel={section.title}>
+            <OverlineLabel tone="secondary">{section.title}</OverlineLabel>
           </SectionHeader>
           <Grid>
-            {nowTiles.map((r, i) => (
-              <SourceTile key={`now-${i}`} resolved={r} index={i} />
-            ))}
-          </Grid>
-        </Animated.View>
-      ) : null}
-
-      {/* ── Today's energy ────────────────────────────────────── */}
-      {ready && todayTiles.length > 0 ? (
-        <Animated.View entering={stagger(2)}>
-          <SectionHeader>
-            <OverlineLabel color={scheme.textTertiary}>
-              TODAY'S ENERGY
-            </OverlineLabel>
-          </SectionHeader>
-          <Grid>
-            {todayTiles.map((r, i) => (
+            {section.items.map((r, i) => (
               <SourceTile
-                key={`today-${i}`}
+                key={r.key}
                 resolved={r}
-                index={nowTiles.length + i}
+                index={section.startIndex + i}
               />
             ))}
+            {section.items.length % 2 === 1 ? <SourceTileSpacer /> : null}
           </Grid>
         </Animated.View>
-      ) : null}
-
-      {/* ── Other ─────────────────────────────────────────────── */}
-      {ready && otherTiles.length > 0 ? (
-        <Animated.View entering={stagger(3)}>
-          <SectionHeader>
-            <OverlineLabel color={scheme.textTertiary}>OTHER</OverlineLabel>
-          </SectionHeader>
-          <Grid>
-            {otherTiles.map((r, i) => (
-              <SourceTile
-                key={`other-${i}`}
-                resolved={r}
-                index={nowTiles.length + todayTiles.length + i}
-              />
-            ))}
-          </Grid>
-        </Animated.View>
-      ) : null}
+      ))}
     </Container>
   );
 };
@@ -288,21 +230,15 @@ const styles = StyleSheet.create({
   container: {
     gap: space.lg,
   },
-  liveHeaderRow: {
+  titleRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'baseline',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    columnGap: space.sm,
     paddingHorizontal: space.xs,
   },
-  liveHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-  },
   sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: space.xs,
     paddingBottom: space.sm,
   },
@@ -314,8 +250,7 @@ const styles = StyleSheet.create({
 });
 
 const Container = createBox(styles.container, 'Container');
-const LiveHeaderRow = createBox(styles.liveHeaderRow, 'LiveHeaderRow');
-const LiveHeaderLeft = createBox(styles.liveHeaderLeft, 'LiveHeaderLeft');
+const TitleRow = createBox(styles.titleRow, 'TitleRow');
 const SectionHeader = createBox(styles.sectionHeader, 'SectionHeader');
 const Grid = createBox(styles.grid, 'Grid');
 

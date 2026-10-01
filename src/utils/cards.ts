@@ -1,5 +1,12 @@
 import { ICardConfig, ISiteAllData, ISiteConfig } from 'src/types';
 import { tryNumber } from './parsers';
+import { CardPeriod, periodFromCard, periodFromName } from './sources';
+import {
+  formatQuantity,
+  FormattedQuantity,
+  isRateUnit,
+  unitFamily,
+} from './units';
 
 /**
  * Card config + live-data resolver pipeline.
@@ -60,8 +67,8 @@ export const normalizeCardConfig = (raw: unknown): ICardConfig | null => {
       typeof raw.colour === 'string'
         ? raw.colour
         : typeof raw.color === 'string'
-          ? raw.color
-          : undefined,
+        ? raw.color
+        : undefined,
     icon: typeof raw.icon === 'string' ? raw.icon : undefined,
     decimalPlaces,
     dataStore,
@@ -120,7 +127,9 @@ export const resolveCardValue = (
   liveData: ISiteAllData | undefined | null,
 ): unknown => {
   if (!liveData) return undefined;
-  const branch = (liveData as unknown as Record<string, unknown>)[card.dataStore];
+  const branch = (liveData as unknown as Record<string, unknown>)[
+    card.dataStore
+  ];
   if (!isObject(branch)) return undefined;
   const dataEnvelope = branch.data;
   if (dataEnvelope === null || typeof dataEnvelope !== 'object') {
@@ -178,4 +187,203 @@ export const formatCardValue = (
     });
   }
   return String(raw);
+};
+
+/* ─────────── Cards-tab sections (what time window a tile covers) ─────────── */
+
+/**
+ * Which Cards-tab section a card belongs to:
+ *
+ *  - `now`      instantaneous power (W / VAr / VA, any prefix) whose name
+ *               states no other window ('PV Total Power' kW, 'Wind' kW)
+ *  - `today`    an accumulating unit (Wh / VArh / VAh) + a 'today' name
+ *  - `period`   … + a week / month / year name ('Grid Energy YTD')
+ *  - `lifetime` … + a lifetime name ('Total Plant Yield')
+ *  - `energy`   … with no period in the name ('PV-SG-CI-01' kWh) — we
+ *               don't know the window, so we don't claim one
+ *  - `other`    everything else (W/m², °C, %, unitless, and power readings
+ *               pinned to a window such as 'Peak Power Today' kW — a
+ *               peak is neither the current power nor an energy total)
+ */
+export type CardBucket =
+  | 'now'
+  | 'today'
+  | 'period'
+  | 'lifetime'
+  | 'energy'
+  | 'other';
+
+/** Display order of the Cards-tab sections. */
+export const CARD_BUCKET_ORDER: readonly CardBucket[] = [
+  'now',
+  'today',
+  'period',
+  'lifetime',
+  'energy',
+  'other',
+];
+
+/** Minimal card shape the bucketing needs (an `ICardConfig` satisfies it). */
+export interface CardNameUnit {
+  name: string;
+  unit?: string | null;
+}
+
+/** Wh / VArh / VAh with any prefix — a counter that accumulates over time. */
+const isAccumulatingUnit = (unit?: string | null): boolean =>
+  unitFamily(unit) !== 'other' && !isRateUnit(unit);
+
+/**
+ * Section bucket for a card — from the NAME's period wording first
+ * (`periodFromCard`: 'today' / 'week' / 'month' / 'year' / 'lifetime'),
+ * then the unit. Presentation only: it never changes a card's value.
+ */
+export const cardBucket = (card: CardNameUnit): CardBucket => {
+  const period = periodFromCard(card.name, card.unit);
+  if (isRateUnit(card.unit)) {
+    // periodFromCard returns 'now' for a rate unit only when the name
+    // pins no window of its own.
+    return period === 'now' ? 'now' : 'other';
+  }
+  if (!isAccumulatingUnit(card.unit)) return 'other';
+  switch (period) {
+    case 'today':
+      return 'today';
+    case 'week':
+    case 'month':
+    case 'year':
+      return 'period';
+    case 'lifetime':
+      return 'lifetime';
+    default:
+      return 'energy';
+  }
+};
+
+const PERIOD_SECTION_TITLE: Partial<Record<CardPeriod, string>> = {
+  week: 'Energy this week',
+  month: 'Energy this month',
+  year: 'Energy this year',
+};
+
+/**
+ * Sentence-case section heading for a bucket. The `period` bucket names
+ * its window only when EVERY card in it states the same one ('Energy this
+ * year' for a set of YTD counters); a mix reads 'Energy this period'.
+ */
+export const cardBucketTitle = (
+  bucket: CardBucket,
+  cards: readonly CardNameUnit[] = [],
+): string => {
+  switch (bucket) {
+    case 'now':
+      return 'Power now';
+    case 'today':
+      return 'Energy today';
+    case 'period': {
+      const periods = new Set(cards.map(c => periodFromName(c.name)));
+      if (periods.size === 1) {
+        const [only] = periods;
+        const title = only ? PERIOD_SECTION_TITLE[only] : undefined;
+        if (title) return title;
+      }
+      return 'Energy this period';
+    }
+    case 'lifetime':
+      return 'Energy lifetime';
+    case 'energy':
+      return 'Energy';
+    case 'other':
+    default:
+      return 'Other metrics';
+  }
+};
+
+export interface CardSection<T> {
+  bucket: CardBucket;
+  title: string;
+  items: T[];
+  /**
+   * Position of this section's first item in the whole tab, so entrance
+   * animation caps (ANIM_LIMIT) count across sections, not per section.
+   */
+  startIndex: number;
+}
+
+/**
+ * Group items into ordered, non-empty Cards-tab sections. Item order
+ * within a section follows the backend's card order.
+ */
+export const groupCardSections = <T>(
+  items: readonly T[],
+  cardOf: (item: T) => CardNameUnit,
+): CardSection<T>[] => {
+  const byBucket = new Map<CardBucket, T[]>();
+  for (const item of items) {
+    const bucket = cardBucket(cardOf(item));
+    const list = byBucket.get(bucket);
+    if (list) list.push(item);
+    else byBucket.set(bucket, [item]);
+  }
+  const sections: CardSection<T>[] = [];
+  let startIndex = 0;
+  for (const bucket of CARD_BUCKET_ORDER) {
+    const list = byBucket.get(bucket);
+    if (!list || list.length === 0) continue;
+    sections.push({
+      bucket,
+      title: cardBucketTitle(bucket, list.map(cardOf)),
+      items: list,
+      startIndex,
+    });
+    startIndex += list.length;
+  }
+  return sections;
+};
+
+/**
+ * Tile label for a backend card name, in its ORIGINAL case. Strips only
+ * words the context already says: a ' - RealTime' tag (every tile is a
+ * current reading), and a trailing 'Today' inside the 'Energy today'
+ * section. Never truncates — the tile wraps to two lines instead. Falls
+ * back to the full name when stripping would leave nothing.
+ */
+export const cardTileLabel = (name: string, bucket: CardBucket): string => {
+  let label = name.replace(/\s*[-–—]\s*real[\s-]?time\b/i, '');
+  if (bucket === 'today') {
+    label = label.replace(/[\s\-–—·:(]*\btoday\b\)?\s*$/i, '');
+  }
+  label = label.trim();
+  return label.length > 0 ? label : name.trim();
+};
+
+/** Backend placeholders for "no reading" — shown as 'No data', never as text. */
+const MISSING_WORDS = /^(na|n\/a|nan|null|undefined|none|-+|—)$/i;
+
+/**
+ * A Cards-tab value as displayed: `formatQuantity` precise, 2 decimals,
+ * in the backend's own unit (`rescale: false`) so every tile reads exactly
+ * like the web portal ('147,786.00 kWh', '14,463.03 kW'). Non-numeric
+ * backend TEXT (a status such as 'Running') is shown verbatim without a
+ * unit; 'NA' / null / '' are missing ('No data'). The value itself is
+ * never altered.
+ */
+export const formatCardDisplay = (
+  raw: unknown,
+  unit?: string | null,
+): FormattedQuantity => {
+  const q = formatQuantity(raw, unit, {
+    mode: 'precise',
+    decimals: 2,
+    rescale: false,
+  });
+  if (!q.isMissing) return q;
+  const text =
+    typeof raw === 'string'
+      ? raw.trim()
+      : typeof raw === 'boolean'
+      ? String(raw)
+      : '';
+  if (text === '' || MISSING_WORDS.test(text)) return q;
+  return { text, unit: '', spoken: text, isMissing: false, value: null };
 };
