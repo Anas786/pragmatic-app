@@ -9,6 +9,7 @@
  */
 
 import { AggregatedSource, StackBar } from 'src/utils';
+import { Y_AXIS_LABEL_FORMATTER } from '../chartConfig';
 
 export interface ReportChartTheme {
   textPrimary: string;
@@ -19,13 +20,6 @@ export interface ReportChartTheme {
   surface: string;
   isDark: boolean;
 }
-
-/** Compact y-axis tick formatter (string fn — needs enableParseStringFunction). */
-const Y_LABEL_FORMATTER =
-  "function(v){var a=Math.abs(v);" +
-  "if(a>=1e6)return (v/1e6).toFixed(1)+'M';" +
-  "if(a>=1e3)return (v/1e3).toFixed(0)+'K';" +
-  'return ""+v;}';
 
 /**
  * Donut pie. `sources` is passed in full (including zero-value entries)
@@ -145,17 +139,23 @@ export const buildReportStackBarOption = (
       axisLabel: {
         color: theme.textSecondary,
         fontSize: 10,
-        formatter: Y_LABEL_FORMATTER,
+        formatter: Y_AXIS_LABEL_FORMATTER,
       },
     },
+    // Pinned to the full 0–100 range so the chart opens fully zoomed OUT
+    // with every time bucket on screen. This matches ECharts' own default
+    // for an omitted start/end — stated explicitly so a later edit can't
+    // silently introduce a trailing window (as the Trends chart once had).
     dataZoom: [
-      { type: 'inside', xAxisIndex: 0, filterMode: 'none' },
+      { type: 'inside', xAxisIndex: 0, filterMode: 'none', start: 0, end: 100 },
       {
         type: 'slider',
         xAxisIndex: 0,
         height: 16,
         bottom: 8,
         filterMode: 'none',
+        start: 0,
+        end: 100,
         borderColor: theme.border,
         fillerColor: theme.isDark
           ? 'rgba(52,211,153,0.18)'

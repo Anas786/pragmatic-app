@@ -41,13 +41,13 @@ export const daysAgo = (n: number): Date => {
  * Maximum inclusive span (in calendar days) the report Custom range can
  * cover. MUST stay in lockstep with `DateRangePickerModal`'s default
  * `MAX_RANGE_DAYS` (counted as *additional* days after the start day,
- * i.e. `REPORT_CUSTOM_MAX_DAYS - 1`) — the picker greys out anything
+ * i.e. `REPORT_CUSTOM_MAX_DAYS - 1` = 30) — the picker greys out anything
  * past that cap and its caption reads "Max range: N days".
  *
  * Mirrors the `TREND_CUSTOM_MAX_DAYS` / `TREND_CUSTOM_MAX_RANGE` parity
  * pattern in `src/utils/trends.ts`.
  */
-export const REPORT_CUSTOM_MAX_DAYS = 15;
+export const REPORT_CUSTOM_MAX_DAYS = 31;
 
 /**
  * Default span used to seed the Custom filter on every Report card:

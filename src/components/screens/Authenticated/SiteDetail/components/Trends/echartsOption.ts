@@ -7,37 +7,38 @@
  * auto-rescales the axes, plus built-in zoom/pan (dataZoom) — none of
  * which gifted-charts can do in one frame.
  *
- * Axis strategy: ONE colour-coded y-axis per series, each titled with
- * that series' `display` name and on its own scale (a section can mix
- * params with wildly different units — a 0–1 ratio next to 0–1500
- * minutes — so a shared axis would flatten most of them). Axes
- * alternate left/right and stack with an offset. echarts rescales each
- * axis automatically as the legend hides series.
+ * Axis strategy: ONE shared code path for both inline (compact) and
+ * full-screen (`detailed`) — bars share a single left axis, and lines
+ * get a second (right) axis only when the section mixes bar + line/area
+ * series. There is deliberately never one axis per series: per-series
+ * scales draw a 48K bar and a 750M bar at the same height, which reads as
+ * "comparable" when they differ ~15,000× — the full-screen view used to do
+ * this and diverged from the card. A shared scale keeps relative
+ * magnitudes honest (the value guard below — `coerceChartValue` /
+ * `IMPOSSIBLE_READING_CEILING` — keeps one garbage-magnitude reading from
+ * wrecking that shared scale for everyone else). `detailed` only changes
+ * presentation density (a larger tick font, rotated x labels, every x
+ * label shown) — never the axis count or the series→axis mapping.
  */
 
 import { TrendAggregation, TrendDataRow } from 'src/types';
 import { formatTrendLabel, isBarType } from 'src/utils';
-import { ChartTheme } from '../chartConfig';
-import { coerceValue } from './helpers';
-
-/** Compact y-axis tick formatter, passed as a string fn (echarts-pro
- *  needs `enableParseStringFunction` to eval it inside the WebView). */
-const Y_LABEL_FORMATTER =
-  "function(v){var a=Math.abs(v);" +
-  "if(a>=1e6)return (v/1e6).toFixed(1)+'M';" +
-  "if(a>=1e3)return (v/1e3).toFixed(0)+'K';" +
-  'return ""+v;}';
+import { ChartTheme, COMPACT_VALUE_FN_SRC, Y_AXIS_LABEL_FORMATTER } from '../chartConfig';
+import { coerceChartValue } from './helpers';
 
 /**
  * Axis-trigger tooltip formatter (string fn, eval'd in the WebView via
  * `enableParseStringFunction`). Renders the x-label header then one
- * colour-marked row per series with a compact value; null → "–".
+ * colour-marked row per series with a compact value; null → "–". Shares
+ * the same compact-number rules as `Y_AXIS_LABEL_FORMATTER` (see
+ * `COMPACT_VALUE_FN_SRC` in `chartConfig.ts`) — formatter strings can't
+ * share a JS closure across WebView evals, so its source is spliced in.
  */
 const TOOLTIP_FORMATTER = `function(params){
+  ${COMPACT_VALUE_FN_SRC}
   if(!params||!params.length)return '';
-  function fmt(v){var a=Math.abs(v);if(a>=1e6)return (v/1e6).toFixed(2)+'M';if(a>=1e3)return (v/1e3).toFixed(1)+'K';return ''+(Math.round(v*100)/100);}
   var s='<div style="font-size:11px;font-weight:600;margin-bottom:4px">'+params[0].axisValueLabel+'</div>';
-  for(var i=0;i<params.length;i++){var p=params[i];var val=(p.value==null?'–':fmt(p.value));s+='<div style="display:flex;align-items:center;gap:6px;line-height:1.7">'+p.marker+'<span style="flex:1">'+p.seriesName+'</span><b style="margin-left:10px">'+val+'</b></div>';}
+  for(var i=0;i<params.length;i++){var p=params[i];var val=(p.value==null?'–':__fmtCompactVal(p.value));s+='<div style="display:flex;align-items:center;gap:6px;line-height:1.7">'+p.marker+'<span style="flex:1">'+p.seriesName+'</span><b style="margin-left:10px">'+val+'</b></div>';}
   return s;
 }`;
 
@@ -46,13 +47,25 @@ const sortByTime = (rows: TrendDataRow[]): TrendDataRow[] =>
 
 export interface TrendComboOptions {
   /**
-   * `false` (inline) → compact: a dual y-axis (bars left / lines right)
-   * and auto-thinned x labels, sized to fit a phone-width card.
-   * `true` (full-screen/landscape) → one colour-coded y-axis per series
-   * (each titled with its `display`) and EVERY x label shown — there's
-   * room for it in landscape.
+   * `false` (inline) → compact: sized to fit a phone-width card.
+   * `true` (full-screen/landscape) → same dual-axis strategy, denser
+   * presentation only — larger tick font, wider grid margins, EVERY x
+   * label shown (there's room for it in landscape).
    */
   detailed?: boolean;
+}
+
+/** Result of {@link buildTrendComboOption}. */
+export interface TrendComboBuildResult {
+  /** The echarts option — pass straight to `RNEChartsPro`. */
+  option: object;
+  /**
+   * Count of points dropped by the impossible-reading guard (see
+   * `IMPOSSIBLE_READING_CEILING` in `./helpers`) across every series in
+   * this section. Callers must disclose this to the user (e.g. a small
+   * "N invalid readings hidden" caption) rather than drop it silently.
+   */
+  invalidCount: number;
 }
 
 export const buildTrendComboOption = (
@@ -61,21 +74,10 @@ export const buildTrendComboOption = (
   windowMs: number,
   theme: ChartTheme,
   options: TrendComboOptions = {},
-): object => {
+): TrendComboBuildResult => {
   const detailed = options.detailed === true;
   const sorted = sortByTime(rows);
   const categories = sorted.map(r => formatTrendLabel(r.time, windowMs));
-
-  // Default the x zoom to a readable window so bars aren't crammed
-  // edge-to-edge; the slider/pinch pans the rest. Wider in detailed
-  // (landscape) mode where there's more room.
-  const visibleTarget = detailed ? 96 : 40;
-  const zoomStart =
-    categories.length > visibleTarget
-      ? Math.round(
-          ((categories.length - visibleTarget) / categories.length) * 100,
-        )
-      : 0;
 
   const axisLabelStyle = { color: theme.textSecondary, fontSize: 10 };
   const nameStyle = { color: theme.textTertiary, fontSize: 10 };
@@ -86,75 +88,52 @@ export const buildTrendComboOption = (
   const hasBar = aggregations.some(a => isBarType(a.type));
   const hasLine = aggregations.some(a => !isBarType(a.type));
 
-  let yAxis: object[];
-  let yIndexFor: (a: TrendAggregation, i: number) => number;
-  let gridLeft: number;
-  let gridRight: number;
+  // ONE shared axis-assignment path for both compact and full-screen:
+  // bars share a left axis, lines get a second (right) axis only when
+  // bar + line/area series are mixed — never one axis per series (see
+  // the module doc above for why). `detailed` only bumps the tick font.
+  const dualAxis = hasBar && hasLine;
+  const yAxisBase = {
+    type: 'value' as const,
+    min: 0,
+    axisLine: { show: false },
+    axisTick: { show: false },
+    axisLabel: {
+      color: theme.textSecondary,
+      fontSize: detailed ? 12 : 10,
+      formatter: Y_AXIS_LABEL_FORMATTER,
+    },
+  };
+  const yAxis: object[] = dualAxis
+    ? [
+        { ...yAxisBase, position: 'left', splitLine: splitLineStyle },
+        { ...yAxisBase, position: 'right', splitLine: { show: false } },
+      ]
+    : [{ ...yAxisBase, splitLine: splitLineStyle }];
+  const lineYIndex = dualAxis ? 1 : 0;
+  const yIndexFor = (a: TrendAggregation): number =>
+    isBarType(a.type) ? 0 : lineYIndex;
+  // containLabel reserves the tick-label width, so keep base gutters slim
+  // in both modes — there's no per-series offset stacking to account for.
+  const gridLeft = 8;
+  const gridRight = dualAxis ? 8 : 12;
 
-  if (detailed) {
-    // One colour-coded y-axis per series, alternating left/right and
-    // stacking outward with an offset — each param on its own scale.
-    const PER_AXIS_OFFSET = 56;
-    let leftCount = 0;
-    let rightCount = 0;
-    yAxis = aggregations.map((a, i) => {
-      const side = i % 2 === 0 ? 'left' : 'right';
-      const slot = side === 'left' ? leftCount++ : rightCount++;
-      return {
-        type: 'value' as const,
-        min: 0,
-        position: side,
-        offset: slot * PER_AXIS_OFFSET,
-        name: a.display,
-        nameLocation: 'middle' as const,
-        nameRotate: side === 'left' ? 90 : -90,
-        nameGap: 40,
-        nameTextStyle: { color: a.color, fontSize: 11 },
-        axisLine: { show: true, lineStyle: { color: a.color } },
-        axisTick: { show: false },
-        axisLabel: { color: a.color, fontSize: 11, formatter: Y_LABEL_FORMATTER },
-        // Gridlines from the first axis only — overlapping rules from
-        // multiple scales would be meaningless.
-        splitLine: i === 0 ? splitLineStyle : { show: false },
-      };
+  // Physically-impossible readings (see `IMPOSSIBLE_READING_CEILING`) are
+  // dropped to a chart gap here — the ONE shared path both modes' series
+  // go through — and tallied so the caller can disclose the count.
+  let invalidCount = 0;
+  const series = aggregations.map(a => {
+    const data = sorted.map(r => {
+      const { value, invalid } = coerceChartValue(r[a.param]);
+      if (invalid) invalidCount++;
+      return value;
     });
-    yIndexFor = (_a, i) => i;
-    gridLeft = Math.max(16, leftCount * PER_AXIS_OFFSET + 14);
-    gridRight = Math.max(16, rightCount * PER_AXIS_OFFSET + 14);
-  } else {
-    // Compact: dual axis — bars on the left, lines on the right (a
-    // single axis when only one family is present). Tick labels are
-    // shown but the axis titles are dropped — the legend already names
-    // the series, and the titles just ate horizontal room.
-    const dualAxis = hasBar && hasLine;
-    const yAxisBase = {
-      type: 'value' as const,
-      min: 0,
-      axisLine: { show: false },
-      axisTick: { show: false },
-      axisLabel: { ...axisLabelStyle, formatter: Y_LABEL_FORMATTER },
-    };
-    yAxis = dualAxis
-      ? [
-          { ...yAxisBase, position: 'left', splitLine: splitLineStyle },
-          { ...yAxisBase, position: 'right', splitLine: { show: false } },
-        ]
-      : [{ ...yAxisBase, splitLine: splitLineStyle }];
-    const lineYIndex = dualAxis ? 1 : 0;
-    yIndexFor = a => (isBarType(a.type) ? 0 : lineYIndex);
-    // containLabel reserves the tick-label width, so keep base gutters slim.
-    gridLeft = 8;
-    gridRight = dualAxis ? 8 : 12;
-  }
-
-  const series = aggregations.map((a, i) => {
-    const data = sorted.map(r => coerceValue(r[a.param]));
     if (isBarType(a.type)) {
       return {
         name: a.display,
         type: 'bar',
         data,
-        yAxisIndex: yIndexFor(a, i),
+        yAxisIndex: yIndexFor(a),
         barMaxWidth: 18,
         itemStyle: { color: a.color, borderRadius: [3, 3, 0, 0] },
         z: 2,
@@ -165,7 +144,7 @@ export const buildTrendComboOption = (
       name: a.display,
       type: 'line',
       data,
-      yAxisIndex: yIndexFor(a, i),
+      yAxisIndex: yIndexFor(a),
       smooth: true,
       showSymbol: false,
       lineStyle: { color: a.color, width: 2 },
@@ -175,7 +154,7 @@ export const buildTrendComboOption = (
     };
   });
 
-  return {
+  const option = {
     backgroundColor: 'transparent',
     textStyle: { color: theme.textSecondary },
     legend: {
@@ -192,10 +171,16 @@ export const buildTrendComboOption = (
       top: 40,
       left: gridLeft,
       right: gridRight,
-      bottom: detailed ? 88 : 70,
-      // Detailed mode reserves manual gutters for the offset axes, so
-      // containLabel must be off (it can't reason about offset axes).
-      containLabel: !detailed,
+      // With containLabel, `bottom` is measured from the tick labels (the
+      // rotated full-screen labels included), so both modes need the same
+      // room below them: the "Time" name (nameGap from the axis line) and
+      // the dataZoom slider. The old full-screen 88 was tuned for manual
+      // gutters and cost ~15% of the rotated view's plot height.
+      bottom: 70,
+      // Both modes use the same (at most 2-axis) layout now — no offset
+      // stacking to account for — so echarts can auto-size the gutter
+      // around whichever tick labels render widest.
+      containLabel: true,
     },
     tooltip: {
       show: true,
@@ -228,15 +213,22 @@ export const buildTrendComboOption = (
     yAxis,
     // `inside` → pinch / drag zoom+pan; `slider` → explicit handle (avoids
     // fighting the parent vertical ScrollView for horizontal swipes).
+    //
+    // start/end are pinned to the full 0–100 range: the chart opens fully
+    // zoomed OUT so every bucket in the selected period is on screen at
+    // once. Both entries must carry the same window or ECharts reconciles
+    // them on first paint and the view jumps. (This used to default to a
+    // trailing window of the last 40 buckets — 96 in landscape — which
+    // read better at high bucket counts but hid the start of the range.)
     dataZoom: [
-      { type: 'inside', xAxisIndex: 0, filterMode: 'none', start: zoomStart, end: 100 },
+      { type: 'inside', xAxisIndex: 0, filterMode: 'none', start: 0, end: 100 },
       {
         type: 'slider',
         xAxisIndex: 0,
         height: 16,
         bottom: 8,
         filterMode: 'none',
-        start: zoomStart,
+        start: 0,
         end: 100,
         borderColor: theme.border,
         fillerColor: theme.isDark
@@ -248,4 +240,6 @@ export const buildTrendComboOption = (
     ],
     series,
   };
+
+  return { option, invalidCount };
 };

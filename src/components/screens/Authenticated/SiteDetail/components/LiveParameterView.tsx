@@ -40,12 +40,21 @@
  *     all are shown, so no single React commit exceeds ~20 tiles. The
  *     counter resets when the category / search changes.
  *
+ * Category selection:
+ *   There is no "All" pill — the grid always shows exactly one category.
+ *   The default is Energy, falling back to Power when the site reports no
+ *   energy registers, and to the first non-empty category when it reports
+ *   neither. Because that depends on data which isn't present on the first
+ *   render, the default is DERIVED (see `activeCategory`) rather than
+ *   seeded into `useState` — an effect would flash the wrong category for
+ *   a frame before correcting itself.
+ *
  *  ┌────────────────────────────────────────────────┐
  *  │ ● LIVE METRICS · 142          [⟳]              │
  *  ├────────────────────────────────────────────────┤
  *  │ [🔍 Search…                          ✕]        │
  *  ├────────────────────────────────────────────────┤
- *  │ [All 142][Power 38][Voltage 22][Current 18]…   │
+ *  │ [Energy 41][Power 38][Voltage 22][Current 18]… │
  *  │  Sort:  [Name][Value][Time]                    │
  *  ├────────────────────────────────────────────────┤
  *  │ ┌──────────┐ ┌──────────┐                      │
@@ -110,7 +119,6 @@ type SiteDetailRouteProp = RouteProp<DashboardStackParamList, 'SiteDetail'>;
 type SortKey = 'name' | 'value' | 'time';
 
 type CategoryKey =
-  | 'all'
   | 'power'
   | 'voltage'
   | 'current'
@@ -232,7 +240,7 @@ const matchCategory = (
   categories: CategoryDef[],
 ): CategoryDef => {
   for (const c of categories) {
-    if (c.key === 'all' || c.key === 'other') continue;
+    if (c.key === 'other') continue;
     try {
       if (c.match(name)) return c;
     } catch {
@@ -457,7 +465,11 @@ const LiveParameterView: FC = () => {
   // SEARCH_DEBOUNCE_MS instead of per keystroke.
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('name');
-  const [activeCategory, setActiveCategory] = useState<CategoryKey>('all');
+  // null until the user taps a pill; `activeCategory` below resolves it
+  // against the data-derived default (Energy → Power → first non-empty).
+  const [pickedCategory, setPickedCategory] = useState<CategoryKey | null>(
+    null,
+  );
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query), SEARCH_DEBOUNCE_MS);
@@ -466,7 +478,6 @@ const LiveParameterView: FC = () => {
 
   const categories: CategoryDef[] = useMemo(
     () => [
-      { key: 'all', label: 'All', color: scheme.brand, match: () => true },
       // Energy is tested BEFORE power: standard meter registers like
       // "Active Energy Import (kWh)" / "Reactive Energy" must land in
       // Energy, not get claimed by a power keyword first. kvarh/kvah
@@ -528,7 +539,6 @@ const LiveParameterView: FC = () => {
 
   const countsByCategory = useMemo(() => {
     const counts: Record<CategoryKey, number> = {
-      all: params.length,
       power: 0,
       voltage: 0,
       current: 0,
@@ -542,19 +552,36 @@ const LiveParameterView: FC = () => {
   }, [params]);
 
   const visibleCategories = useMemo(
-    () =>
-      categories.filter(
-        c => c.key === 'all' || countsByCategory[c.key] > 0,
-      ),
+    () => categories.filter(c => countsByCategory[c.key] > 0),
     [categories, countsByCategory],
   );
 
+  /**
+   * Energy first, Power when the site has no energy registers, otherwise
+   * the leftmost pill that actually has parameters. Null only while
+   * `params` is empty (loading / no data), which the render branches above
+   * the grid already handle.
+   */
+  const defaultCategory: CategoryKey | null = useMemo(() => {
+    if (countsByCategory.energy > 0) return 'energy';
+    if (countsByCategory.power > 0) return 'power';
+    return visibleCategories[0]?.key ?? null;
+  }, [countsByCategory, visibleCategories]);
+
+  // A pick only survives while its category still has parameters — a
+  // refetch that empties it also removes its pill, so honouring the stale
+  // pick would strand the user on "Nothing in this category" with no pill
+  // to tap back out of.
+  const activeCategory: CategoryKey | null =
+    pickedCategory && countsByCategory[pickedCategory] > 0
+      ? pickedCategory
+      : defaultCategory;
+
   const filtered = useMemo(() => {
     const q = debouncedQuery.trim().toLowerCase();
-    let list =
-      activeCategory === 'all'
-        ? params
-        : params.filter(p => p.category === activeCategory);
+    let list = activeCategory
+      ? params.filter(p => p.category === activeCategory)
+      : params;
     if (q) {
       list = list.filter(
         p =>
@@ -738,7 +765,7 @@ const LiveParameterView: FC = () => {
               color={cat.color}
               label={cat.label}
               count={countsByCategory[cat.key]}
-              onPress={() => setActiveCategory(cat.key)}
+              onPress={() => setPickedCategory(cat.key)}
               scheme={scheme}
               themed={themed}
             />

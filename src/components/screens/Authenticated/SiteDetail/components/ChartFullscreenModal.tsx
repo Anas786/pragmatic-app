@@ -30,6 +30,15 @@ interface ChartFullscreenModalProps {
   option: object;
   /** Optional caption under the title (e.g. a legend hint). */
   hint?: string;
+  /**
+   * Optional second caption line below `hint` — e.g. a data-quality
+   * disclosure ("N invalid readings hidden"). Kept separate from `hint`
+   * (rather than appended to it) so a data-quality note is never
+   * truncated by the single-line legend hint sharing its space. Rendered
+   * in the same muted style as `hint`; the TEXT itself carries the
+   * meaning, not colour.
+   */
+  warning?: string;
 }
 
 /**
@@ -48,6 +57,7 @@ const ChartFullscreenModal: FC<ChartFullscreenModalProps> = ({
   title,
   option,
   hint,
+  warning,
 }) => {
   const scheme = useScheme();
   const { width: W, height: H } = useWindowDimensions();
@@ -105,6 +115,15 @@ const ChartFullscreenModal: FC<ChartFullscreenModalProps> = ({
                   color={scheme.textTertiary}
                   numberOfLines={1}>
                   {hint}
+                </AppText>
+              ) : null}
+              {warning ? (
+                <AppText
+                  fontSize={FONT_SIZE_XXS}
+                  center
+                  color={scheme.textTertiary}
+                  numberOfLines={1}>
+                  {warning}
                 </AppText>
               ) : null}
             </View>

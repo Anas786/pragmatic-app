@@ -50,7 +50,7 @@ interface DateRangePickerModalProps {
   onApply: (start: Date, end: Date) => void;
   /**
    * Extra days allowed AFTER the start day → inclusive span is
-   * `maxRangeDays + 1`. Defaults to the report cap (14 → 15-day span).
+   * `maxRangeDays + 1`. Defaults to the report cap (30 → 31-day span).
    * Trends pass a tighter cap (2 → 3-day span).
    */
   maxRangeDays?: number;
@@ -62,10 +62,10 @@ interface DateRangePickerModalProps {
  * `start + MAX_RANGE_DAYS` and the tap handler clamps any later
  * second-tap to the cap defensively.
  *
- * Counted as 14 *additional* days after the start day → a 15-day
- * inclusive range (e.g. tap Dec 1 → max end is Dec 15).
+ * Counted as 30 *additional* days after the start day → a 31-day
+ * inclusive range (e.g. tap Dec 1 → max end is Dec 31).
  */
-const MAX_RANGE_DAYS = 14;
+const MAX_RANGE_DAYS = 30;
 const DOW_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const MONTH_LABELS = [
   'January',
@@ -102,18 +102,32 @@ const isBetween = (d: Date, start: Date, end: Date): boolean => {
 
 /* ─────────────── presets ─────────────── */
 
-interface Preset {
+export interface Preset {
   label: string;
+  /**
+   * Widest possible calendar-day span (inclusive) this preset can ever
+   * produce, regardless of today's weekday (e.g. "This week" tops out
+   * at 7 days when today is a Saturday) — a static upper bound, not the
+   * actual span `build()` returns right now.
+   */
+  maxSpanDays: number;
   build: () => { start: Date; end: Date };
 }
 
-// Presets capped to fit within the 15-day max range. "Last month"
-// or "Last 30d" would overflow the cap and force a clamp on apply,
-// which is confusing — better to only surface ranges the user can
-// actually pick by hand.
-const PRESETS: Preset[] = [
+/**
+ * Presets carry a static `maxSpanDays` rather than depending on today's
+ * actual date, so `presetsWithinRange` (below) can filter this list
+ * against a picker's `maxRangeDays` prop: a preset whose widest span
+ * could exceed the cap never renders, instead of silently clamping on
+ * apply and giving the user a shorter range than its label promised.
+ * Reports/Tables (31-day cap) show every preset here; Trends (3-day cap)
+ * shows only "Today". Add a "Last 30d" entry (`maxSpanDays: 30`) if a
+ * wider one-tap preset is ever needed for the longer caps.
+ */
+export const PRESETS: Preset[] = [
   {
     label: 'Today',
+    maxSpanDays: 1,
     build: () => {
       const today = new Date();
       return { start: today, end: today };
@@ -121,6 +135,7 @@ const PRESETS: Preset[] = [
   },
   {
     label: 'Last 7d',
+    maxSpanDays: 7,
     build: () => {
       const end = new Date();
       const start = new Date();
@@ -130,6 +145,7 @@ const PRESETS: Preset[] = [
   },
   {
     label: 'This week',
+    maxSpanDays: 7,
     build: () => {
       const end = new Date();
       const start = new Date();
@@ -139,6 +155,7 @@ const PRESETS: Preset[] = [
   },
   {
     label: 'Last 15d',
+    maxSpanDays: 15,
     build: () => {
       const end = new Date();
       const start = new Date();
@@ -147,6 +164,16 @@ const PRESETS: Preset[] = [
     },
   },
 ];
+
+/**
+ * Keep only the presets whose widest possible span fits inside the
+ * picker's cap — `maxRangeDays + 1` inclusive days. Pure and exported so
+ * it's unit-testable without mounting the modal.
+ */
+export const presetsWithinRange = <P extends { maxSpanDays: number }>(
+  presets: P[],
+  maxRangeDays: number,
+): P[] => presets.filter(p => p.maxSpanDays <= maxRangeDays + 1);
 
 /* ─────────────── month / year nav header ─────────────── */
 
@@ -332,24 +359,31 @@ const DayCellComponent: FC<DayCellProps> = ({
     return scheme.textPrimary;
   })();
 
+  // The 1/7-width slot is a plain View: PressableScale applies `style` to
+  // its INNER animated view, so a percentage width set on it resolves
+  // against the content-sized Pressable wrapper and the grid packed ~10
+  // days per row under the 7-column weekday header. The slot sizes the
+  // column; the tappable fills it.
   return (
-    <PressableScale
-      onPress={() => onPress(date)}
-      haptic="select"
-      scaleTo={0.9}
-      disabled={disabled}
-      style={[themed.dayCell, disabled ? themed.dayDisabled : null]}
-      accessibilityLabel={formatDate(date, 'DD MMM YYYY')}>
-      {backdrop}
-      <View style={cellInnerStyle}>
-        <AppText
-          fontSize={FONT_SIZE_XS}
-          semi_bold={endpoint || isToday}
-          color={textColor}>
-          {date.getDate()}
-        </AppText>
-      </View>
-    </PressableScale>
+    <View style={themed.daySlot}>
+      <PressableScale
+        onPress={() => onPress(date)}
+        haptic="select"
+        scaleTo={0.9}
+        disabled={disabled}
+        style={[themed.dayCell, disabled ? themed.dayDisabled : null]}
+        accessibilityLabel={formatDate(date, 'DD MMM YYYY')}>
+        {backdrop}
+        <View style={cellInnerStyle}>
+          <AppText
+            fontSize={FONT_SIZE_XS}
+            semi_bold={endpoint || isToday}
+            color={textColor}>
+            {date.getDate()}
+          </AppText>
+        </View>
+      </PressableScale>
+    </View>
   );
 };
 DayCellComponent.displayName = 'DayCell';
@@ -490,17 +524,10 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
     [tempStart, tempEnd, maxRangeDays],
   );
 
-  // Only surface presets whose inclusive span fits within the cap —
-  // a preset that overflows would silently clamp on apply.
+  // Only surface presets whose widest possible span fits within the
+  // cap — a preset that could overflow would silently clamp on apply.
   const availablePresets = useMemo(
-    () =>
-      PRESETS.filter(p => {
-        const { start, end } = p.build();
-        const spanDays = Math.round(
-          (startOfDay(end).getTime() - startOfDay(start).getTime()) / 86400000,
-        );
-        return spanDays <= maxRangeDays;
-      }),
+    () => presetsWithinRange(PRESETS, maxRangeDays),
     [maxRangeDays],
   );
 
@@ -568,24 +595,26 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
       onCancel={onClose}
       onApply={handleApply}
       applyDisabled={!tempStart}>
-      <PresetRow>
-        {availablePresets.map(p => (
-          <PressableScale
-            key={p.label}
-            onPress={() => handlePreset(p)}
-            haptic="select"
-            scaleTo={0.95}
-            style={themed.presetChip}
-            accessibilityLabel={p.label}>
-            <AppText
-              fontSize={FONT_SIZE_XXS}
-              bold
-              color={scheme.textPrimary}>
-              {p.label}
-            </AppText>
-          </PressableScale>
-        ))}
-      </PresetRow>
+      {availablePresets.length > 0 && (
+        <PresetRow>
+          {availablePresets.map(p => (
+            <PressableScale
+              key={p.label}
+              onPress={() => handlePreset(p)}
+              haptic="select"
+              scaleTo={0.95}
+              style={themed.presetChip}
+              accessibilityLabel={p.label}>
+              <AppText
+                fontSize={FONT_SIZE_XXS}
+                bold
+                color={scheme.textPrimary}>
+                {p.label}
+              </AppText>
+            </PressableScale>
+          ))}
+        </PresetRow>
+      )}
 
       <View style={themed.calendarCard}>
         <MonthNav
@@ -738,8 +767,13 @@ const createStyles = (scheme: Scheme) =>
       flexDirection: 'row',
       flexWrap: 'wrap',
     },
-    dayCell: {
+    // Column slot (see DayCell): plain View so the % width resolves against
+    // the grid row. Children stretch to fill it (no alignItems here).
+    daySlot: {
       width: `${100 / 7}%`,
+      height: CELL_SIZE,
+    },
+    dayCell: {
       height: CELL_SIZE,
       alignItems: 'center',
       justifyContent: 'center',

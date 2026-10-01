@@ -22,7 +22,12 @@ export type TrendPeriod = '24H' | '48H' | '72H' | 'Custom';
 export const TREND_PERIODS: TrendPeriod[] = ['24H', '48H', '72H', 'Custom'];
 export const DEFAULT_TREND_PERIOD: TrendPeriod = '24H';
 
-/** Custom range is capped at 3 calendar days (inclusive). */
+/**
+ * Custom range is capped at 3 calendar days (inclusive) — much tighter
+ * than the report cap (`REPORT_CUSTOM_MAX_DAYS`, 31 days). The trends
+ * endpoint returns fine-grained rows, so even a few days is a heavy
+ * query and a dense chart next to the 24H/48H/72H presets beside it.
+ */
 export const TREND_CUSTOM_MAX_DAYS = 3;
 /** Extra days after the start day the date picker allows (cap − 1). */
 export const TREND_CUSTOM_MAX_RANGE = TREND_CUSTOM_MAX_DAYS - 1;
