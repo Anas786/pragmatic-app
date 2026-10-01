@@ -10,25 +10,113 @@
  */
 
 import { energyPalette } from 'src/theme';
+import { formatSig3, isRateUnit, MISSING_TEXT } from './units';
 
 export type SourceToken = keyof typeof energyPalette;
 
 /**
+ * Canonical display order for energy sources (generation first, the grid
+ * last) — use it wherever several sources are listed side by side.
+ */
+export const SOURCE_ORDER: SourceToken[] = ['solar', 'wind', 'battery', 'genset', 'grid'];
+
+/**
+ * Short tags must stand alone as a "word": letters may not touch them on
+ * either side, but digits, `_`, `-`, spaces and edges may ('ed_pv', 'PV1',
+ * 'DG-1', 'BESS SOC'). Otherwise 'Bridge load' / 'Edge meter' read as
+ * genset (they contain 'dg') and 'spv'-style words as solar.
+ */
+const tag = (t: string) => new RegExp(`(^|[^a-z])${t}($|[^a-z])`);
+const PV_TAG = tag('pv');
+const DG_TAG = tag('dg');
+const BESS_TAG = tag('bess');
+
+/**
  * Match the lowercased `name` against the source dictionary. Returns
  * `undefined` for unrecognised values — callers should fall back to a
- * neutral colour / label.
+ * neutral colour / label. Long words ('solar', 'wind', 'grid', 'genset',
+ * 'battery') match as substrings; the short tags pv / dg / bess only as
+ * letter-bounded tokens.
  */
 export const sourceTokenFromName = (
   name: string,
 ): SourceToken | undefined => {
   const n = name.toLowerCase();
-  if (n.includes('solar') || n.includes('pv')) return 'solar';
+  if (n.includes('solar') || PV_TAG.test(n)) return 'solar';
   if (n.includes('wind')) return 'wind';
   if (n.includes('grid')) return 'grid';
-  if (n.includes('genset') || n.includes('dg')) return 'genset';
-  if (n.includes('battery') || n.includes('bess')) return 'battery';
+  if (n.includes('genset') || DG_TAG.test(n)) return 'genset';
+  if (n.includes('battery') || BESS_TAG.test(n)) return 'battery';
   return undefined;
 };
+
+/* ─────────── card period (what time window a backend card covers) ─────────── */
+
+export type CardPeriod = 'now' | 'today' | 'week' | 'month' | 'year' | 'lifetime';
+
+export const PERIOD_LABEL: Record<CardPeriod, string> = {
+  now: 'Now',
+  today: 'Today',
+  week: 'This week',
+  month: 'This month',
+  year: 'This year',
+  lifetime: 'Lifetime',
+};
+
+/** Checked in this order — the first match wins ('Total Energy Today' is
+ *  'today', not 'lifetime'). Lifetime is deliberately narrow: a bare
+ *  'Total' does NOT imply lifetime ('Total Energy Consumed' stays
+ *  undefined) — a period caption is shown only when the name says so. */
+const PERIOD_PATTERNS: [CardPeriod, RegExp][] = [
+  ['today', /\b(today|daily|day|tdy)\b/i],
+  ['week', /\b(week|weekly|wtd)\b/i],
+  ['month', /\b(month|monthly|mtd)\b/i],
+  ['year', /\b(year|yearly|annual|ytd)\b/i],
+  [
+    'lifetime',
+    /\b(lifetime|life[\s-]time|cumulative|since commissioning|all[\s-]time|total (plant )?yield|plant yield)\b/i,
+  ],
+];
+
+/**
+ * The time window a card covers, derived ONLY from the backend card NAME
+ * (the first matching pattern wins). Returns `undefined` when the name
+ * states no period. This is the variant for user-visible period captions
+ * (Dashboard SiteCard, tile overlines): a caption may only say what the
+ * backend name says (orchestrator rule O5).
+ *
+ *   'Grid Energy Today'      → 'today'
+ *   'Max Demand This Month'  → 'month'
+ *   'PV Energy YTD Shams'    → 'year'
+ *   'Total Plant Yield'      → 'lifetime'
+ *   'PV Total Power'         → undefined
+ */
+export const periodFromName = (name: string): CardPeriod | undefined => {
+  for (const [period, re] of PERIOD_PATTERNS) {
+    if (re.test(name)) return period;
+  }
+  return undefined;
+};
+
+/**
+ * The time window a backend card's value covers, for grouping/bucketing:
+ * the card NAME's period wording first (`periodFromName`), and only when
+ * the name states none, a power-family unit (W / VAr / VA, any prefix)
+ * marks an instantaneous reading ('now'). Returns `undefined` when neither
+ * says. For a visible period caption use `periodFromName` — 'now' here is
+ * inferred from the unit, not stated by the backend name.
+ *
+ *   ('Peak Power Today', 'kW')        → 'today'   (the name wins)
+ *   ('PV Total Power', 'kW')          → 'now'
+ *   ('Grid Energy Today', 'kWh')      → 'today'
+ *   ('Total Plant Yield', 'kWh')      → 'lifetime'
+ *   ('Industrial consumption', 'kWh') → undefined
+ */
+export const periodFromCard = (
+  name: string,
+  unit?: string | null,
+): CardPeriod | undefined =>
+  periodFromName(name) ?? (isRateUnit(unit) ? 'now' : undefined);
 
 /**
  * Concise label for the source. Drops common decoration ("- RealTime",
@@ -47,45 +135,58 @@ export const shortSourceLabel = (name: string): string => {
 };
 
 /**
- * Compact K/M/B formatter for cramped UI slots. Mirrors the legacy
- * `formatCompactNumber` in `utils/cards.ts` but treats *number-or-
- * string-or-NA* inputs uniformly (string passes through, NaN → "—").
+ * Compact K/M/B/T formatter for cramped, UNITLESS slots — 3 significant
+ * digits, same rules as `formatQuantity` compact mode. Values that carry a
+ * unit should use `formatQuantity` instead (no 'K' next to a unit).
  *
- * Examples (default 1 decimal):
- *   121393.6        → "121.4K"
- *   17_000          → "17K"
- *   1_005_727_768   → "1.0B"
- *   850             → "850"
+ *   15642          → "15.6K"
+ *   17_000         → "17K"
+ *   1_049_999      → "1.05M"
+ *   850            → "850"
+ *   'NA' / null    → "—"
  */
 export const formatCompact = (value: number | string | null | undefined): string => {
-  if (value === null || value === undefined) return '—';
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed)) return value;
-    return formatCompact(parsed);
+  let n: number;
+  if (typeof value === 'number') {
+    n = value;
+  } else if (typeof value === 'string' && value.trim() !== '') {
+    n = Number(value);
+  } else {
+    return MISSING_TEXT;
   }
-  if (!Number.isFinite(value)) return '—';
-  // Decimal-count thresholds compare the MAGNITUDE — comparing the signed
-  // value made every negative reading (battery discharge, grid export)
-  // pick up an extra decimal vs its positive twin (-121.4K vs 121K).
-  const abs = Math.abs(value);
-  if (abs >= 1e9)
-    return (value / 1e9).toFixed(abs >= 10e9 ? 0 : 1) + 'B';
-  if (abs >= 1e6)
-    return (value / 1e6).toFixed(abs >= 10e6 ? 0 : 1) + 'M';
-  if (abs >= 1e3)
-    return (value / 1e3).toFixed(abs >= 10e3 ? 0 : 1) + 'K';
-  return value.toFixed(0);
+  if (!Number.isFinite(n)) return MISSING_TEXT;
+  const suffixes = ['', 'K', 'M', 'B', 'T'];
+  let i = 0;
+  let x = n;
+  // Compare the ROUNDED magnitude so 999,950 becomes "1.00M", not "1000K".
+  while (i < suffixes.length - 1 && Math.abs(Number(x.toPrecision(3))) >= 1000) {
+    x /= 1000;
+    i += 1;
+  }
+  return formatSig3(x) + suffixes[i];
 };
 
 /**
- * Match a backend column name (e.g. `ed_solar`, `et_grid_import`) against
- * the known source tokens via case-insensitive substring matching. Callers
- * use the returned token to look up colours and labels from `energyPalette`.
- * Returns `undefined` for unrecognised columns.
+ * Match a backend REPORT column name (e.g. `ed_solar`, `et_grid_import`)
+ * to the source bucket its values are SUMMED into (aggregateEnergy /
+ * buildStackData in utils/aggregations.ts).
+ *
+ * This is a VALUE path, so it deliberately keeps the original plain
+ * substring matching — 'pv' / 'dg' / 'bess' anywhere in the column
+ * ('ed_spv', 'ed_dgset', 'ed_bessa' included) — so the set of columns that
+ * feed each Reports total is exactly what it was (web-portal parity, O1).
+ * The word-bounded `sourceTokenFromName` is for DISPLAY classification only
+ * (accent colour, icon, short label) and must not drive totals.
  */
-export const findSourceForColumn = (column: string): SourceToken | undefined =>
-  sourceTokenFromName(column);
+export const findSourceForColumn = (column: string): SourceToken | undefined => {
+  const n = column.toLowerCase();
+  if (n.includes('solar') || n.includes('pv')) return 'solar';
+  if (n.includes('wind')) return 'wind';
+  if (n.includes('grid')) return 'grid';
+  if (n.includes('genset') || n.includes('dg')) return 'genset';
+  if (n.includes('battery') || n.includes('bess')) return 'battery';
+  return undefined;
+};
 
 /**
  * Neutral accent for cards whose name doesn't resolve to a source token

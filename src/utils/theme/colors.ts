@@ -119,8 +119,10 @@ const deriveColors = (scheme: ColorScheme, isDark: boolean): ThemeColors => ({
   headerBg: scheme.surfaceMuted,
 
   // Light mode kept its high-contrast "dark pill on light page" look.
+  // The light text is the white `surface` — NOT `textOnBrand`, which is
+  // dark ink in both themes now and would vanish on the dark pill.
   dateFilterBg: isDark ? scheme.surfaceRaised : scheme.textPrimary,
-  dateFilterText: isDark ? scheme.textPrimary : scheme.textOnBrand,
+  dateFilterText: isDark ? scheme.textPrimary : scheme.surface,
 
   tabActiveBg: scheme.brand,
 });

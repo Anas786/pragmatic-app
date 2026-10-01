@@ -1,56 +1,23 @@
-import React, { FC, useMemo } from 'react';
-import { StyleSheet } from 'react-native';
-import { AppText, PressableScale } from 'src/components/common';
-import { radius as radiusTokens, Scheme, space, useScheme, useThemedStyles } from 'src/theme';
-import { FONT_SIZE_XS } from 'src/utils';
+import React, { FC } from 'react';
+import { Pill } from 'src/components/common';
 
 interface ReportFilterPillProps {
   active: boolean;
+  /** Internal filter key ('Custom' / 'Month' / 'Year' / 'Life Time'). */
   label: string;
   onPress: () => void;
 }
 
-const ReportFilterPill: FC<ReportFilterPillProps> = ({ active, label, onPress }) => {
-  const scheme = useScheme();
-  const themed = useThemedStyles(createThemedStyles);
-  const pillStyle = useMemo(
-    () =>
-      StyleSheet.flatten([
-        styles.filterPill,
-        active ? themed.filterPillActive : themed.filterPillInactive,
-      ]),
-    [active, themed.filterPillActive, themed.filterPillInactive],
-  );
-  return (
-    <PressableScale onPress={onPress} haptic="select" scaleTo={0.94} style={pillStyle}>
-      <AppText
-        fontSize={FONT_SIZE_XS}
-        medium
-        color={active ? scheme.textOnBrand : scheme.textPrimary}>
-        {label}
-      </AppText>
-    </PressableScale>
-  );
-};
+/** 'Life Time' stays the internal switch key; users always see 'Lifetime'. */
+const displayLabel = (label: string): string => (label === 'Life Time' ? 'Lifetime' : label);
 
-const styles = StyleSheet.create({
-  filterPill: {
-    paddingHorizontal: space.lg,
-    paddingVertical: 10,
-    borderRadius: radiusTokens.pill,
-  },
-});
-
-const createThemedStyles = (scheme: Scheme) =>
-  StyleSheet.create({
-    filterPillActive: {
-      backgroundColor: scheme.brand,
-    },
-    filterPillInactive: {
-      backgroundColor: scheme.surface,
-      borderColor: scheme.border,
-      borderWidth: 1,
-    },
-  });
+/**
+ * Period filter pill for Reports / Tables / Trends — a radio `Pill`
+ * (brand fill + dark ink when selected, 'select' haptic only on change).
+ * Wrap the row in `PillGroup` for radio-group semantics and position.
+ */
+const ReportFilterPill: FC<ReportFilterPillProps> = ({ active, label, onPress }) => (
+  <Pill role="radio" label={displayLabel(label)} selected={active} onPress={onPress} />
+);
 
 export default ReportFilterPill;

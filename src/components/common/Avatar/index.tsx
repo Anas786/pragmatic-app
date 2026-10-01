@@ -1,94 +1,104 @@
-import React, { FC } from "react";
-import { StyleSheet, View, TouchableOpacity, Image, ActivityIndicator } from "react-native";
-import Icon from "react-native-vector-icons/MaterialIcons";
-import {
-  BLUE,
-  getInitials,
-  normalizeHeight,
-  normalizeWidth,
-  WHITE
-} from "src/utils";
-import AppText from "../AppText";
+import React, { FC, useMemo, useState } from 'react';
+import { Image, StyleSheet, View, ViewStyle } from 'react-native';
+import { useScheme } from 'src/theme';
+import { getInitials } from 'src/utils/format';
+import AppText from '../AppText';
+import PressableScale from '../PressableScale';
 
 interface AvatarProps {
   name: string;
+  /** Square size in pt (never width/height-normalised). Default 48. */
   size?: number;
+  imageUrl?: string;
   onPress?: () => void;
+  /** Defaults to the person's name. */
+  accessibilityLabel?: string;
+  /** @deprecated Ignored — the camera badge was removed with the image picker. */
   showCameraIcon?: boolean;
-  imageUrl?: string; // Optional profile image URL
-  isLoading?: boolean; // Loading state for image upload
+  /** @deprecated Ignored — there is no upload flow any more. */
+  isLoading?: boolean;
 }
 
-const Avatar: FC<AvatarProps> = ({ name, size = 48, onPress, showCameraIcon = false, imageUrl, isLoading = false }) => {
-  const avatarSize = normalizeHeight(size);
-  const iconSize = normalizeHeight(size * 0.3);
+const RING = 2;
 
-  return (
-    <TouchableOpacity
-      style={[
-        styles.avatar,
-        {
-          height: avatarSize,
-          width: normalizeWidth(size),
-          borderRadius: avatarSize / 2,
-        },
-      ]}
-      onPress={onPress}
-      disabled={!onPress || isLoading}
-    >
-      {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={WHITE} />
-        </View>
-      ) : imageUrl ? (
-        <Image 
-          source={{ uri: imageUrl }} 
-          style={[
-            styles.avatarImage,
-            {
-              height: avatarSize,
-              width: normalizeWidth(size),
-              borderRadius: avatarSize / 2,
-            }
-          ]}
+/**
+ * A person's avatar: an exact circle on a brandSoft fill with a 2pt brand
+ * ring and brandText initials (round(0.38 × size), SemiBold), or the photo
+ * inside the same ring. Sizes: 48 in the drawer row, 72 in the Profile
+ * header. Decorative (hidden from screen readers) unless pressable or
+ * given an explicit label — the name is normally printed beside it.
+ */
+const Avatar: FC<AvatarProps> = ({ name, size = 48, imageUrl, onPress, accessibilityLabel }) => {
+  const scheme = useScheme();
+  // Remember WHICH url failed (like SiteLogo), so a later, different url —
+  // e.g. once the user record finishes loading — gets a fresh attempt.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const showImage = !!imageUrl && failedUrl !== imageUrl;
+
+  const circle = useMemo<ViewStyle>(
+    () => ({
+      width: size,
+      height: size,
+      borderRadius: size / 2,
+      borderWidth: RING,
+      borderColor: scheme.brand,
+      backgroundColor: scheme.brandSoft,
+    }),
+    [size, scheme.brand, scheme.brandSoft],
+  );
+  const inner = size - RING * 2;
+  const imageStyle = useMemo(
+    () => ({ width: inner, height: inner, borderRadius: inner / 2 }),
+    [inner],
+  );
+
+  const body = (
+    <View style={[styles.circle, circle]}>
+      {showImage ? (
+        <Image
+          source={{ uri: imageUrl }}
+          style={imageStyle}
           resizeMode="cover"
+          onError={() => setFailedUrl(imageUrl ?? null)}
         />
       ) : (
-        <AppText semi_bold fontSize={20} color={WHITE}>
+        <AppText
+          semi_bold
+          fontSize={Math.round(size * 0.38)}
+          color={scheme.brandText}
+          allowFontScaling={false}
+          numberOfLines={1}>
           {getInitials(name)}
         </AppText>
       )}
-      
-      {showCameraIcon && onPress && !isLoading && (
-        <View style={[styles.cameraIconContainer, { bottom: -iconSize / 2, right: -iconSize / 2 }]}>
-          <Icon name="camera-alt" size={iconSize} color={WHITE} />
-        </View>
-      )}
-    </TouchableOpacity>
+    </View>
+  );
+
+  if (onPress) {
+    return (
+      <PressableScale
+        onPress={onPress}
+        accessibilityLabel={accessibilityLabel ?? name}>
+        {body}
+      </PressableScale>
+    );
+  }
+  return (
+    <View
+      accessible={!!accessibilityLabel}
+      accessibilityRole={accessibilityLabel ? 'image' : undefined}
+      accessibilityLabel={accessibilityLabel}
+      importantForAccessibility={accessibilityLabel ? 'yes' : 'no-hide-descendants'}>
+      {body}
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  avatar: {
-    backgroundColor: BLUE,
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-  },
-  avatarImage: {
-    // Image styles are applied inline for dynamic sizing
-  },
-  loadingContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  cameraIconContainer: {
-    position: "absolute",
-    backgroundColor: BLUE,
-    borderRadius: normalizeHeight(20),
-    padding: normalizeHeight(4),
-    borderWidth: 2,
-    borderColor: WHITE,
+  circle: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
 });
 

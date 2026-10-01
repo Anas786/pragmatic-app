@@ -1,4 +1,5 @@
 export { default as AppText } from './AppText';
+export type { TextTone, TextVariant } from './AppText';
 export { default as Spacer } from './Spacer';
 export { default as CustomIcon } from './CustomIcon';
 export { default as BaseKeyboardAvoid } from './BaseKeyboardAvoid';
@@ -19,9 +20,14 @@ export { default as HeroGradientCard } from './HeroGradientCard';
 export type { HeroVariant } from './HeroGradientCard';
 export { default as PESLogo } from './PESLogo';
 export type { PESLogoProps } from './PESLogo';
-export { HeroTopRow, HeroLiveBadge, HeroValueRow } from './HeroRow';
+export { HeroTopRow, HeroLiveBadge, HeroValueRow, HeroStatusBadge } from './HeroRow';
+export type { HeroStatusBadgeProps } from './HeroRow';
+export { default as FreshnessStatus } from './FreshnessStatus';
+export type { FreshnessStatusProps } from './FreshnessStatus';
+export { default as SiteLogo } from './SiteLogo';
 export { default as AppTextInput } from './AppTextInput';
 export { default as EmptyStateCard } from './EmptyStateCard';
+export type { EmptyStateKind } from './EmptyStateCard';
 export { default as Dot } from './Dot';
 export { default as AccentBar } from './AccentBar';
 export { default as TintedPill } from './TintedPill';
@@ -32,6 +38,9 @@ export { createBox } from './Box';
 export { default as ScreenContainer } from './ScreenContainer';
 export { default as TopBar } from './TopBar';
 export { default as IconButton } from './IconButton';
+export type { IconButtonProps } from './IconButton';
+export { default as ScreenHeader } from './ScreenHeader';
+export type { ScreenHeaderProps } from './ScreenHeader';
 export { default as HamburgerIcon } from './HamburgerIcon';
 
 // List / empty-state primitives
@@ -48,6 +57,9 @@ export {
 
 // Interactive primitives
 export { default as ActionBtn } from './ActionBtn';
+export { Pill, PillGroup } from './Pill';
+export type { PillProps, PillGroupProps } from './Pill';
+export type { PressableScaleProps, PressableRole } from './PressableScale';
 export { default as Fab, FabWrap } from './Fab';
 
 // Search

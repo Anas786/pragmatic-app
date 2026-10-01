@@ -1,12 +1,14 @@
 import React, { FC, ReactNode, useMemo } from 'react';
 import { StyleSheet, TextStyle } from 'react-native';
-import AppText from '../AppText';
-import { FONT_SIZE_XXS } from 'src/utils';
+import AppText, { TextTone } from '../AppText';
 
 interface OverlineLabelProps {
   children: ReactNode;
-  color: string;
-  /** Custom font-size override. Defaults to `FONT_SIZE_XXS` (10pt). */
+  /** Explicit colour. Omit to use `tone` (default 'secondary'). */
+  color?: string;
+  /** Semantic colour role when no `color` is given. */
+  tone?: TextTone;
+  /** Custom font-size override. Defaults to the 11pt overline size. */
   fontSize?: number;
   /** Pass-through `numberOfLines` (defaults to 1 — overlines should
    *  never wrap). */
@@ -16,14 +18,16 @@ interface OverlineLabelProps {
 }
 
 /**
- * The small uppercase, tracked label used as a section heading across
- * every hero and section card in the redesigned UI ("POWER MIX",
- * "TOTAL LOAD", "PLANT YIELD", "DISTRIBUTION", etc.).
+ * The small uppercase, tracked label for short APP-AUTHORED in-card labels
+ * ("POWER MIX", "TOTAL ENERGY") — 11pt SemiBold, tracking 1.0. Section
+ * titles use a sentence-case h3 instead, and backend-provided names are
+ * never put in an overline (they keep their own case).
  */
 const OverlineLabel: FC<OverlineLabelProps> = ({
   children,
   color,
-  fontSize = FONT_SIZE_XXS,
+  tone = 'secondary',
+  fontSize,
   numberOfLines = 1,
   style,
 }) => {
@@ -33,9 +37,11 @@ const OverlineLabel: FC<OverlineLabelProps> = ({
   );
   return (
     <AppText
+      variant="overline"
       fontSize={fontSize}
-      bold
+      semi_bold
       color={color}
+      tone={tone}
       numberOfLines={numberOfLines}
       style={merged}>
       {children}
@@ -45,7 +51,7 @@ const OverlineLabel: FC<OverlineLabelProps> = ({
 
 const styles = StyleSheet.create({
   base: {
-    letterSpacing: 1.5,
+    letterSpacing: 1.0,
     textTransform: 'uppercase',
   },
 });

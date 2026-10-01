@@ -295,6 +295,7 @@ const SourceNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
           {icon ? <GifImage source={icon.path} size={ICON_SIZE} /> : null}
         </View>
         <AppText
+          fixedSize
           fontSize={15}
           lineHeight={20}
           bold
@@ -311,6 +312,7 @@ const SourceNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
         {node.data.keys.map((k, i) => (
           <View key={i} style={styles.metricRow}>
             <AppText
+              fixedSize
               fontSize={11}
               lineHeight={14}
               semi_bold
@@ -321,6 +323,7 @@ const SourceNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
             </AppText>
             <View style={styles.metricValueWrap}>
               <AppText
+                fixedSize
                 fontSize={14}
                 lineHeight={18}
                 bold
@@ -332,7 +335,12 @@ const SourceNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
                 {formatSldValue(resolve(k.param))}
               </AppText>
               {k.unit ? (
-                <AppText fontSize={10} lineHeight={13} medium color={scheme.textSecondary}>
+                <AppText
+                  fixedSize
+                  fontSize={10}
+                  lineHeight={13}
+                  medium
+                  color={scheme.textSecondary}>
                   {k.unit}
                 </AppText>
               ) : null}
@@ -378,6 +386,7 @@ const LogoNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
       <View style={styles.logoInner}>
         {icon ? <GifImage source={icon.path} size={LOGO_ICON_SIZE} /> : null}
         <AppText
+          fixedSize
           fontSize={13}
           lineHeight={17}
           bold
@@ -387,6 +396,7 @@ const LogoNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
         </AppText>
         {primary ? (
           <AppText
+            fixedSize
             fontSize={11}
             lineHeight={14}
             color={scheme.textSecondary}

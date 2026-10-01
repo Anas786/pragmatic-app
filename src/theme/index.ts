@@ -9,24 +9,13 @@
  * old screens in lockstep.
  */
 
-import { useThemeStore } from 'src/hooks';
-import { darkScheme, lightScheme, ColorScheme } from './tokens';
+import { useThemeStore } from 'src/hooks/useThemeStore';
+import { ColorScheme } from './tokens';
+import { DARK_SCHEME, LIGHT_SCHEME } from './useThemedStyles';
 
 export * from './tokens';
-export { useThemedStyles } from './useThemedStyles';
+export { useThemedStyles, LIGHT_SCHEME, DARK_SCHEME } from './useThemedStyles';
 export type { Scheme } from './useThemedStyles';
-
-// Built once at module load so `useScheme()` returns the *same* object
-// reference on every call for a given mode — keeps memoized children
-// (React.memo / useMemo deps) from invalidating on unrelated re-renders.
-const LIGHT: ColorScheme & { isDark: boolean } = {
-  ...lightScheme,
-  isDark: false,
-};
-const DARK: ColorScheme & { isDark: boolean } = {
-  ...darkScheme,
-  isDark: true,
-};
 
 /**
  * Subscribes a component to the active color scheme.
@@ -39,8 +28,9 @@ const DARK: ColorScheme & { isDark: boolean } = {
  * Referentially stable: the same frozen-by-convention object is returned
  * for every call in a given mode, so it's safe to use directly in
  * `useMemo`/`useCallback` deps and `React.memo`'d component props.
+ * The mode follows the theme preference (System / Light / Dark).
  */
 export const useScheme = (): ColorScheme & { isDark: boolean } => {
   const isDark = useThemeStore(s => s.isDark);
-  return isDark ? DARK : LIGHT;
+  return isDark ? DARK_SCHEME : LIGHT_SCHEME;
 };

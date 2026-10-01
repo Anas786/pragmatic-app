@@ -7,6 +7,8 @@ export type RootStackParamList = {
 
 export type OnboardingStackParamList = {
   Login: undefined;
+  /** Terms reachable from the Login screen's legal line. */
+  TermsAndConditions: undefined;
 };
 
 export type DrawerParamList = {
@@ -30,9 +32,22 @@ export type DashboardStackParamList = {
      * site's two-letter initials in that case.
      */
     siteimage: string | null;
+    /**
+     * Seeds the header's freshness status before `/data/all` lands — the
+     * site-list values the Dashboard card was showing. All optional so
+     * existing navigations keep compiling.
+     */
+    state?: string | null;
+    dataLastUpdate?: number | string | null;
+    capacityKw?: number | null;
   };
   /** Energy-flow diagram, presented full-screen in landscape. */
   SLDFullscreen: {
     siteId: string;
   };
+  /** Info screens pushed on the stack (so Back returns to where you were). */
+  Profile: undefined;
+  AboutUs: undefined;
+  ContactUs: undefined;
+  TermsAndConditions: undefined;
 };

@@ -1,47 +1,70 @@
-import React, { FC, useMemo } from 'react';
+import React, { FC, ReactNode, useMemo } from 'react';
 import { ActivityIndicator, StyleSheet } from 'react-native';
-import { AppText, createBox, PressableScale } from 'src/components/common';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import {
+  AppText,
+  createBox,
+  IconButton,
+  PressableScale,
+} from 'src/components/common';
 import {
   radius as radiusTokens,
   Scheme,
   space,
+  touch,
   useScheme,
   useThemedStyles,
 } from 'src/theme';
-import {
-  FONT_SIZE_SM,
-  FONT_SIZE_XS,
-  FONT_SIZE_XXS,
-  ICON_SIZE_MD,
-  ICON_SIZE_XS,
-} from 'src/utils';
+import { ICON_SIZE_MD, ICON_SIZE_XS } from 'src/utils';
 import { CalendarIcon, RefreshIcon } from 'src/assets/icons';
 
 interface DateFilterHeaderProps {
-  /** Section title — rendered as a small overline label above the row. */
+  /** Section title — a sentence-case heading ('Energy mix'). Backend
+   *  headings (Trends) are passed through in their own case. */
   title: string;
-  /** Pre-formatted label inside the date pill. */
+  /** Optional secondary line under the title. */
+  caption?: string;
+  /** Pre-formatted period label inside the date pill. */
   dateLabel: string;
+  /** Spoken period when the visible label is abbreviated. */
+  dateA11yLabel?: string;
   /** Tap handler for the date pill. */
   onDatePress: () => void;
   /** When true (Lifetime filter), the pill is non-interactive. */
   pillDisabled?: boolean;
+  /** 'pill' (default) — tappable date pill; 'caption' — the period is
+   *  shown as plain text under the title, with no picker affordance. */
+  datePillMode?: 'pill' | 'caption';
   /** Tap handler for the refresh button. Hidden when omitted. */
   onRefresh?: () => void;
-  /** Show a spinner inside the refresh button while a refetch is in flight. */
+  /** Spinner + busy state on the refresh button while refetching. */
   refreshing?: boolean;
-  /** Optional secondary line — small caption under the title (e.g. "Live"). */
-  caption?: string;
+  /** Extra trailing control(s), placed before the refresh button. */
+  right?: ReactNode;
 }
 
+/**
+ * Section header for time-filtered cards (Reports, Tables, Trends):
+ *
+ *   Energy mix                     [📅 1 – 30 Sep 2026 ▾] (⟳)
+ *   optional caption
+ *
+ * The title is a real heading (role 'header'). The date pill reads
+ * 'Date range, <label>' with the hint 'Opens date picker' and carries a
+ * chevron while it can open one; on Lifetime it is disabled (no chevron).
+ * Refresh is a soft IconButton with a busy state.
+ */
 const DateFilterHeader: FC<DateFilterHeaderProps> = ({
   title,
+  caption,
   dateLabel,
+  dateA11yLabel,
   onDatePress,
   pillDisabled = false,
+  datePillMode = 'pill',
   onRefresh,
   refreshing = false,
-  caption,
+  right,
 }) => {
   const scheme = useScheme();
   const themed = useThemedStyles(createThemedStyles);
@@ -49,68 +72,82 @@ const DateFilterHeader: FC<DateFilterHeaderProps> = ({
     () =>
       StyleSheet.flatten([
         themed.datePill,
-        pillDisabled ? styles.dateRangeContainerDisabled : null,
+        pillDisabled ? styles.datePillDisabled : null,
       ]),
     [themed.datePill, pillDisabled],
   );
+  const spokenDate = dateA11yLabel ?? dateLabel;
+  const asCaption = datePillMode === 'caption';
 
   return (
     <Header>
       <TitleColumn>
-        <AppText
-          fontSize={FONT_SIZE_XXS}
-          color={scheme.textTertiary}
-          medium
-          style={styles.overline}
-          numberOfLines={1}>
+        <AppText variant="h3" accessibilityRole="header" numberOfLines={2}>
           {title}
         </AppText>
         {caption ? (
-          <AppText
-            fontSize={FONT_SIZE_XS}
-            color={scheme.textSecondary}
-            numberOfLines={1}>
+          <AppText variant="caption" tone="secondary" numberOfLines={2}>
             {caption}
+          </AppText>
+        ) : null}
+        {asCaption ? (
+          <AppText
+            variant="caption"
+            tone="secondary"
+            numberOfLines={1}
+            accessibilityLabel={`Date range, ${spokenDate}`}>
+            {dateLabel}
           </AppText>
         ) : null}
       </TitleColumn>
 
       <Actions>
-        <PressableScale
-          onPress={onDatePress}
-          haptic="select"
-          scaleTo={0.96}
-          disabled={pillDisabled}
-          style={datePillStyle}
-          accessibilityLabel="Pick date filter"
-          accessibilityHint="Opens the date filter picker">
-          <CalendarIcon size={ICON_SIZE_XS} color={scheme.brand} />
-          <AppText
-            fontSize={FONT_SIZE_XS}
-            medium
-            color={scheme.textPrimary}
-            numberOfLines={1}>
-            {dateLabel}
-          </AppText>
-        </PressableScale>
-
-        {onRefresh ? (
+        {asCaption ? null : (
           <PressableScale
-            onPress={onRefresh}
-            haptic="tap"
-            disabled={refreshing}
-            style={themed.refreshButton}
-            accessibilityLabel="Refresh">
-            {refreshing ? (
-              <ActivityIndicator size="small" color={scheme.brand} />
-            ) : (
-              <RefreshIcon size={ICON_SIZE_MD} color={scheme.brand} />
+            onPress={onDatePress}
+            scaleTo={0.96}
+            disabled={pillDisabled}
+            hitSlop={PILL_HIT_SLOP}
+            style={datePillStyle}
+            accessibilityLabel={`Date range, ${spokenDate}`}
+            accessibilityHint={pillDisabled ? undefined : 'Opens date picker'}>
+            <CalendarIcon size={ICON_SIZE_XS} color={scheme.brandText} />
+            <AppText variant="caption" medium numberOfLines={1} style={styles.dateText}>
+              {dateLabel}
+            </AppText>
+            {pillDisabled ? null : (
+              <Icon name="expand-more" size={16} color={scheme.textSecondary} />
             )}
           </PressableScale>
+        )}
+
+        {right ?? null}
+
+        {onRefresh ? (
+          <IconButton
+            variant="soft"
+            onPress={onRefresh}
+            disabled={refreshing}
+            busy={refreshing}
+            accessibilityLabel="Refresh">
+            {refreshing ? (
+              <ActivityIndicator size="small" color={scheme.brandText} />
+            ) : (
+              <RefreshIcon size={ICON_SIZE_MD} color={scheme.brandText} />
+            )}
+          </IconButton>
         ) : null}
       </Actions>
     </Header>
   );
+};
+
+/** Tops the 36pt pill up to the platform minimum target. */
+const PILL_HIT_SLOP = {
+  top: Math.max(0, Math.ceil((touch.min - touch.pillVisual) / 2)),
+  bottom: Math.max(0, Math.ceil((touch.min - touch.pillVisual) / 2)),
+  left: 0,
+  right: 0,
 };
 
 const Header = createBox(
@@ -120,7 +157,7 @@ const Header = createBox(
       alignItems: 'center',
       paddingHorizontal: space.xs,
       paddingBottom: space.sm,
-      gap: space.md,
+      gap: space.sm,
     },
   }).s,
   'Header',
@@ -142,20 +179,19 @@ const Actions = createBox(
     s: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: space.sm,
-      flexShrink: 0,
+      gap: space.xs,
+      flexShrink: 1,
     },
   }).s,
   'Actions',
 );
 
 const styles = StyleSheet.create({
-  overline: {
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
+  datePillDisabled: {
+    opacity: 0.7,
   },
-  dateRangeContainerDisabled: {
-    opacity: 0.55,
+  dateText: {
+    flexShrink: 1,
   },
 });
 
@@ -164,26 +200,15 @@ const createThemedStyles = (scheme: Scheme) =>
     datePill: {
       flexDirection: 'row',
       alignItems: 'center',
+      minHeight: touch.pillVisual,
+      maxWidth: 220,
       borderWidth: 1,
       borderRadius: radiusTokens.pill,
       paddingHorizontal: space.md,
-      paddingVertical: 8,
-      gap: 8,
+      gap: 6,
       backgroundColor: scheme.surfaceMuted,
       borderColor: scheme.border,
     },
-    refreshButton: {
-      width: 38,
-      height: 38,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderRadius: radiusTokens.pill,
-      backgroundColor: scheme.brandSoft,
-    },
   });
-
-// Suppress unused-import warning for FONT_SIZE_SM (kept available for
-// future caller variants).
-void FONT_SIZE_SM;
 
 export default DateFilterHeader;

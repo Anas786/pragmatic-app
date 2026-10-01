@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { SetStateAction, useCallback, useMemo, useState } from 'react';
 import {
   buildReportFilter,
   daysAgo,
@@ -8,6 +8,12 @@ import {
 } from 'src/utils';
 import { ReportFilter } from 'src/networking';
 import { InverterFilterOption } from 'src/data/mock';
+import {
+  ReportPeriodEntry,
+  ReportPeriodScope,
+  reportPeriodKey,
+  useReportPeriodStore,
+} from './useReportPeriodStore';
 
 /**
  * Shared date-filter state machine for the "report-style" cards on
@@ -21,9 +27,15 @@ import { InverterFilterOption } from 'src/data/mock';
  *   - the active pill (`Custom` / `Month` / `Year` / `Life Time`),
  *   - the derived `ReportFilter` payload + header pill label.
  *
- * Each call site gets its OWN independent state (per CLAUDE.md §8 the
- * cards deliberately keep separate filter selections) — only the code
- * is shared, not the state.
+ * Each card keeps its OWN selection (per CLAUDE.md §8 Reports and Tables
+ * deliberately keep separate periods):
+ *   - without a `scope`, the state is local to the calling component
+ *     (resets when the tab unmounts) — the original behaviour;
+ *   - with `{ siteId, card }`, the selection lives in the non-persisted
+ *     `useReportPeriodStore` under `${siteId}:${card}`, so it survives tab
+ *     switches, stays isolated per site and per card, and a site that was
+ *     never touched starts from the defaults.
+ * Picker-visibility flags are always local.
  *
  * The three `*PickerProps` bundles spread straight onto the picker
  * modals so the card JSX stays a one-liner per modal:
@@ -32,18 +44,65 @@ import { InverterFilterOption } from 'src/data/mock';
  *     <MonthYearPickerModal {...monthPickerProps} />
  *     <MonthYearPickerModal {...yearPickerProps} />
  */
-export const useDateFilter = () => {
-  const [startDate, setStartDate] = useState(() => daysAgo(DEFAULT_CUSTOM_RANGE_DAYS));
-  const [endDate, setEndDate] = useState(() => new Date());
-  const [selectedMonth, setSelectedMonth] = useState<MonthSelection>(() => {
+export const useDateFilter = (scope?: ReportPeriodScope) => {
+  // Local state doubles as the stable DEFAULTS for scoped mode: a scoped
+  // key with no stored entry reads these, so the Date identities (and the
+  // memoised reportFilter) don't churn render to render.
+  const [localStart, setLocalStart] = useState(() => daysAgo(DEFAULT_CUSTOM_RANGE_DAYS));
+  const [localEnd, setLocalEnd] = useState(() => new Date());
+  const [localMonth, setLocalMonth] = useState<MonthSelection>(() => {
     const now = new Date();
     return { month: now.getMonth() + 1, year: now.getFullYear() };
   });
-  const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear());
+  const [localYear, setLocalYear] = useState<number>(() => new Date().getFullYear());
+  const [localFilter, setLocalFilter] = useState<InverterFilterOption>('Custom');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [showYearPicker, setShowYearPicker] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<InverterFilterOption>('Custom');
+
+  const key = scope ? reportPeriodKey(scope) : null;
+  const stored = useReportPeriodStore(s => (key ? s.entries[key] : undefined));
+  const setEntry = useReportPeriodStore(s => s.setEntry);
+
+  const startDate = stored?.startDate ?? localStart;
+  const endDate = stored?.endDate ?? localEnd;
+  const selectedMonth = stored?.selectedMonth ?? localMonth;
+  const selectedYear = stored?.selectedYear ?? localYear;
+  const activeFilter = stored?.activeFilter ?? localFilter;
+
+  /** Write a partial selection: to the store when scoped (seeding the
+   *  untouched fields from the current effective values), else locally. */
+  const commit = useCallback(
+    (patch: Partial<ReportPeriodEntry>) => {
+      if (key) {
+        const current = useReportPeriodStore.getState().entries[key];
+        setEntry(key, {
+          activeFilter: current?.activeFilter ?? localFilter,
+          startDate: current?.startDate ?? localStart,
+          endDate: current?.endDate ?? localEnd,
+          selectedMonth: current?.selectedMonth ?? localMonth,
+          selectedYear: current?.selectedYear ?? localYear,
+          ...patch,
+        });
+        return;
+      }
+      if (patch.activeFilter !== undefined) setLocalFilter(patch.activeFilter);
+      if (patch.startDate !== undefined) setLocalStart(patch.startDate);
+      if (patch.endDate !== undefined) setLocalEnd(patch.endDate);
+      if (patch.selectedMonth !== undefined) setLocalMonth(patch.selectedMonth);
+      if (patch.selectedYear !== undefined) setLocalYear(patch.selectedYear);
+    },
+    [key, setEntry, localFilter, localStart, localEnd, localMonth, localYear],
+  );
+
+  /** Same call shape as the old `useState` setter (value or updater). */
+  const setActiveFilter = useCallback(
+    (next: SetStateAction<InverterFilterOption>) => {
+      const value = typeof next === 'function' ? next(activeFilter) : next;
+      commit({ activeFilter: value });
+    },
+    [commit, activeFilter],
+  );
 
   const reportFilter = useMemo<ReportFilter>(
     () => buildReportFilter(activeFilter, startDate, endDate, selectedMonth, selectedYear),
@@ -61,16 +120,19 @@ export const useDateFilter = () => {
   /** Lifetime has no pickable range — the header pill goes inert. */
   const pillDisabled = activeFilter === 'Life Time';
 
-  const handleDateApply = useCallback((start: Date, end: Date) => {
-    setStartDate(start);
-    setEndDate(end);
-  }, []);
-  const handleMonthApply = useCallback((sel: { year: number; month: number }) => {
-    setSelectedMonth({ year: sel.year, month: sel.month });
-  }, []);
-  const handleYearApply = useCallback((sel: { year: number }) => {
-    setSelectedYear(sel.year);
-  }, []);
+  const handleDateApply = useCallback(
+    (start: Date, end: Date) => commit({ startDate: start, endDate: end }),
+    [commit],
+  );
+  const handleMonthApply = useCallback(
+    (sel: { year: number; month: number }) =>
+      commit({ selectedMonth: { year: sel.year, month: sel.month } }),
+    [commit],
+  );
+  const handleYearApply = useCallback(
+    (sel: { year: number }) => commit({ selectedYear: sel.year }),
+    [commit],
+  );
 
   /** Date-pill tap → open whichever picker matches the active pill. */
   const handlePillPress = useCallback(() => {
@@ -89,6 +151,22 @@ export const useDateFilter = () => {
         break;
     }
   }, [activeFilter]);
+
+  /**
+   * Filter-pill tap: tapping the ALREADY-active pill opens its picker
+   * (Custom → range, Month → month, Year → year, Life Time → nothing);
+   * tapping another pill just selects it.
+   */
+  const onFilterPress = useCallback(
+    (option: InverterFilterOption) => {
+      if (option === activeFilter) {
+        handlePillPress();
+        return;
+      }
+      commit({ activeFilter: option });
+    },
+    [activeFilter, handlePillPress, commit],
+  );
 
   const closeDatePicker = useCallback(() => setShowDatePicker(false), []);
   const closeMonthPicker = useCallback(() => setShowMonthPicker(false), []);
@@ -139,6 +217,8 @@ export const useDateFilter = () => {
     pillDisabled,
     /** DateFilterHeader `onDatePress` handler. */
     handlePillPress,
+    /** Filter-pill handler: re-tap opens the picker, else selects. */
+    onFilterPress,
     /** Spread bundles for the three picker modals. */
     dateRangePickerProps,
     monthPickerProps,

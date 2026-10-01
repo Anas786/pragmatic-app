@@ -1,5 +1,11 @@
 import React, { FC, ReactNode } from 'react';
-import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import {
+  AccessibilityRole,
+  StyleProp,
+  StyleSheet,
+  View,
+  ViewStyle,
+} from 'react-native';
 import { elevation, radius as radiusTokens, space, useScheme } from 'src/theme';
 
 type ElevationKey = keyof typeof elevation;
@@ -17,6 +23,13 @@ interface SurfaceProps {
    *  the theme-aware default hairline; pass a hex string for a colored one. */
   bordered?: boolean | string;
   style?: StyleProp<ViewStyle>;
+  /** Make the whole card ONE screen-reader element (non-interactive data
+   *  tiles) — pair with a composed `accessibilityLabel`. */
+  accessible?: boolean;
+  accessibilityLabel?: string;
+  accessibilityRole?: AccessibilityRole;
+  accessibilityHint?: string;
+  testID?: string;
 }
 
 /**
@@ -34,6 +47,11 @@ const Surface: FC<SurfaceProps> = ({
   padding: paddingProp,
   bordered = false,
   style,
+  accessible,
+  accessibilityLabel,
+  accessibilityRole,
+  accessibilityHint,
+  testID,
 }) => {
   const scheme = useScheme();
 
@@ -54,6 +72,11 @@ const Surface: FC<SurfaceProps> = ({
 
   return (
     <View
+      accessible={accessible}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole={accessibilityRole}
+      accessibilityHint={accessibilityHint}
+      testID={testID}
       style={[
         elevation[elevationKey],
         {

@@ -1,11 +1,27 @@
 import React, { FC, ReactNode } from 'react';
 import { StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Edge, SafeAreaView } from 'react-native-safe-area-context';
 import { Scheme, useThemedStyles } from 'src/theme';
 
-const ScreenContainer: FC<{ children?: ReactNode }> = ({ children }) => {
+interface ScreenContainerProps {
+  children?: ReactNode;
+  /**
+   * Safe-area edges to pad. Default: all four (unchanged behaviour).
+   * Screens whose content scrolls under the home indicator pass
+   * `['top', 'left', 'right']` and pad the scroll content themselves.
+   */
+  edges?: Edge[];
+}
+
+const ALL_EDGES: Edge[] = ['top', 'right', 'bottom', 'left'];
+
+const ScreenContainer: FC<ScreenContainerProps> = ({ children, edges = ALL_EDGES }) => {
   const themed = useThemedStyles(createScreenStyles);
-  return <SafeAreaView style={themed.container}>{children}</SafeAreaView>;
+  return (
+    <SafeAreaView style={themed.container} edges={edges}>
+      {children}
+    </SafeAreaView>
+  );
 };
 ScreenContainer.displayName = 'ScreenContainer';
 

@@ -1,9 +1,10 @@
-import React, { FC, useEffect } from 'react';
-import { StyleSheet } from 'react-native';
+import React, { FC, useEffect, useMemo } from 'react';
+import { StyleSheet, View, ViewStyle } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import Animated, {
   cancelAnimation,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withRepeat,
   withSequence,
@@ -14,24 +15,40 @@ import { duration } from 'src/theme';
 interface PulseDotProps {
   color: string;
   size?: number;
+  /**
+   * false → a plain static dot: no Reanimated values, no loop. Use it
+   * whenever the data is not live (see the freshness model) — a pulse
+   * claims "this is updating right now".
+   */
+  active?: boolean;
 }
 
+const useDotStyle = (color: string, size: number): ViewStyle =>
+  useMemo(
+    () => ({ width: size, height: size, borderRadius: size / 2, backgroundColor: color }),
+    [color, size],
+  );
+
+const StaticDot: FC<{ color: string; size: number }> = ({ color, size }) => {
+  const dot = useDotStyle(color, size);
+  return <View style={[styles.dot, dot]} />;
+};
+
 /**
- * Pulsing brand-coloured dot for LIVE indicators.
- *
- * Uses an infinite scale + opacity loop driven on the UI thread via
- * Reanimated 3 shared values — no JS involvement after mount, so this
- * is free at 60fps even when 100+ tiles are on screen.
+ * The animated variant. Uses an infinite scale + opacity loop driven on
+ * the UI thread via Reanimated 3 shared values — no JS involvement after
+ * mount.
  *
  * The loops only run while the owning screen is focused: infinite
  * `withRepeat`s otherwise keep ticking on the UI thread behind covered
- * screens (CPU drain / device heat). PulseDot is only ever rendered
- * inside navigator screens, so `useIsFocused` is safe here.
+ * screens (CPU drain / device heat). Only rendered inside navigator
+ * screens, so `useIsFocused` is safe here.
  */
-const PulseDot: FC<PulseDotProps> = ({ color, size = 8 }) => {
+const AnimatedPulse: FC<{ color: string; size: number }> = ({ color, size }) => {
   const isFocused = useIsFocused();
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
+  const dot = useDotStyle(color, size);
 
   useEffect(() => {
     if (!isFocused) return;
@@ -66,14 +83,20 @@ const PulseDot: FC<PulseDotProps> = ({ color, size = 8 }) => {
     opacity: opacity.value,
   }));
 
-  return (
-    <Animated.View
-      style={[
-        style,
-        styles.dot,
-        { width: size, height: size, borderRadius: size / 2, backgroundColor: color },
-      ]}
-    />
+  return <Animated.View style={[style, styles.dot, dot]} />;
+};
+
+/**
+ * Brand-coloured dot for LIVE indicators. Pulses only when `active`
+ * (default) and the OS "reduce motion" setting is off; otherwise renders
+ * a static dot. At most one pulsing element per screen.
+ */
+const PulseDot: FC<PulseDotProps> = ({ color, size = 8, active = true }) => {
+  const reduceMotion = useReducedMotion();
+  return active && !reduceMotion ? (
+    <AnimatedPulse color={color} size={size} />
+  ) : (
+    <StaticDot color={color} size={size} />
   );
 };
 

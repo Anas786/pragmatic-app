@@ -80,6 +80,33 @@ export const semantic = {
 
 /* ─────────── 2. Mode-aware semantic tokens ─────────── */
 
+/** Energy-source keys (same set as `energyPalette`). */
+export type EnergySource = keyof typeof energyPalette;
+
+/** One colour per semantic status role. */
+export interface StatusRoles {
+  success: string;
+  warning: string;
+  danger: string;
+  info: string;
+}
+
+/** `rgba()` of a 6-digit hex at `alpha` — used to derive soft fills. */
+const withAlpha = (hex: string, alpha: number): string => {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const statusSoftAt = (alpha: number): StatusRoles => ({
+  success: withAlpha(semantic.success, alpha),
+  warning: withAlpha(semantic.warning, alpha),
+  danger: withAlpha(semantic.danger, alpha),
+  info: withAlpha(semantic.info, alpha),
+});
+
 export interface ColorScheme {
   /** Page background — the deepest surface. */
   bg: string;
@@ -96,7 +123,14 @@ export interface ColorScheme {
   textSecondary: string;
   /** Tertiary text — placeholders, low-emphasis. */
   textTertiary: string;
-  /** Inverse text — for use on brand-color backgrounds. */
+  /** Disabled-control text only (NOT AA — never for readable content). */
+  textDisabled: string;
+  /**
+   * Ink for anything sitting on a SOLID brand or energy-source fill
+   * (active pills/tabs, CTA buttons, source badges). Dark ink in BOTH
+   * themes: ≥7.59:1 on the light brand, ≥4.87:1 on every energyPalette
+   * fill (enforced by __tests__/tokenContrast.test.ts).
+   */
   textOnBrand: string;
 
   /** Brand primary (emerald) — used for active states, CTAs, success. */
@@ -105,6 +139,9 @@ export interface ColorScheme {
   brandSoft: string;
   /** Brand bold — deeper emerald for hover/pressed states. */
   brandBold: string;
+  /** Brand-coloured TEXT/ICON ink on neutral surfaces (AA on bg + surface).
+   *  `brand` itself is a fill — it fails AA as text on light surfaces. */
+  brandText: string;
 
   /** Premium accent (gold) — used very sparingly. */
   accentGold: string;
@@ -113,6 +150,22 @@ export interface ColorScheme {
   hairline: string;
   /** Soft border — when an outline is structurally required. */
   border: string;
+  /** Strong border — form-field outlines and other UI boundaries that
+   *  must meet the 3:1 non-text contrast minimum on `surface`. */
+  borderStrong: string;
+  /** Modal / sheet backdrop scrim. */
+  scrim: string;
+  /** Plate behind site logos (logos are light-background artwork). */
+  logoPlate: string;
+
+  /** Text/icon ink per energy source — for the RARE case where a source
+   *  name is coloured. `energyPalette` stays fills-only. */
+  energyInk: Record<EnergySource, string>;
+  /** Text/icon ink for status (PR values, status pills, uptime, errors). */
+  statusInk: StatusRoles;
+  /** Soft status fills (semantic hue at 12% light / 16% dark) — pair with
+   *  `statusInk` for status pills. */
+  statusSoft: StatusRoles;
 
   /** Skeleton base + shimmer highlight. */
   skeletonBase: string;
@@ -173,31 +226,55 @@ export const lightScheme: ColorScheme = {
   surfaceMuted: slate[100],
 
   textPrimary: slate[900],
-  textSecondary: slate[500],
-  textTertiary: slate[400],
-  textOnBrand: slate[0],
+  // AA on every light surface (was slate-500/400, which failed on muted).
+  textSecondary: slate[600],
+  textTertiary: '#636B78',
+  textDisabled: slate[400],
+  // Dark ink on the brand fill in BOTH themes (7.59:1 on emerald-500).
+  textOnBrand: slate[950],
 
   brand: emerald[500],
   brandSoft: 'rgba(16, 185, 129, 0.10)',
   brandBold: emerald[600],
+  brandText: emerald[700],
 
   accentGold: gold[500],
 
   hairline: 'rgba(17, 24, 39, 0.06)',
   border: slate[200],
+  borderStrong: slate[500],
+  scrim: 'rgba(10, 14, 26, 0.40)',
+  logoPlate: slate[0],
+
+  energyInk: {
+    solar: '#4D7C0F',
+    wind: '#0E7490',
+    grid: '#1D4ED8',
+    genset: '#C2410C',
+    battery: '#7E22CE',
+  },
+  statusInk: {
+    success: emerald[700],
+    // amber-800: amber-700 (#B45309) is only 4.4:1 on its own soft fill.
+    warning: '#92400E',
+    danger: '#B91C1C',
+    info: '#1D4ED8',
+  },
+  statusSoft: statusSoftAt(0.12),
 
   skeletonBase: slate[100],
   skeletonHighlight: slate[200],
 
-  heroGradient: [emerald[500], emerald[600], emerald[700]],
+  // Deeper emerald (700→900) so white hero text is ≥5.48:1 on every stop.
+  heroGradient: [emerald[700], emerald[800], emerald[900]],
   heroOnGradient: slate[0],
-  heroOnGradientMuted: emerald[100], // pale mint reads on bright emerald
-  heroGlow: emerald[500],
+  heroOnGradientMuted: emerald[100], // pale mint, ≥4.84:1 on emerald-700
+  heroGlow: emerald[700],
 
-  /** Saturated rose stack — `red-500/600/700` for the "needs attention"
-   *  hero. Tuned for the same perceived weight as the brand gradient. */
-  heroDangerGradient: ['#EF4444', '#DC2626', '#B91C1C'],
-  heroDangerOnGradientMuted: '#FECACA', // pale rose reads on bright red
+  /** Deep rose stack — `red-700/800/900` for the "needs attention" hero,
+   *  matched to the deeper brand hero so white text stays AA. */
+  heroDangerGradient: ['#B91C1C', '#991B1B', '#7F1D1D'],
+  heroDangerOnGradientMuted: '#FEE2E2',
   heroDangerGlow: '#EF4444',
 };
 
@@ -209,17 +286,38 @@ export const darkScheme: ColorScheme = {
 
   textPrimary: slate[50],
   textSecondary: slate[400],
-  textTertiary: slate[500],
+  // Brighter than slate-500 so it is AA on surfaceRaised (4.85:1).
+  textTertiary: '#8B95A5',
+  textDisabled: slate[600],
   textOnBrand: slate[950],
 
   brand: emerald[400], // slightly lighter in dark for AAA contrast
   brandSoft: 'rgba(52, 211, 153, 0.14)',
   brandBold: emerald[500],
+  brandText: emerald[400],
 
   accentGold: gold[400],
 
   hairline: 'rgba(255, 255, 255, 0.06)',
   border: slate[700],
+  borderStrong: slate[500],
+  scrim: 'rgba(0, 0, 0, 0.60)',
+  logoPlate: slate[200],
+
+  energyInk: {
+    solar: '#84CC16',
+    wind: '#06B6D4',
+    grid: '#60A5FA',
+    genset: '#F97316',
+    battery: '#C084FC',
+  },
+  statusInk: {
+    success: emerald[400],
+    warning: '#FBBF24',
+    danger: '#F87171',
+    info: '#60A5FA',
+  },
+  statusSoft: statusSoftAt(0.16),
 
   skeletonBase: slate[800],
   skeletonHighlight: slate[700],
@@ -345,12 +443,26 @@ export const type = {
   // Support
   caption: { size: 12, line: 16, weight: '400' as const, tracking: 0.1 },
   overline: { size: 11, line: 14, weight: '600' as const, tracking: 1.0 },
-  micro: { size: 10, line: 12, weight: '500' as const, tracking: 0.2 },
+  // 11pt is the app-wide floor (AppText enforces it unless `fixedSize`).
+  micro: { size: 11, line: 14, weight: '500' as const, tracking: 0.2 },
 
   // Number — for big readouts (use tabular variant + tighter tracking)
   numberLg: { size: 28, line: 32, weight: '600' as const, tracking: -0.4 },
   numberMd: { size: 20, line: 24, weight: '600' as const, tracking: -0.2 },
 };
+
+/* ─────────── 6b. Touch targets ─────────── */
+
+/**
+ * Minimum interactive target: 44×44pt (Apple HIG) on iOS, 48×48dp
+ * (Material) on Android. Reach it by visual size or `hitSlop` — but inside
+ * `overflow: 'hidden'` parents the size must be real (hitSlop is clipped).
+ * `pillVisual` is the default visual height of a `Pill`.
+ */
+export const touch = {
+  min: Platform.select({ ios: 44, android: 48, default: 44 }) as number,
+  pillVisual: 36,
+} as const;
 
 /* ─────────── 7. Motion — durations + spring presets ─────────── */
 
