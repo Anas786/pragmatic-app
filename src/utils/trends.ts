@@ -1,6 +1,8 @@
 /**
  * Trends helpers — period → SQL-range translation, config selection,
- * aggregation type-splitting, and readable x-axis labels.
+ * aggregation type-splitting, readable x-axis labels, and the section
+ * header copy (absolute-window caption, non-redundant subHeading, spoken
+ * period names).
  *
  * The trends data endpoint takes SQL-ish `start`/`end` expressions and
  * an IANA `tz`, NOT the epoch-ms params the report endpoints use — so
@@ -13,6 +15,8 @@ import {
   TrendAggType,
   TrendConfig,
 } from 'src/types';
+import { formatDateRange, MONTHS_SHORT } from './dates';
+import { buildSiteParamNames } from './liveParams';
 import { endOfDayMs, startOfDayMs } from './reports';
 
 /* ─────────────── period pills ─────────────── */
@@ -107,27 +111,114 @@ export const formatTrendLabel = (epochMs: number, windowMs: number): string => {
   return `${p(d.getDate())} ${time}`;
 };
 
-/** Header pill label for the active period. */
-export const formatTrendPeriodLabel = (
+/* ─────────────── header copy ─────────────── */
+
+/**
+ * Spoken / long name of each period pill. The pills show the short form
+ * ('24H'); screen readers and the header caption use this one.
+ */
+export const TREND_PERIOD_SPOKEN: Record<TrendPeriod, string> = {
+  '24H': 'Last 24 hours',
+  '48H': 'Last 48 hours',
+  '72H': 'Last 72 hours',
+  Custom: 'Custom range',
+};
+
+/**
+ * Screen-reader label of a period pill — always contains the visible text.
+ * 'Custom' says what a tap does: it always opens the range picker (also
+ * when it's already the active period — that's how a range is edited),
+ * and there's no date pill in a trend header to do it instead.
+ */
+export const trendPeriodPillA11yLabel = (period: TrendPeriod): string =>
+  period === 'Custom'
+    ? `${TREND_PERIOD_SPOKEN.Custom}, opens date picker`
+    : `${period}, ${TREND_PERIOD_SPOKEN[period].toLowerCase()}`;
+
+export interface TrendWindowLabel {
+  /** Visible caption: '30 Sep 14:35 – 1 Oct 14:35' / '29 Sep – 1 Oct 2026'. */
+  text: string;
+  /** Spoken form: 'Last 24 hours, 30 Sep 14:35 to 1 Oct 14:35'. */
+  spoken: string;
+}
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** '30 Sep 14:35' (+ ' 2025' after the month when `withYear`). Device-local
+ *  time, 24-hour — the same clock the chart's x-axis labels use. */
+const formatTrendStamp = (ms: number, withYear: boolean): string => {
+  const d = new Date(ms);
+  const day = `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
+  return `${withYear ? `${day} ${d.getFullYear()}` : day} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+};
+
+/**
+ * The absolute window the active period covers — the Trends section's
+ * header caption (the pills already name the period, so the caption says
+ * WHICH hours).
+ *
+ *  - presets  → the rolling window ending at `anchorMs`, the moment the
+ *    backend evaluated `now()` (the query's `dataUpdatedAt`, or the time
+ *    the pill was tapped while that fetch is in flight):
+ *    '30 Sep 14:35 – 1 Oct 14:35'. Years are added to BOTH ends when the
+ *    window crosses a year or isn't in `now`'s year.
+ *  - Custom   → the picked calendar days via `formatDateRange`
+ *    ('29 Sep – 1 Oct 2026'); DD/MM/YY is not used anywhere.
+ */
+export const formatTrendWindowLabel = (
   period: TrendPeriod,
   startDate: Date,
   endDate: Date,
-): string => {
-  const fmt = (d: Date) => {
-    const p = (n: number) => String(n).padStart(2, '0');
-    return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${String(d.getFullYear()).slice(-2)}`;
-  };
-  switch (period) {
-    case '24H':
-      return 'Last 24 hours';
-    case '48H':
-      return 'Last 48 hours';
-    case '72H':
-      return 'Last 72 hours';
-    case 'Custom':
-    default:
-      return `${fmt(startDate)} - ${fmt(endDate)}`;
+  anchorMs: number,
+  now: number = Date.now(),
+): TrendWindowLabel => {
+  if (period === 'Custom') {
+    const text = formatDateRange(startDate, endDate);
+    return {
+      text,
+      spoken: `${TREND_PERIOD_SPOKEN.Custom}, ${text.replace(' – ', ' to ')}`,
+    };
   }
+  const endMs = anchorMs;
+  const startMs = endMs - PRESET_HOURS[period] * 60 * 60 * 1000;
+  const startYear = new Date(startMs).getFullYear();
+  const endYear = new Date(endMs).getFullYear();
+  const withYear = startYear !== endYear || endYear !== new Date(now).getFullYear();
+  const a = formatTrendStamp(startMs, withYear);
+  const b = formatTrendStamp(endMs, withYear);
+  return { text: `${a} – ${b}`, spoken: `${TREND_PERIOD_SPOKEN[period]}, ${a} to ${b}` };
+};
+
+/**
+ * Letters/digits kept when comparing headings: ASCII, accented Latin,
+ * Greek, Cyrillic, Arabic/Urdu, kana and CJK. Everything else (spaces,
+ * punctuation, dashes, symbols) separates words. Explicit ranges rather
+ * than `\p{L}` so it behaves the same on every Hermes build.
+ */
+const NON_WORD =
+  /[^a-z0-9\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F\u0370-\u03FF\u0400-\u04FF\u0600-\u06FF\u3040-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]+/g;
+
+/** Lower-case, punctuation → single spaces (keeps accented letters). */
+const normalizeHeadingText = (s: string): string =>
+  s.toLowerCase().replace(NON_WORD, ' ').trim();
+
+/**
+ * The section caption under a trend heading: the config's `subHeading`,
+ * but only when it adds information. After normalising case and
+ * punctuation it must be neither equal to the heading nor contained in it
+ * as whole words ('Power' under 'Power Trend' is dropped; 'Active power
+ * of all inverters' under 'Power' is kept). Returns `undefined` to omit.
+ */
+export const trendCaption = (
+  heading: string,
+  subHeading?: string | null,
+): string | undefined => {
+  if (typeof subHeading !== 'string') return undefined;
+  const sub = normalizeHeadingText(subHeading);
+  if (sub === '') return undefined;
+  const head = normalizeHeadingText(heading);
+  if (sub === head || ` ${head} `.includes(` ${sub} `)) return undefined;
+  return subHeading.trim();
 };
 
 /* ─────────────── aggregation helpers ─────────────── */
@@ -161,6 +252,7 @@ const mappedParamLabel = (
 const normalizeAggregation = (
   raw: unknown,
   mapping: ParamsMapping | null | undefined,
+  siteNames: Record<string, string>,
 ): TrendAggregation | null => {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
@@ -170,15 +262,23 @@ const normalizeAggregation = (
 
   // Series label priority: an explicit, MEANINGFUL config `display` (some
   // configs fill it with the raw p-code — treat that as absent) → the
-  // params-mapping label → the raw code as a last resort. Legends, series
-  // names and tooltips all render this value.
+  // site's own name for the param (`globalParams.live`, e.g. p1000005 →
+  // 'Captive Plant kW'; the global params-mapping only knows it as
+  // 'Custom Parameter 5', and the web portal shows the site name) → the
+  // params-mapping label → the raw code as a last resort. Same order as the
+  // Live tab (resolveLiveParamName). Legends, series names and tooltips all
+  // render this value.
   const explicitDisplay =
     typeof o.display === 'string' &&
     o.display.trim().length > 0 &&
     o.display.trim() !== param
       ? o.display
       : null;
-  const display = explicitDisplay ?? mappedParamLabel(mapping, param) ?? param;
+  const display =
+    explicitDisplay ??
+    siteNames[param] ??
+    mappedParamLabel(mapping, param) ??
+    param;
 
   return {
     param,
@@ -191,6 +291,7 @@ const normalizeAggregation = (
 const normalizeTrend = (
   raw: unknown,
   mapping: ParamsMapping | null | undefined,
+  siteNames: Record<string, string>,
 ): TrendConfig | null => {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
@@ -200,7 +301,7 @@ const normalizeTrend = (
       : {};
   const rawAggs = Array.isArray(payload.aggregations) ? payload.aggregations : [];
   const aggregations = rawAggs
-    .map(a => normalizeAggregation(a, mapping))
+    .map(a => normalizeAggregation(a, mapping, siteNames))
     .filter((a): a is TrendAggregation => a !== null);
   if (aggregations.length === 0) return null;
   return {
@@ -230,8 +331,9 @@ export interface IndexedTrendConfig extends TrendConfig {
  * config is missing or the wrong shape.
  *
  * `mapping` is the `/public/config/params-mapping` dict (from
- * `useParamsMapping()`) — series labels resolve through it whenever the
- * trend config carries no meaningful `display` of its own.
+ * `useParamsMapping()`). When the trend config carries no meaningful
+ * `display`, a series label resolves through the site's own param names
+ * (`config.globalParams.live`) first, then through `mapping`.
  */
 export const selectTrends = (
   config: unknown,
@@ -242,9 +344,10 @@ export const selectTrends = (
   if (!components || typeof components !== 'object') return [];
   const trends = (components as Record<string, unknown>).trends;
   if (!Array.isArray(trends)) return [];
+  const siteNames = buildSiteParamNames(config);
   return trends
     .map((raw, sourceIdx): IndexedTrendConfig | null => {
-      const trend = normalizeTrend(raw, mapping);
+      const trend = normalizeTrend(raw, mapping, siteNames);
       return trend ? { ...trend, sourceIdx } : null;
     })
     .filter((t): t is IndexedTrendConfig => t !== null);

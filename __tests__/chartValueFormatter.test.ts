@@ -32,6 +32,8 @@ const THEME = {
   textTertiary: '#000000',
   border: '#000000',
   surface: '#ffffff',
+  brand: '#10b981',
+  brandSoft: 'rgba(16, 185, 129, 0.10)',
   isDark: false,
 };
 

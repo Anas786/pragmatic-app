@@ -19,12 +19,31 @@
  * wrecking that shared scale for everyone else). `detailed` only changes
  * presentation density (a larger tick font, rotated x labels, every x
  * label shown) — never the axis count or the series→axis mapping.
+ *
+ * Chrome: the legend is echarts' 'plain' type and WRAPS (it never
+ * paginates and never truncates a name); `grid.top` comes from
+ * `estimateTrendLegend` for the chart's real width, and a single series
+ * gets no legend at all. There is no x-axis name (the labels are plainly
+ * times), so `grid.bottom` only has to clear the dataZoom slider. Every
+ * colour comes from the `ChartTheme` — no hex literals in here.
  */
 
 import { TrendAggregation, TrendDataRow } from 'src/types';
 import { formatTrendLabel, isBarType } from 'src/utils';
 import { ChartTheme, COMPACT_VALUE_FN_SRC, Y_AXIS_LABEL_FORMATTER } from '../chartConfig';
-import { coerceChartValue } from './helpers';
+import {
+  coerceChartValue,
+  DEFAULT_TREND_CHART_WIDTH,
+  estimateTrendLegend,
+  formatInvalidReadingsCaption,
+  TREND_GRID_BOTTOM,
+  TREND_INVALID_NOTE_HEIGHT,
+  TREND_LEGEND,
+} from './helpers';
+
+/** Stable id so a later merge-mode `setOption` updates (or hides) the
+ *  in-chart invalid-readings note instead of stacking a second one. */
+const INVALID_NOTE_ID = 'trend-invalid-note';
 
 /**
  * Axis-trigger tooltip formatter (string fn, eval'd in the WebView via
@@ -53,6 +72,12 @@ export interface TrendComboOptions {
    * label shown (there's room for it in landscape).
    */
   detailed?: boolean;
+  /**
+   * Width of the chart (WebView) in px — the legend wraps at this width,
+   * and `grid.top` leaves room for exactly the rows it will take.
+   * Defaults to a 402pt phone's inline card.
+   */
+  width?: number;
 }
 
 /** Result of {@link buildTrendComboOption}. */
@@ -80,7 +105,6 @@ export const buildTrendComboOption = (
   const categories = sorted.map(r => formatTrendLabel(r.time, windowMs));
 
   const axisLabelStyle = { color: theme.textSecondary, fontSize: 10 };
-  const nameStyle = { color: theme.textTertiary, fontSize: 10 };
   const splitLineStyle = {
     lineStyle: { color: theme.border, type: 'dashed' as const },
   };
@@ -154,29 +178,77 @@ export const buildTrendComboOption = (
     };
   });
 
+  const legend = estimateTrendLegend(
+    aggregations.map(a => a.display),
+    options.width ?? DEFAULT_TREND_CHART_WIDTH,
+  );
+  // Inline only: the "N invalid readings hidden" disclosure is drawn
+  // INSIDE the chart (the plot gives up one line; the card height never
+  // changes when data arrives). Full screen shows it as RN text instead
+  // (ChartFullscreenModal `warning`). The element always exists so a
+  // merge-mode update can hide it again.
+  const showNote = !detailed && invalidCount > 0;
+  const gridTop = legend.gridTop + (showNote ? TREND_INVALID_NOTE_HEIGHT : 0);
+
   const option = {
     backgroundColor: 'transparent',
     textStyle: { color: theme.textSecondary },
     legend: {
-      type: 'scroll',
+      show: legend.show,
+      // 'plain' wraps onto extra rows — never paginates, never truncates.
+      type: 'plain',
+      orient: 'horizontal',
+      left: 0,
       top: 0,
-      data: aggregations.map(a => a.display),
-      textStyle: { color: theme.textSecondary, fontSize: 11 },
+      padding: 0,
+      itemGap: TREND_LEGEND.itemGap,
+      // A name too long for one line wraps within the chart width instead
+      // of running off the edge.
+      data: aggregations.map((a, i) => {
+        const wrapWidth = legend.wrapWidths[i];
+        return wrapWidth === null
+          ? a.display
+          : {
+              name: a.display,
+              textStyle: { width: wrapWidth, overflow: 'break' },
+            };
+      }),
+      textStyle: {
+        color: theme.textSecondary,
+        fontSize: TREND_LEGEND.fontSize,
+        lineHeight: TREND_LEGEND.lineHeight,
+      },
       inactiveColor: theme.textTertiary,
       icon: 'roundRect',
-      itemWidth: 12,
-      itemHeight: 8,
+      itemWidth: TREND_LEGEND.iconWidth,
+      itemHeight: TREND_LEGEND.iconHeight,
     },
+    graphic: detailed
+      ? undefined
+      : [
+          {
+            id: INVALID_NOTE_ID,
+            type: 'text',
+            left: 0,
+            top: legend.show ? legend.height + 2 : 0,
+            silent: true,
+            invisible: !showNote,
+            style: {
+              text: showNote ? formatInvalidReadingsCaption(invalidCount) : '',
+              fill: theme.textSecondary,
+              fontSize: TREND_LEGEND.fontSize,
+            },
+          },
+        ],
     grid: {
-      top: 40,
+      top: gridTop,
       left: gridLeft,
       right: gridRight,
       // With containLabel, `bottom` is measured from the tick labels (the
       // rotated full-screen labels included), so both modes need the same
-      // room below them: the "Time" name (nameGap from the axis line) and
-      // the dataZoom slider. The old full-screen 88 was tuned for manual
-      // gutters and cost ~15% of the rotated view's plot height.
-      bottom: 70,
+      // room below them — just the dataZoom slider now that the x-axis
+      // has no name.
+      bottom: TREND_GRID_BOTTOM,
       // Both modes use the same (at most 2-axis) layout now — no offset
       // stacking to account for — so echarts can auto-size the gutter
       // around whichever tick labels render widest.
@@ -197,10 +269,6 @@ export const buildTrendComboOption = (
       type: 'category',
       data: categories,
       boundaryGap: true,
-      name: 'Time',
-      nameLocation: 'middle',
-      nameGap: detailed ? 56 : 34,
-      nameTextStyle: nameStyle,
       axisLine: { lineStyle: { color: theme.border } },
       axisTick: { show: false },
       // Both modes let echarts auto-thin labels + drop overlaps so the
@@ -231,11 +299,22 @@ export const buildTrendComboOption = (
         start: 0,
         end: 100,
         borderColor: theme.border,
-        fillerColor: theme.isDark
-          ? 'rgba(52,211,153,0.18)'
-          : 'rgba(16,185,129,0.14)',
-        handleStyle: { color: theme.isDark ? '#34D399' : '#10B981' },
-        textStyle: { color: theme.textTertiary, fontSize: 9 },
+        fillerColor: theme.brandSoft,
+        handleStyle: { color: theme.brand, borderColor: theme.brand },
+        moveHandleStyle: { color: theme.brand, opacity: 0.6 },
+        emphasis: {
+          handleStyle: { color: theme.brand, borderColor: theme.brand },
+          moveHandleStyle: { color: theme.brand, opacity: 0.9 },
+        },
+        dataBackground: {
+          lineStyle: { color: theme.border },
+          areaStyle: { color: theme.border },
+        },
+        selectedDataBackground: {
+          lineStyle: { color: theme.brand },
+          areaStyle: { color: theme.brandSoft },
+        },
+        textStyle: { color: theme.textTertiary, fontSize: 10 },
       },
     ],
     series,

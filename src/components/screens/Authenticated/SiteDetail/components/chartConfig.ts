@@ -34,6 +34,10 @@ export interface ChartTheme {
   border: string;
   /** Raised surface — used as the tooltip background. */
   surface: string;
+  /** Brand emerald — dataZoom handles / selected-range outline. */
+  brand: string;
+  /** 10–14% brand tint — the dataZoom selected-range fill. */
+  brandSoft: string;
   isDark: boolean;
 }
 
@@ -53,6 +57,8 @@ export const chartThemeFromScheme = (scheme: Scheme): ChartTheme => {
     textTertiary: scheme.textTertiary,
     border: scheme.border,
     surface: scheme.surfaceRaised,
+    brand: scheme.brand,
+    brandSoft: scheme.brandSoft,
     isDark: scheme.isDark,
   };
   themeCache.set(scheme, theme);
