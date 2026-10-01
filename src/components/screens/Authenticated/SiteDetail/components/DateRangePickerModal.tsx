@@ -1,5 +1,5 @@
 /**
- * DateRangePickerModal — v2 (modern calendar grid + presets).
+ * DateRangePickerModal — v3 (calendar grid + presets).
  *
  * Replaces the native @react-native-community/datetimepicker spinner
  * with a custom calendar grid. Date-range UX patterns:
@@ -8,38 +8,34 @@
  *   2. Tap another day after start → sets end (range complete)
  *   3. Tap a day before start → restart with new start
  *
- * The range cap (MAX_RANGE_MONTHS = 1) is enforced by greying out
- * days past `start + cap`. Tapping a greyed day is a no-op.
+ * The range cap (`maxRangeDays`) is enforced by greying out days past
+ * `start + cap`, and future days are never selectable (no data yet).
  *
- * Preset chips above the calendar (Last 7d / 30d / This week / This
- * month) let the user pick common ranges in one tap.
+ * Preset chips above the calendar (Today / Last 7d / This week / Last
+ * 15d) set common ranges in one tap; the chip whose range equals the
+ * draft is shown selected. Day cells expose selected state (start, end
+ * and in-range) and say ", start date" / ", end date" to screen readers.
  */
 
 import React, {
   FC,
   memo,
-  ReactNode,
   useCallback,
   useMemo,
   useState,
 } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { AppText, PressableScale } from 'src/components/common';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import { AppText, Pill, PillGroup, PressableScale } from 'src/components/common';
 import {
   radius as radiusTokens,
   Scheme,
   space,
+  touch,
   useScheme,
   useThemedStyles,
 } from 'src/theme';
-import {
-  addDays,
-  FONT_SIZE_SM,
-  FONT_SIZE_XS,
-  FONT_SIZE_XXS,
-} from 'src/utils';
-import { formatDate } from 'src/utils/format';
-import { DownArrow, UpArrow } from 'src/assets/icons';
+import { addDays, formatDateRange, MONTHS_LONG, MONTHS_SHORT } from 'src/utils/dates';
 import PickerSheet from './pickers/PickerSheet';
 
 interface DateRangePickerModalProps {
@@ -67,19 +63,14 @@ interface DateRangePickerModalProps {
  */
 const MAX_RANGE_DAYS = 30;
 const DOW_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-const MONTH_LABELS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
+const DOW_SPOKEN = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
 ];
 
 /* ─────────────── date helpers ─────────────── */
@@ -100,10 +91,39 @@ const isBetween = (d: Date, start: Date, end: Date): boolean => {
   return t > startOfDay(start).getTime() && t < startOfDay(end).getTime();
 };
 
+/** First day of `d`'s month (00:00). */
+const monthStart = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), 1);
+
+/**
+ * Screen-reader label for one calendar day: '1 September' (+ the year
+ * when it isn't the current one), then ', start date' / ', end date'
+ * (', start and end date' for a one-day range) and ', today'. Selected
+ * state itself is announced from `accessibilityState`, so VoiceOver reads
+ * '1 September, start date, selected'.
+ */
+export const dayCellA11yLabel = (
+  date: Date,
+  flags: { isStart: boolean; isEnd: boolean; isToday: boolean },
+  currentYear: number = new Date().getFullYear(),
+): string => {
+  const parts = [
+    `${date.getDate()} ${MONTHS_LONG[date.getMonth()]}${
+      date.getFullYear() === currentYear ? '' : ` ${date.getFullYear()}`
+    }`,
+  ];
+  if (flags.isStart && flags.isEnd) parts.push('start and end date');
+  else if (flags.isStart) parts.push('start date');
+  else if (flags.isEnd) parts.push('end date');
+  if (flags.isToday) parts.push('today');
+  return parts.join(', ');
+};
+
 /* ─────────────── presets ─────────────── */
 
 export interface Preset {
   label: string;
+  /** Spoken label when the chip text is abbreviated ('Last 7 days'). */
+  spokenLabel?: string;
   /**
    * Widest possible calendar-day span (inclusive) this preset can ever
    * produce, regardless of today's weekday (e.g. "This week" tops out
@@ -135,6 +155,7 @@ export const PRESETS: Preset[] = [
   },
   {
     label: 'Last 7d',
+    spokenLabel: 'Last 7 days',
     maxSpanDays: 7,
     build: () => {
       const end = new Date();
@@ -155,6 +176,7 @@ export const PRESETS: Preset[] = [
   },
   {
     label: 'Last 15d',
+    spokenLabel: 'Last 15 days',
     maxSpanDays: 15,
     build: () => {
       const end = new Date();
@@ -175,55 +197,104 @@ export const presetsWithinRange = <P extends { maxSpanDays: number }>(
   maxRangeDays: number,
 ): P[] => presets.filter(p => p.maxSpanDays <= maxRangeDays + 1);
 
+/**
+ * The preset whose range equals the draft range (calendar days), or null.
+ * The first match wins (on a Sunday 'This week' equals 'Today'). Pure and
+ * exported for tests.
+ */
+export const presetMatchingRange = <P extends Pick<Preset, 'label' | 'build'>>(
+  presets: P[],
+  start: Date | null,
+  end: Date | null,
+): P | null => {
+  if (!start || !end) return null;
+  for (const p of presets) {
+    const r = p.build();
+    if (sameDay(r.start, start) && sameDay(r.end, end)) return p;
+  }
+  return null;
+};
+
 /* ─────────────── month / year nav header ─────────────── */
+
+/** Tops a 32pt round icon button up to the platform minimum target. */
+const NAV_SIZE = 32;
+const NAV_SLOP = Math.max(0, Math.ceil((touch.min - NAV_SIZE) / 2));
+const NAV_HIT_SLOP = { top: NAV_SLOP, bottom: NAV_SLOP, left: NAV_SLOP, right: NAV_SLOP };
+/** Month-label button: vertical slop only (horizontal would overlap the
+ *  neighbouring chevrons' targets). */
+const LABEL_HIT_SLOP = { top: NAV_SLOP, bottom: NAV_SLOP, left: 0, right: 0 };
+
+const NavArrow: FC<{
+  direction: 'prev' | 'next';
+  onPress: () => void;
+  disabled?: boolean;
+  accessibilityLabel: string;
+}> = ({ direction, onPress, disabled = false, accessibilityLabel }) => {
+  const scheme = useScheme();
+  const themed = useThemedStyles(createStyles);
+  return (
+    <PressableScale
+      onPress={onPress}
+      scaleTo={0.92}
+      disabled={disabled}
+      hitSlop={NAV_HIT_SLOP}
+      style={[themed.navArrow, disabled ? themed.navDisabled : null]}
+      accessibilityLabel={accessibilityLabel}>
+      <Icon
+        name={direction === 'prev' ? 'chevron-left' : 'chevron-right'}
+        size={20}
+        color={scheme.textPrimary}
+      />
+    </PressableScale>
+  );
+};
+NavArrow.displayName = 'NavArrow';
 
 /**
  * The label between the chevrons is tappable — tap it to flip the
  * calendar body into "pick a month" mode, where the year is set with
  * its own stepper and you can jump directly to any month. Tap a
- * month to return to the day grid at that month/year.
+ * month to return to the day grid at that month/year. "Next" stops at
+ * the current month (nothing later is selectable).
  */
 const MonthNav: FC<{
   cursor: Date;
+  today: Date;
   pickerOpen: boolean;
   onPrev: () => void;
   onNext: () => void;
   onTogglePicker: () => void;
-}> = ({ cursor, pickerOpen, onPrev, onNext, onTogglePicker }) => {
+}> = ({ cursor, today, pickerOpen, onPrev, onNext, onTogglePicker }) => {
   const scheme = useScheme();
   const themed = useThemedStyles(createStyles);
-  const label = `${MONTH_LABELS[cursor.getMonth()]} ${cursor.getFullYear()}`;
+  const label = `${MONTHS_LONG[cursor.getMonth()]} ${cursor.getFullYear()}`;
+  const atCurrentMonth = monthStart(cursor).getTime() >= monthStart(today).getTime();
   return (
     <View style={themed.monthNav}>
-      <PressableScale
-        onPress={onPrev}
-        haptic="tap"
-        scaleTo={0.92}
-        style={themed.navArrow}
-        accessibilityLabel="Previous month">
-        <DownArrow size={14} color={scheme.textPrimary} />
-      </PressableScale>
+      <NavArrow direction="prev" onPress={onPrev} accessibilityLabel="Previous month" />
       <PressableScale
         onPress={onTogglePicker}
-        haptic="tap"
         scaleTo={0.95}
+        hitSlop={LABEL_HIT_SLOP}
         style={themed.labelButton}
-        accessibilityLabel="Change month or year">
-        <AppText fontSize={FONT_SIZE_SM} bold color={scheme.textPrimary}>
+        expanded={pickerOpen}
+        accessibilityLabel={`${label}, change month or year`}>
+        <AppText variant="bodySm" semi_bold>
           {label}
         </AppText>
-        <View style={pickerOpen ? themed.chevronOpen : themed.chevronClosed}>
-          <DownArrow size={10} color={scheme.textSecondary} />
-        </View>
+        <Icon
+          name={pickerOpen ? 'expand-less' : 'expand-more'}
+          size={16}
+          color={scheme.textSecondary}
+        />
       </PressableScale>
-      <PressableScale
+      <NavArrow
+        direction="next"
         onPress={onNext}
-        haptic="tap"
-        scaleTo={0.92}
-        style={themed.navArrow}
-        accessibilityLabel="Next month">
-        <UpArrow size={14} color={scheme.textPrimary} />
-      </PressableScale>
+        disabled={atCurrentMonth}
+        accessibilityLabel="Next month"
+      />
     </View>
   );
 };
@@ -233,65 +304,60 @@ MonthNav.displayName = 'MonthNav';
 
 const MonthPicker: FC<{
   cursor: Date;
+  today: Date;
   onSelect: (year: number, month: number) => void;
   onYearStep: (delta: number) => void;
-}> = ({ cursor, onSelect, onYearStep }) => {
+}> = ({ cursor, today, onSelect, onYearStep }) => {
   const scheme = useScheme();
   const themed = useThemedStyles(createStyles);
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
-  const today = new Date();
+  const todayYear = today.getFullYear();
+  const todayMonth = today.getMonth();
   return (
     <View style={themed.pickerBody}>
       <View style={themed.yearStepper}>
-        <PressableScale
-          onPress={() => onYearStep(-1)}
-          haptic="tap"
-          scaleTo={0.92}
-          style={themed.navArrow}
-          accessibilityLabel="Previous year">
-          <DownArrow size={14} color={scheme.textPrimary} />
-        </PressableScale>
-        <AppText fontSize={FONT_SIZE_SM} bold color={scheme.textPrimary}>
+        <NavArrow direction="prev" onPress={() => onYearStep(-1)} accessibilityLabel="Previous year" />
+        <AppText variant="bodySm" semi_bold>
           {year}
         </AppText>
-        <PressableScale
+        <NavArrow
+          direction="next"
           onPress={() => onYearStep(1)}
-          haptic="tap"
-          scaleTo={0.92}
-          style={themed.navArrow}
-          accessibilityLabel="Next year">
-          <UpArrow size={14} color={scheme.textPrimary} />
-        </PressableScale>
+          disabled={year >= todayYear}
+          accessibilityLabel="Next year"
+        />
       </View>
       <View style={themed.monthGrid}>
-        {MONTH_LABELS.map((name, idx) => {
+        {MONTHS_LONG.map((name, idx) => {
           const selected = idx === month;
-          const isCurrent =
-            year === today.getFullYear() && idx === today.getMonth();
+          const isCurrent = year === todayYear && idx === todayMonth;
+          const future = year > todayYear || (year === todayYear && idx > todayMonth);
           return (
             <View key={name} style={themed.monthSlot}>
               <PressableScale
                 onPress={() => onSelect(year, idx)}
-                haptic="select"
                 scaleTo={0.94}
+                disabled={future}
+                selected={selected}
                 style={[
                   themed.monthCell,
                   selected ? themed.monthCellSelected : null,
                   !selected && isCurrent ? themed.monthCellToday : null,
+                  future ? themed.cellDisabled : null,
                 ]}
                 accessibilityLabel={`${name} ${year}`}>
                 <AppText
-                  fontSize={FONT_SIZE_XS}
+                  variant="caption"
                   semi_bold={selected || isCurrent}
                   color={
                     selected
                       ? scheme.textOnBrand
                       : isCurrent
-                        ? scheme.brand
+                        ? scheme.brandText
                         : scheme.textPrimary
                   }>
-                  {name.slice(0, 3)}
+                  {MONTHS_SHORT[idx]}
                 </AppText>
               </PressableScale>
             </View>
@@ -355,7 +421,7 @@ const DayCellComponent: FC<DayCellProps> = ({
     if (disabled) return scheme.textTertiary;
     if (endpoint) return scheme.textOnBrand;
     if (!inMonth) return scheme.textTertiary;
-    if (isToday) return scheme.brand;
+    if (isToday) return scheme.brandText;
     return scheme.textPrimary;
   })();
 
@@ -371,14 +437,12 @@ const DayCellComponent: FC<DayCellProps> = ({
         haptic="select"
         scaleTo={0.9}
         disabled={disabled}
+        selected={endpoint || inRange}
         style={[themed.dayCell, disabled ? themed.dayDisabled : null]}
-        accessibilityLabel={formatDate(date, 'DD MMM YYYY')}>
+        accessibilityLabel={dayCellA11yLabel(date, { isStart, isEnd, isToday })}>
         {backdrop}
         <View style={cellInnerStyle}>
-          <AppText
-            fontSize={FONT_SIZE_XS}
-            semi_bold={endpoint || isToday}
-            color={textColor}>
+          <AppText variant="caption" semi_bold={endpoint || isToday} color={textColor}>
             {date.getDate()}
           </AppText>
         </View>
@@ -412,7 +476,6 @@ const CalendarGrid: FC<CalendarGridProps> = ({
   maxAllowed,
   onSelect,
 }) => {
-  const scheme = useScheme();
   const themed = useThemedStyles(createStyles);
 
   // Build a 6×7 cell grid for the cursor's month. First cell is the
@@ -437,7 +500,11 @@ const CalendarGrid: FC<CalendarGridProps> = ({
       <View style={themed.dowRow}>
         {DOW_LABELS.map((d, i) => (
           <View key={i} style={themed.dowCell}>
-            <AppText fontSize={FONT_SIZE_XXS} bold color={scheme.textTertiary}>
+            <AppText
+              variant="micro"
+              semi_bold
+              tone="secondary"
+              accessibilityLabel={DOW_SPOKEN[i]}>
               {d}
             </AppText>
           </View>
@@ -485,7 +552,6 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
   onApply,
   maxRangeDays = MAX_RANGE_DAYS,
 }) => {
-  const scheme = useScheme();
   const themed = useThemedStyles(createStyles);
 
   // Draft range under construction. One state object (not two separate
@@ -558,13 +624,28 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
     setCursor(new Date(start));
   };
 
+  // The preset chip whose range equals the draft reads as selected.
+  const matchedPreset = useMemo(
+    () => presetMatchingRange(availablePresets, tempStart, tempEnd),
+    [availablePresets, tempStart, tempEnd],
+  );
+
   const handlePrevMonth = () =>
     setCursor(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  // Never page past the current month — every later day is disabled.
   const handleNextMonth = () =>
-    setCursor(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+    setCursor(prev => {
+      const next = new Date(prev.getFullYear(), prev.getMonth() + 1, 1);
+      return next.getTime() > monthStart(today).getTime() ? prev : next;
+    });
 
   const handleYearStep = (delta: number) =>
-    setCursor(prev => new Date(prev.getFullYear() + delta, prev.getMonth(), 1));
+    setCursor(prev => {
+      const next = new Date(prev.getFullYear() + delta, prev.getMonth(), 1);
+      // Stepping into the current year from a later month lands on the
+      // current month rather than a future one.
+      return next.getTime() > monthStart(today).getTime() ? monthStart(today) : next;
+    });
 
   const handleMonthPickerSelect = (year: number, monthIdx: number) => {
     setCursor(new Date(year, monthIdx, 1));
@@ -582,43 +663,38 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
 
   const subtitle =
     tempStart && tempEnd
-      ? `${formatDate(tempStart, 'DD MMM')} – ${formatDate(tempEnd, 'DD MMM YYYY')}`
+      ? formatDateRange(tempStart, tempEnd)
       : tempStart
-        ? `${formatDate(tempStart, 'DD MMM YYYY')} – Pick end date`
+        ? `${formatDateRange(tempStart, tempStart)} · pick an end date`
         : 'Pick a start date';
 
   return (
     <PickerSheet
       visible={visible}
-      title="Date Range"
+      title="Date range"
       subtitle={subtitle}
       onCancel={onClose}
       onApply={handleApply}
       applyDisabled={!tempStart}>
       {availablePresets.length > 0 && (
-        <PresetRow>
+        <PillGroup label="Quick ranges" style={themed.presetRow}>
           {availablePresets.map(p => (
-            <PressableScale
+            <Pill
               key={p.label}
+              size="sm"
+              label={p.label}
+              selected={matchedPreset?.label === p.label}
               onPress={() => handlePreset(p)}
-              haptic="select"
-              scaleTo={0.95}
-              style={themed.presetChip}
-              accessibilityLabel={p.label}>
-              <AppText
-                fontSize={FONT_SIZE_XXS}
-                bold
-                color={scheme.textPrimary}>
-                {p.label}
-              </AppText>
-            </PressableScale>
+              accessibilityLabel={p.spokenLabel ?? p.label}
+            />
           ))}
-        </PresetRow>
+        </PillGroup>
       )}
 
       <View style={themed.calendarCard}>
         <MonthNav
           cursor={cursor}
+          today={today}
           pickerOpen={view === 'months'}
           onPrev={handlePrevMonth}
           onNext={handleNextMonth}
@@ -638,13 +714,14 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
         ) : (
           <MonthPicker
             cursor={cursor}
+            today={today}
             onSelect={handleMonthPickerSelect}
             onYearStep={handleYearStep}
           />
         )}
       </View>
 
-      <AppText fontSize={FONT_SIZE_XXS} color={scheme.textTertiary} center>
+      <AppText variant="caption" tone="secondary" center>
         Max range: {maxRangeDays + 1} days
       </AppText>
     </PickerSheet>
@@ -652,32 +729,16 @@ const DateRangePickerModal: FC<DateRangePickerModalProps> = ({
 };
 DateRangePickerModal.displayName = 'DateRangePickerModal';
 
-/* ─────────────── styled helpers ─────────────── */
-
-const PresetRow: FC<{ children: ReactNode }> = ({ children }) => {
-  const themed = useThemedStyles(createStyles);
-  return <View style={themed.presetRow}>{children}</View>;
-};
-PresetRow.displayName = 'PresetRow';
-
 /* ─────────────── styles ─────────────── */
 
-const CELL_SIZE = 40;
+/** Day-cell height = the platform minimum touch target (44 iOS / 48 Android). */
+const CELL_SIZE = touch.min;
 
 const createStyles = (scheme: Scheme) =>
   StyleSheet.create({
     presetRow: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: space.sm,
-    },
-    presetChip: {
-      paddingHorizontal: space.md,
-      paddingVertical: 8,
-      borderRadius: radiusTokens.pill,
-      backgroundColor: scheme.surfaceMuted,
-      borderWidth: 1,
-      borderColor: scheme.hairline,
+      // Room for the pills' vertical hitSlop between wrapped rows.
+      rowGap: space.md,
     },
     calendarCard: {
       backgroundColor: scheme.surfaceMuted,
@@ -692,28 +753,24 @@ const createStyles = (scheme: Scheme) =>
       paddingHorizontal: space.sm,
     },
     navArrow: {
-      width: 32,
-      height: 32,
+      width: NAV_SIZE,
+      height: NAV_SIZE,
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: radiusTokens.pill,
       backgroundColor: scheme.surface,
-      transform: [{ rotate: '90deg' }], // DownArrow becomes ← / UpArrow becomes →
+    },
+    navDisabled: {
+      opacity: 0.35,
     },
     labelButton: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
+      minHeight: NAV_SIZE,
       paddingHorizontal: space.md,
-      paddingVertical: 6,
       borderRadius: radiusTokens.pill,
       backgroundColor: scheme.surface,
-    },
-    chevronClosed: {
-      // Plain down chevron — indicates "tap to expand"
-    },
-    chevronOpen: {
-      transform: [{ rotate: '180deg' }],
     },
     pickerBody: {
       gap: space.md,
@@ -735,7 +792,8 @@ const createStyles = (scheme: Scheme) =>
       padding: 4,
     },
     monthCell: {
-      paddingVertical: 14,
+      minHeight: touch.min,
+      paddingVertical: space.sm,
       borderRadius: radiusTokens.md,
       backgroundColor: scheme.surface,
       borderWidth: 1,
@@ -754,6 +812,9 @@ const createStyles = (scheme: Scheme) =>
     },
     monthCellToday: {
       borderColor: scheme.brand,
+    },
+    cellDisabled: {
+      opacity: 0.35,
     },
     dowRow: {
       flexDirection: 'row',

@@ -1,5 +1,6 @@
 import { ReportFilter } from 'src/networking';
 import { ReportMapping } from 'src/types';
+import { formatDateRange, formatMonthYear, MONTHS_LONG, MONTHS_SHORT } from './dates';
 
 /**
  * Period-filter helpers shared by every "report-style" card on the
@@ -112,12 +113,13 @@ export const buildReportFilter = (
 };
 
 /**
- * Format an epoch-ms `time` field for the bar chart x-axis based on
- * the active filter:
- *   - Custom    → DD/MM         ("20/04")
- *   - Month     → DD            ("20")        — all bars share a month
- *   - Year      → short month   ("Apr")       — bars are months
- *   - Life Time → year          ("2024")      — bars are years
+ * Short x-axis label for one report bucket (epoch-ms `time`, local time):
+ *   - Custom    → day + month   ("1 Sep")
+ *   - Month     → day           ("1" … "30")  — every bar shares the month
+ *   - Year      → short month   ("Sep")       — bars are months
+ *   - Life Time → year          ("2026")      — bars are years
+ * Month names come from the fixed `MONTHS_SHORT` table (identical on
+ * Hermes and in Jest). DD/MM is never used.
  */
 export const formatChartLabel = (
   epochMs: number,
@@ -125,28 +127,54 @@ export const formatChartLabel = (
 ): string => {
   const d = new Date(epochMs);
   if (Number.isNaN(d.getTime())) return '';
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
   switch (pill) {
     case 'Month':
-      return dd;
+      return String(d.getDate());
     case 'Year':
-      return d.toLocaleString('default', { month: 'short' });
+      return MONTHS_SHORT[d.getMonth()];
     case 'Life Time':
       return String(d.getFullYear());
     case 'Custom':
     default:
-      return `${dd}/${mm}`;
+      return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
   }
 };
 
 /**
- * Format a date pill string for the header based on the active
- * filter. Mirrors the picker semantics:
- *   - Custom    → "DD/MM/YY - DD/MM/YY"
- *   - Month     → "April 2026"
+ * Full name of one report bucket — the chart tooltip header and the
+ * screen-reader summary, where the short axis label ("1", "Sep") would be
+ * ambiguous:
+ *   - Custom / Month → "1 Sep 2026"
+ *   - Year           → "September 2026"
+ *   - Life Time      → "2026"
+ */
+export const formatBucketLabel = (
+  epochMs: number,
+  pill: ReportPeriodPill | string,
+): string => {
+  const d = new Date(epochMs);
+  if (Number.isNaN(d.getTime())) return '';
+  switch (pill) {
+    case 'Year':
+      return `${MONTHS_LONG[d.getMonth()]} ${d.getFullYear()}`;
+    case 'Life Time':
+      return String(d.getFullYear());
+    case 'Month':
+    case 'Custom':
+    default:
+      return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}`;
+  }
+};
+
+/**
+ * Period label for the header date pill AND the hero period badge (one
+ * formatter, so they always agree):
+ *   - Custom    → "1 Sep – 1 Oct 2026" / "1 – 30 Sep 2026" (`formatDateRange`)
+ *   - Month     → "September 2026"                      (`formatMonthYear`)
  *   - Year      → "2026"
- *   - Life Time → "Lifetime"
+ *   - Life Time → "Lifetime"  ('Life Time' is only the internal switch key)
+ * Consumed through `useDateFilter`, so Reports, Tables and any other
+ * report-style card read the same.
  */
 export const formatDateFilterLabel = (
   pill: ReportPeriodPill | string,
@@ -155,45 +183,35 @@ export const formatDateFilterLabel = (
   selectedMonth?: MonthSelection,
   selectedYear?: number,
 ): string => {
-  const pad2 = (n: number) => String(n).padStart(2, '0');
-  const pad4 = (n: number) => String(n).padStart(4, '0').slice(-2);
-  const fmtDate = (d: Date) =>
-    `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${pad4(d.getFullYear())}`;
-
   const now = new Date();
   switch (pill) {
-    case 'Month': {
-      const month = selectedMonth?.month ?? now.getMonth() + 1;
-      const year = selectedMonth?.year ?? now.getFullYear();
-      const date = new Date(year, month - 1, 1);
-      return `${date.toLocaleString('default', { month: 'long' })} ${year}`;
-    }
+    case 'Month':
+      return formatMonthYear({
+        month: selectedMonth?.month ?? now.getMonth() + 1,
+        year: selectedMonth?.year ?? now.getFullYear(),
+      });
     case 'Year':
       return String(selectedYear ?? now.getFullYear());
     case 'Life Time':
       return 'Lifetime';
     case 'Custom':
     default:
-      return `${fmtDate(startDate)} - ${fmtDate(endDate)}`;
+      return formatDateRange(startDate, endDate);
   }
 };
 
 /**
- * Round `n` up to the nearest "nice" power-of-10 boundary so bar chart
- * y-axes land on round numbers. Returns 0 for non-finite or non-positive
- * input.
+ * Muted outage caption under the energy chart: "1 day with no production",
+ * "3 months with no production" (Year), "2 years …" (Life Time). `null`
+ * when no bucket totalled exactly 0.
  */
-export const niceCeiling = (n: number): number => {
-  if (!Number.isFinite(n) || n <= 0) return 0;
-  const exp = Math.floor(Math.log10(n));
-  const base = Math.pow(10, exp);
-  const fraction = n / base;
-  let nice: number;
-  if (fraction <= 1) nice = 1;
-  else if (fraction <= 2) nice = 2;
-  else if (fraction <= 5) nice = 5;
-  else nice = 10;
-  return nice * base;
+export const formatNoProductionCaption = (
+  zeroBuckets: number,
+  pill: ReportPeriodPill | string,
+): string | null => {
+  if (!Number.isFinite(zeroBuckets) || zeroBuckets <= 0) return null;
+  const noun = pill === 'Year' ? 'month' : pill === 'Life Time' ? 'year' : 'day';
+  return `${zeroBuckets} ${noun}${zeroBuckets === 1 ? '' : 's'} with no production`;
 };
 
 /**

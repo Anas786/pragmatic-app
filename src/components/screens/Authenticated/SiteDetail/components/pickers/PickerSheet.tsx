@@ -1,13 +1,15 @@
 /**
  * PickerSheet — shared bottom-sheet shell used by the date / month /
  * year pickers. Slides up from the bottom (modern mobile pattern,
- * less disruptive than a centre modal), with a drag-handle, title,
- * close button, body slot and Cancel / Apply footer.
+ * less disruptive than a centre modal), with a title, close button,
+ * body slot and an Apply / Cancel footer.
  *
  * Visual language:
  *   - Soft top corners (radius.2xl) so it reads as a sheet, not a card
- *   - Drag handle pill for affordance
- *   - Cancel = text button. Apply = brand-filled pill.
+ *   - No drag handle — the sheet can't be dragged, so it isn't drawn
+ *   - Apply = full-width 48pt brand button; Cancel = text button below it
+ *   - The footer clears the home indicator / gesture bar
+ *     (`insets.bottom + space.md`), so Apply is never in the swipe zone.
  *
  * Built on React Native's **core** `Modal` + a Reanimated slide/fade,
  * NOT `react-native-modal`. Under the New Architecture (Fabric) the
@@ -20,7 +22,7 @@
  * temp state and pass it to `onApply`.
  */
 
-import React, { FC, ReactNode, useEffect, useState } from 'react';
+import React, { FC, ReactNode, useEffect, useMemo, useState } from 'react';
 import {
   Dimensions,
   Modal,
@@ -34,19 +36,18 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import {
-  AppText,
-  PressableScale,
-} from 'src/components/common';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AppText, PressableScale } from 'src/components/common';
 import {
   duration as durationTokens,
   radius as radiusTokens,
   Scheme,
   space,
+  touch,
   useScheme,
   useThemedStyles,
 } from 'src/theme';
-import { FONT_SIZE_MD, FONT_SIZE_XS, ICON_SIZE_XS } from 'src/utils';
+import { ICON_SIZE_XS } from 'src/utils';
 import { Close } from 'src/assets/icons';
 
 interface PickerSheetProps {
@@ -65,6 +66,14 @@ interface PickerSheetProps {
 
 const SCREEN_H = Dimensions.get('window').height;
 
+/** Visual diameter of the header close button. */
+const CLOSE_SIZE = 32;
+/** Tops the close button up to the platform minimum target. */
+const CLOSE_SLOP = Math.max(0, Math.ceil((touch.min - CLOSE_SIZE) / 2));
+const CLOSE_HIT_SLOP = { top: CLOSE_SLOP, bottom: CLOSE_SLOP, left: CLOSE_SLOP, right: CLOSE_SLOP };
+/** Apply button height (≥ touch.min on both platforms). */
+const APPLY_H = Math.max(48, touch.min);
+
 const PickerSheet: FC<PickerSheetProps> = ({
   visible,
   title,
@@ -77,6 +86,11 @@ const PickerSheet: FC<PickerSheetProps> = ({
 }) => {
   const scheme = useScheme();
   const themed = useThemedStyles(createStyles);
+  const insets = useSafeAreaInsets();
+  const sheetStyleBase = useMemo(
+    () => [themed.sheet, { paddingBottom: insets.bottom + space.md }],
+    [themed.sheet, insets.bottom],
+  );
 
   // Keep the Modal mounted through the slide-out so the exit animates.
   const [mounted, setMounted] = useState(visible);
@@ -119,37 +133,35 @@ const PickerSheet: FC<PickerSheetProps> = ({
       statusBarTranslucent
       onRequestClose={onCancel}>
       <View style={styles.root}>
+        {/* Backdrop tap = Cancel. Hidden from screen readers — the sheet
+            is modal for them and has its own Close / Cancel buttons. */}
         <Pressable
           style={StyleSheet.absoluteFill}
           onPress={onCancel}
-          accessibilityRole="button"
-          accessibilityLabel="Close picker">
+          accessible={false}
+          importantForAccessibility="no">
           <Animated.View style={[StyleSheet.absoluteFill, styles.scrim, backdropStyle]} />
         </Pressable>
 
         <Animated.View
-          style={[themed.sheet, sheetStyle]}
+          style={[sheetStyleBase, sheetStyle]}
+          accessibilityViewIsModal
           onLayout={e => setSheetH(e.nativeEvent.layout.height)}>
-          <View style={themed.handle} />
-
           <View style={themed.header}>
             <View style={themed.headerText}>
-              <AppText fontSize={FONT_SIZE_MD} bold color={scheme.textPrimary}>
+              <AppText variant="h3" accessibilityRole="header">
                 {title}
               </AppText>
               {subtitle ? (
-                <AppText
-                  fontSize={FONT_SIZE_XS}
-                  color={scheme.textSecondary}
-                  numberOfLines={1}>
+                <AppText variant="caption" tone="secondary" numberOfLines={1}>
                   {subtitle}
                 </AppText>
               ) : null}
             </View>
             <PressableScale
               onPress={onCancel}
-              haptic="tap"
               scaleTo={0.9}
+              hitSlop={CLOSE_HIT_SLOP}
               style={themed.closeButton}
               accessibilityLabel="Close picker">
               <Close size={ICON_SIZE_XS} color={scheme.textSecondary} />
@@ -160,30 +172,25 @@ const PickerSheet: FC<PickerSheetProps> = ({
 
           <View style={themed.footer}>
             <PressableScale
-              onPress={onCancel}
-              haptic="tap"
-              scaleTo={0.97}
-              style={themed.cancelButton}
-              accessibilityLabel="Cancel">
-              <AppText
-                fontSize={FONT_SIZE_XS}
-                semi_bold
-                color={scheme.textSecondary}>
-                Cancel
-              </AppText>
-            </PressableScale>
-            <PressableScale
               onPress={onApply}
-              haptic="select"
-              scaleTo={0.97}
+              scaleTo={0.98}
               disabled={applyDisabled}
               style={[
                 themed.applyButton,
                 applyDisabled ? themed.applyDisabled : null,
               ]}
               accessibilityLabel={applyLabel}>
-              <AppText fontSize={FONT_SIZE_XS} bold color={scheme.textOnBrand}>
+              <AppText variant="body" semi_bold tone="onBrand">
                 {applyLabel}
+              </AppText>
+            </PressableScale>
+            <PressableScale
+              onPress={onCancel}
+              scaleTo={0.97}
+              style={themed.cancelButton}
+              accessibilityLabel="Cancel">
+              <AppText variant="body" medium tone="secondary">
+                Cancel
               </AppText>
             </PressableScale>
           </View>
@@ -210,16 +217,7 @@ const createStyles = (scheme: Scheme) =>
       backgroundColor: scheme.surface,
       borderTopLeftRadius: radiusTokens['2xl'],
       borderTopRightRadius: radiusTokens['2xl'],
-      paddingBottom: space.xl,
-    },
-    handle: {
-      alignSelf: 'center',
-      width: 40,
-      height: 4,
-      borderRadius: 2,
-      backgroundColor: scheme.hairline,
-      marginTop: space.sm,
-      marginBottom: space.sm,
+      paddingTop: space.md,
     },
     header: {
       flexDirection: 'row',
@@ -235,8 +233,8 @@ const createStyles = (scheme: Scheme) =>
       gap: 2,
     },
     closeButton: {
-      width: 32,
-      height: 32,
+      width: CLOSE_SIZE,
+      height: CLOSE_SIZE,
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: radiusTokens.pill,
@@ -248,37 +246,27 @@ const createStyles = (scheme: Scheme) =>
       gap: space.lg,
     },
     footer: {
-      flexDirection: 'row',
-      justifyContent: 'flex-end',
-      gap: space.sm,
+      gap: space.xs,
       paddingHorizontal: space.xl,
       paddingTop: space.md,
     },
-    cancelButton: {
-      paddingHorizontal: space.xl,
-      paddingVertical: 12,
-      borderRadius: radiusTokens.pill,
-      backgroundColor: scheme.surfaceMuted,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
     applyButton: {
-      paddingHorizontal: space['2xl'],
-      paddingVertical: 12,
+      minHeight: APPLY_H,
       borderRadius: radiusTokens.pill,
       backgroundColor: scheme.brand,
       alignItems: 'center',
       justifyContent: 'center',
-      shadowColor: scheme.brand,
-      shadowOpacity: 0.3,
-      shadowRadius: 10,
-      shadowOffset: { width: 0, height: 4 },
-      elevation: 3,
+      paddingHorizontal: space['2xl'],
     },
     applyDisabled: {
       opacity: 0.4,
-      shadowOpacity: 0,
-      elevation: 0,
+    },
+    cancelButton: {
+      minHeight: touch.min,
+      alignItems: 'center',
+      justifyContent: 'center',
+      alignSelf: 'center',
+      paddingHorizontal: space.xl,
     },
   });
 

@@ -16,7 +16,16 @@ export const energyReportQueryKey = (
 
 /**
  * Subscribes to /protected/data/v2/report/{siteId}?type=energy_queries.
- * Backs the Performance Report pie chart on the Reports tab.
+ * Backs the Performance Report (hero, Sources list, energy-over-time
+ * chart) on the Reports tab.
+ *
+ * Keep-previous-data, per site: a period change keeps the previous
+ * period's data on screen (`isPlaceholderData: true`) until the new key
+ * resolves, so the hero and the chart WebView stay mounted (no skeleton
+ * flash, no FadeInDown replay, no WebView reload); the card dims it and
+ * marks it 'Updating…'. Placeholder data is never written to the cache.
+ * It is only carried over when the previous query was for the SAME site —
+ * another site's numbers must never stand in, even for a moment.
  */
 export const useEnergyReport = (
   siteId: string | undefined | null,
@@ -26,6 +35,8 @@ export const useEnergyReport = (
     queryKey: energyReportQueryKey(siteId ?? '', filter),
     queryFn: () => getEnergyReport(siteId as string, filter),
     enabled: !!siteId,
+    placeholderData: (previousData, previousQuery) =>
+      previousQuery?.queryKey[1] === (siteId ?? '') ? previousData : undefined,
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 30,
     retry: (failureCount, error: any) => {
