@@ -54,5 +54,23 @@ target 'PragmaticEnergySolution' do
         Pod::UI.puts 'Patched fmt/base.h: FMT_USE_CONSTEVAL disabled for Apple clang'.green
       end
     end
+
+    # Xcode 27 only accepts iOS deployment targets of 15.0+, and treats anything
+    # lower as a build ERROR. Pod targets inherit the minimum from their own
+    # podspec — lottie-ios (13.0), lottie-react-native and RNCAsyncStorage
+    # (13.4) — including their privacy-manifest / resource-bundle targets, so
+    # they fail even though the app itself targets 15.1. Raise every pod
+    # target still below the app's minimum up to it. Only ever raises: a pod
+    # that genuinely needs a newer iOS keeps its own higher target. Harmless
+    # for the app — nothing can run below the app target's 15.1 anyway.
+    min_ios = min_ios_version_supported
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |build_config|
+        current = build_config.build_settings['IPHONEOS_DEPLOYMENT_TARGET']
+        if current && Gem::Version.new(current) < Gem::Version.new(min_ios)
+          build_config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = min_ios
+        end
+      end
+    end
   end
 end
