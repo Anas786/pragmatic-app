@@ -55,7 +55,7 @@ Quick health-check anytime: **`npx tsc --noEmit`** — should be zero errors any
 | Public asset CDN | `https://d1syhs8qvp9sng.cloudfront.net` (site logos) |
 | Cognito Region | `ap-southeast-1` |
 | Cognito User Pool | `ap-southeast-1_HvF8AdDd1` |
-| Cognito Mobile Client | `27sa4crum5hb010qar9sja1l09` |
+| Cognito Mobile Client | `6umtg1l889sv8ot3jabgd31hl` (`mobile-client-v2`, since 2026-09-27; old `27sa4crum5hb010qar9sja1l09` is being retired) |
 | Cognito Identity Pool | `ap-southeast-1:3e0c5cdc-877a-4db7-9a77-8f85c668acff` |
 | IoT Endpoint | `a1wxyzja5wktis-ats.iot.ap-southeast-1.amazonaws.com` (not yet wired) |
 
@@ -175,6 +175,7 @@ Pulled out as part of the refactor. **Use these instead of hand-rolling.**
 | `GlassChip` | Translucent white pill for hero contexts (count chips, period chips, param pills). Uses `glass.medium` bg + `glass.borderSubtle` border |
 | `PowerMixBar` | Segmented horizontal flex bar visualising a source/severity mix. Props: `segments` (`[{key, color, weight}, ...]`), `height`, `radius`, `trackColor`, `minWeight`, `gap` |
 | `HeroGradientCard` | The premium 3-layer gradient hero (shadow / clip / content). Props: `variant` (`'brand'` \| `'danger'`), `hideSheen`, `padding`. Used on every redesigned tab's top card |
+| `PESLogo` | The PES brand mark as vector art (`width`, `height`, `tone: 'auto'\|'light'\|'dark'`). **Theme-aware ink** from the `brandMark` token: white on dark, `#092819` on light. Use it wherever the logo sits directly on the themed background — the bundled `logo.png` is light-background artwork and vanishes in dark mode (Login uses PESLogo; Dashboard/AboutUs keep the PNG on their white/glass tiles). Same glyph paths as the splash (`PESLogo/glyphs.ts`) |
 
 ### 4.4 Shared helpers — `src/utils/sources.ts`
 
@@ -250,7 +251,7 @@ src/
 │   │   └── (legacy survivors: Avatar, EmptyStateCard — the other legacy
 │   │        components were deleted in the July 2026 dead-code sweep)
 │   └── screens/
-│       ├── Onboarding/     (Splash, Login)
+│       ├── Onboarding/     (Splash = cold-start SplashOverlay, see §20; Login)
 │       └── Authenticated/
 │           ├── Dashboard/  ← site-list grid (redesigned)
 │           │   └── index.tsx (also defines SearchBar, MetricChip, SiteCard inline)
@@ -297,7 +298,7 @@ src/
 │   ├── config.ts           (appAxios + interceptors + executeLogout)
 │   ├── auth/
 │   │   ├── cognito.ts      (signIn, signOut, currentUser, etc.)
-│   │   └── session.ts      (token cache + getValidIdToken with auto-refresh)
+│   │   └── session.ts      (token cache + getValidAccessToken with auto-refresh)
 │   ├── user/index.ts       (paginated getSiteList + search)
 │   ├── site/index.ts       (getSiteAllData, getSiteConfig, getInverterReport, getEnergyReport, ReportFilter union)
 │   └── config-service/index.ts (public config endpoints)
@@ -334,8 +335,25 @@ Single source of truth = **Amplify**. We never store tokens manually.
 
 - `signIn` → `cognitoSignIn(username, password)` (USER_SRP_AUTH). Handles `NEW_PASSWORD_REQUIRED` challenge.
 - Tokens persist via `@aws-amplify/react-native` (AsyncStorage adapter). Survives app restarts.
-- **Every axios request** runs through the request interceptor → `getValidIdToken()` → either returns the cached idToken or calls `fetchAuthSession()` to refresh. 60-s expiry buffer, in-flight dedup, in-memory cache (`session.ts`).
-- **401 retry**: response interceptor force-refreshes once, retries, then calls `executeLogout()` if still 401.
+- **Every axios request** runs through the request interceptor → `getValidAccessToken()` → either returns the cached **accessToken** or reads the user-pool token provider (`cognitoUserPoolsTokenProvider.getTokens({forceRefresh})`), which refreshes when needed. 60-s expiry buffer corrected by Amplify's stored `clockDrift`, in-flight dedup, in-memory cache (`session.ts`).
+- **Not `fetchAuthSession()`** (2026-10-01): with an identity pool configured it ALSO calls GetCredentialsForIdentity on every cold start / forced refresh and throws when that fails, so a slow cognito-identity endpoint blocked every API call and the splash hydrate. Nothing in the app uses those AWS credentials today; identity-pool callers (future IoT/MQTT, S3) must call `fetchAuthSession()` themselves.
+- **Token reads are capped at `TOKEN_FETCH_TIMEOUT_MS` = 15 s** (Amplify's fetch has no timeout on Android). Past the cap the request rejects as a retriable `ERR_NETWORK` (React Query error/retry state, never a sign-out). An abandoned read keeps running inside Amplify (its promise can't be cancelled), so in-flight reads are tracked and sign-in / sign-out first wait for them (`settlePendingTokenReads`, ≤ 3 s, no side effects). **Residual race, accepted and pre-existing** (HEAD had no wait at all): a refresh still hanging after that cap when a user signs out and someone signs in can settle onto the new session — usually as NotAuthorized after our RevokeToken, which makes Amplify clear the store and the new user is signed out (fail-closed). A hand-rolled "undo" that rewrote Amplify's token-store keys was tried and REMOVED (2026-10-01): it never converged and created new failure modes in the ordinary log-out → log-in flow. **Never write Amplify's token-store keys directly.**
+- **⚠️ Which token goes where** (`mobile-client-v2` handoff, 2026-09-27). Getting this wrong is a 401:
+
+  | Destination | Token |
+  |---|---|
+  | Mobile API (`/private/*`, `/protected/*`) | **access** |
+  | Identity pool → IoT/MQTT, S3 exports | **ID** (Amplify builds the Logins map itself — don't touch) |
+  | User name / role / company in the UI | **ID** claims (access token has no `email`, no `custom:*`) |
+  | `/public/*` | none |
+
+  `expiresAt` in `session.ts` is decoded from the **accessToken** — the token
+  we actually send — not the idToken. The idToken is still fetched and kept in
+  the `SessionTokens` bundle for `userFromClaims`.
+- **401 retry**: response interceptor force-refreshes once, retries, then calls `executeLogout()` only if the **retried** request is still 401 (`_retried`); 403/419 sign out immediately. **If the forced refresh yields no token** (timeout, NetworkError, Cognito 5xx/429) the request rejects as retriable `ERR_NETWORK` — **never a sign-out**: a slow or flaky network must never sign anyone out. **Never fall back to the ID token** — a `mobile-client-v2` ID token is rejected with 401 by design, so a fallback would mask the real failure.
+- **Session ended by Cognito**: when a refresh is DEFINITIVELY rejected (Amplify's own session-ending names: NotAuthorized, TokenRevoked, UserNotFound, PasswordResetRequired, UserNotConfirmed, RefreshTokenReuse), Amplify clears its store and reports it only via Hub `tokenRefresh_failure` — no 401 ever happens because the request is never sent. `onSessionEnded` (cognito.ts), wired in config.ts, turns that into `executeLogout()`. Amplify dispatches the Hub event before the read settles, so this always runs first.
+- **Interceptor rules are tested for real**: `__tests__/authInterceptors.test.ts` un-mocks axios (jest.setup.js mocks it globally) and asserts access-token-only, one refresh + one retry per 401, no sign-out on transient refresh failure, sign-out on a definitive one.
+- **Client-id swap invalidates stored sessions.** Amplify keys AsyncStorage by client id, so the v2 cutover makes every existing user sign in once. That path is clean — `useAuth` finds no session and routes to Login (`useUserStore` is in-memory only, so no half-authenticated state). The old client's orphaned AsyncStorage keys are never read again.
 - `executeLogout` clears React Query (`queryClient.clear()`), Cognito session, in-memory user, and `resetActiveSite()`. It is **deduped via a module-scope in-flight promise** — concurrent 401 cascades (and the `executeLogout ↔ globalLogout` mutual recursion) collapse into one sign-out.
 - All requests have a **15 s axios timeout**; `isFresh` compares against the expiry decoded **once per token** (no per-request JWT decode).
 - `/public/*` paths skip the Authorization header attachment automatically.
@@ -386,11 +404,14 @@ Performance Report, Inverter Table) share the same filter UX:
   date pill + brand-soft circular refresh button. Accepts `refreshing` prop to
   show a spinner during background refetches.
 - Tapping the date pill dispatches to:
-  - **Custom** → `DateRangePickerModal` (max 1 month — enforced at the picker level)
+  - **Custom** → `DateRangePickerModal`, cap enforced at the picker level via `maxRangeDays`: **31 days** for Reports/Tables (`REPORT_CUSTOM_MAX_DAYS`, src/utils/reports.ts) and **3 days** for Trends (`TREND_CUSTOM_MAX_DAYS`, src/utils/trends.ts). Presets carry a static `maxSpanDays` and only those that fit the cap are shown (`presetsWithinRange`) — Trends shows just "Today"; Reports/Tables show Today / Last 7d / This week / Last 15d.
   - **Month** → `MonthYearPickerModal mode="month"`
   - **Year** → `MonthYearPickerModal mode="year"`
   - **Life Time** → pill is non-interactive (`pillDisabled`)
-- **Default Custom range** = `today - 15 days` → `today` (`DEFAULT_CUSTOM_RANGE_DAYS = 15`).
+- **Default Custom range** = the full cap: `today - (cap − 1)` → `today` (`DEFAULT_CUSTOM_RANGE_DAYS = REPORT_CUSTOM_MAX_DAYS − 1`; Trends seeds `daysAgo(TREND_CUSTOM_MAX_RANGE)`).
+- **Chart value labels**: every ECharts Y-axis (Trends + Reports) and the Trends tooltip use ONE formatter, `Y_AXIS_LABEL_FORMATTER` / `COMPACT_VALUE_FN_SRC` in `chartConfig.ts` — a JS **source string** evaluated inside the WebView (`enableParseStringFunction`), so it must stay self-contained (no closures over RN values). K/M/B/T with ≤3 significant digits, float noise stripped, `4e31`-style beyond T. Unit-tested by evaluating the string (`__tests__/chartValueFormatter.test.ts`).
+- **Trend charts use ONE shared scale in both the card and fullscreen** (bars on a left axis; a right axis only when bars and lines are mixed). Per-series axes were removed on purpose: per-series scales drew a 48K bar and a 750M bar at the same height, misrepresenting relative magnitude (and made fullscreen diverge from the card). `detailed` (fullscreen) changes density only — axis assignment must never branch on it.
+- **Impossible-reading guard** (`IMPOSSIBLE_READING_CEILING = 1e15`, Trends/helpers.ts): finite values with |v| ≥ 1e15 become gaps and a visible "N invalid readings hidden" caption appears in both views — real backend data shipped ~4e31 for "Wind Energy Day", which flattened every other series on the shared scale. Never hide such points silently.
 
 Each card holds its own `startDate`, `endDate`, `selectedMonth: MonthSelection`,
 `selectedYear: number`, `activeFilter: InverterFilterOption` state. They feed
@@ -643,24 +664,116 @@ respect:
   rendering) and wrap `RNEChartsPro` in a memo so parent state changes don't
   rebuild its ~1MB inline-HTML props (see `ReportChart` in
   PerformanceReportCard, memoized `TrendComboChart`).
+- **`react-native-echarts-pro` is PATCHED** via `patch-package`
+  (`patches/react-native-echarts-pro+1.9.3.patch`, applied by the
+  `postinstall` script). Its `getInstance()` never cleared the previous
+  result before asking the WebView for a new one, so the 50 ms poll
+  resolved with the PRIOR call's value — chart Export saved the chart's
+  previous zoom / legend state, always one render behind. The patch adds
+  `delete latestResult.current[functionName]` before the `postMessage`.
+  ⚠️ 1.9.3 is the latest published version and upstream is unfixed: if
+  the dep is ever bumped, the patch will fail to apply — re-make it with
+  `npx patch-package react-native-echarts-pro` rather than deleting it.
+- **`react-native-reanimated` 3.16.7 is PATCHED** too
+  (`patches/react-native-reanimated+3.16.7.patch`, C++ only, both platforms
+  compile it from node_modules). Android Release crashed with SIGSEGV in
+  `LayoutAnimationsManager::startLayoutAnimation` (`config->toJSValue` on a
+  null config): an `entering` animation is queued for the UI thread, its
+  view unmounts first (fast SiteDetail tab switch clears the config), then
+  the job runs and `operator[]` returns null. The patch is upstream PR #6920
+  (shipped in 3.17.0, issue #6908) plus pre-checks in the entering/layout UI
+  jobs so no stale animation entry is recorded. **When upgrading Reanimated
+  to ≥3.17, drop or regenerate this patch** (the manager hunk is upstream).
+  Regenerate with `npx patch-package react-native-reanimated --include
+  '^Common/cpp/'` — without `--include` the android/build artifacts get
+  swept in. ⚠️ `patches/` must be committed (it was untracked), or a fresh
+  install silently loses both patches.
 - **SLD**: the Skia `Canvas` is viewport-sized (`DiagramSkiaLayer`) with
   pan/zoom replayed as a Skia Group matrix from the viewport's shared values;
   node cards live in `DiagramNodeLayer` inside the old transformed
   Animated.View. The dot grid is ONE SkPath. Manual device pass recommended
   after touching SLD transform code (inline + fullscreen rotated mode).
+- **SLD grouping** (Grouped / Units toggle, `src/utils/sldGroup.ts`):
+  - Grouped (default) collapses leaf source units into ONE box per energy
+    type — "Solar · 9" with totalled values. Pure transform: downstream
+    (bounds, `resolveNodeRects`, both layers) runs on the grouped graph.
+  - Type = name tags first (short tags `PV`/`WTG`/`WT`/`BESS`/`BATT`/`DG`/`GEN`
+    must be WHOLE tokens; long words `solar`/`wind`/`battery`/`diesel`/
+    `generator`/`grid`/`utility`… as substrings; priority battery > solar >
+    wind > WHR > genset > grid), icon key only as fallback — real site data
+    has wrong icons (a PV inverter with the wind icon, BESS with genset).
+    Group box uses the canonical icon + `energyPalette` colour; its edges use
+    that colour too.
+  - **WHR (waste-heat recovery) is its own type** (2026-10-01): `WHR` as a
+    whole token or `waste heat` (separators collapsed) beats genset and the
+    icon fallback, so Lucky Cement's "WHR Plant" no longer merges with
+    "Captive Plant" into "Genset · 2". ≥2 WHR units group as "WHR · N"; there
+    is no palette token for WHR, so that card takes its members' most common
+    icon and that member's colour (no new hex/tokens).
+  - Never grouped: logo/target node, any node with an incoming edge. Group key
+    = type + sorted target set; ≥2 members, singletons stay as-is. One
+    group→target edge per target; handles recomputed to face the target; a
+    bounded deterministic settle pass keeps OTHER edges' routes (orthogonal
+    and bezier, via the renderer's own `bezierControlPoints` /
+    `orthogonalEdgePoints` in sld.ts) clear of group cards.
+  - `buildSldGrouping(graph)` is STRUCTURE-ONLY (cached per graph ref, memo on
+    graph) — live ticks never re-layout. `makeGroupedResolver(base, groups)`
+    (memo on the live resolver, values cached per data snapshot) answers the
+    synthetic params:
+    - additive keys (units parsed as `[k|M|G](W|var|VA|Wh|varh|VAh|A)` →
+      family + SI factor) merge by label + family and are SUMMED, shown in the
+      members' majority unit. W, var and VA are all the "power" family, so a Q
+      key the backend mis-tags `kW` (Lucky Cement's GW-WTG-01) still sums with
+      the other turbines' `kVAr` Q — the label decides the quantity (verified
+      on live data 2026-10-01: Wind · 6 P/Q = exact sum of the 6 units);
+    - all PF keys fold into one row: recomputed |ΣP|/√(ΣP²+ΣQ²) only when every
+      reporting member has BOTH P and Q (paired per member), else mean PF;
+    - everything else (%, SOC, V, Hz…) is AVERAGED; "—" when nothing numeric;
+    - group cards show at most `SLD_GROUP_MAX_ROWS` = 3 keys, ranked by member
+      coverage.
+  - Flow: each group→target edge carries a client-only `data.animation`
+    (synthetic per-(group, target) flag = any member edge to THAT target
+    flowing); `isEdgeAnimated` checks `edge.data.animation` first.
+  - Shared wiring: `useSldModel(siteId)` (SiteDetail/components) for BOTH the
+    inline diagram and the fullscreen route; the mode lives in the
+    non-persisted `useSldViewMode` zustand store. `SLDViewport` is keyed by
+    mode so a switch remounts + re-fits; its lock + orthogonal-routing state
+    is lifted to the parents (controlled props) so it survives the remount.
+    The toggle is its own `SldModeToggle` (ControlButtons.tsx), pinned to the
+    top-right of the safe area and **always visible** — only the zoom / lock /
+    fullscreen column auto-fades (users never found Units mode behind the
+    fade). Hidden when no type has ≥2 units; segments labelled with their
+    visible text (WCAG 2.5.3). Its footprint `SLD_MODE_TOGGLE_BOX` is the real
+    layout box: Fabric hit-tests stop at the parent's bounds, so `hitSlop`
+    can't reach past the container — `sldModeToggleMetrics` sizes the pill
+    itself to a ≥44pt target. The fit (`computeSldFit`) keeps a strip free
+    for it only when needed, so the pill never covers a card at open/re-fit
+    (after the user pans it may, by design).
+  - **Fullscreen safe area**: the route rotates content 90° in JS
+    (`SLD_FULLSCREEN_ROTATION_DEG`), so device insets are mapped through the
+    rotation (`rotateInsets`: device top → content left, right → top, bottom
+    → right, left → bottom) and the rotated container is sized from
+    `useSafeAreaFrame()`. Fit, re-fit, button column and pill all respect the
+    mapped insets (nothing under the Dynamic Island / status / nav bar).
+    The rotation constant and SLDViewport's pan remap (`tx += dy; ty -= dx`)
+    must change together. Pure helpers live in `sldViewportFit.ts`.
+  - Tests: `__tests__/sldGroup.test.ts` (incl. route-clearance mutation check,
+    WHR cases), `__tests__/sldViewportFit.test.ts` (inset mapping, fit,
+    44pt touch target).
 - **Routes import screens directly** — never import screens from the
   `src/components` root barrel (it drags the whole Authenticated tree into the
   splash render; Metro can't defer `export *` re-exports).
-- **Cold start**: `MIN_SPLASH_MS` is a floor anchored to mount time, not
-  additive to auth. App.tsx wires react-query `focusManager` (AppState) +
-  `onlineManager` (NetInfo).
+- **Cold start**: the splash is now the App-level `SplashOverlay` (§20) —
+  `MIN_SPLASH_MS` is gone; the overlay's timeline (minShow anchored to the
+  clock start, not additive to auth) replaced it. App.tsx wires react-query
+  `focusManager` (AppState) + `onlineManager` (NetInfo).
 - **`useSiteData` staleTime = 3 min** (tabs unmount on switch; 30s caused a
   full refetch mid tab-transition). Pull-to-refresh on Dashboard resets the
   infinite query to page 1 instead of serially refetching every cached page.
 - **Android release**: R8 + `shrinkResources` ON (`proguard-rules.pro` has
   per-library keep rules), vector-icons ships only `MaterialIcons.ttf`.
-  ⚠️ First release build needs a smoke test (Amplify sign-in, charts, SLD,
-  GIFs, bootsplash). ⚠️ Release still signs with the **debug keystore** —
+  Release smoke-tested 2026-10-01 (sign-in, charts, SLD, GIFs, splash) — it
+  caught one R8 crash, see §21. ⚠️ Release still signs with the **debug keystore** —
   must fix before store submission.
 - **Removed deps** (zero imports): lodash, @reduxjs/toolkit, i18next,
   @react-navigation/bottom-tabs, react-native-otp-entry,
@@ -675,3 +788,211 @@ respect:
 - Still pending (unchanged from §16): AlarmsView/Trend real-data wiring, MQTT,
   real haptics — plus a recommended future migration of charts from
   react-native-echarts-pro (WebView) to `@wuba/react-native-echarts` (Skia).
+
+---
+
+## 20. Cold-start splash (Sept 2026) — `src/components/screens/Onboarding/Splash/`
+
+A React Native port of the website's "signing-in" animation: a dark circuit
+board whose traces grow outward from around the logo, the PES mark drawing
+itself stroke-by-stroke and then filling, an ignition wave lighting the
+traces, packets, and the caption "Signing you in, <custom:userName> ···".
+Cold start ONLY (not after Login). Dark only (`splashPalette` in
+`src/theme/tokens.ts`, brand-locked — the native launch screen can't read
+the persisted theme).
+
+### 20.1 Architecture
+
+- **App-level overlay, outside the `NavigationContainer`.** `App.tsx`
+  renders `<SplashOverlay destReady onRoute onExited/>` as an absolute sibling
+  of the container. It must **never call navigation hooks**. There is no
+  `Splash` route any more (`OnboardingStackParamList` is just `Login`).
+- The overlay decides the root route from `useAuth()` (`'Drawer'` /
+  `'Onboarding'`) and reports it via `onRoute` at the **pre-mount** point;
+  App then renders `<Routes initialRouteName={route}/>` UNDER the still-opaque
+  overlay inside a wrapper `View` whose `onLayout` + one rAF sets the
+  `destReady` shared value. The exit fade only starts once `destReady` (or a
+  timeout) — it never reveals a blank container. `onExited` → App unmounts
+  the overlay. Until a route is picked the container has no navigator, so a
+  cold-start `resetToLogin` is a no-op (navigationRef.ts).
+- **Files** (import directly by path, never through a barrel):
+  | File | Role |
+  |---|---|
+  | `timeline.ts` | `WEB_TL` / `REDUCED_TL` (web-ms), warp `K`, stall/fallback constants, DEV knobs |
+  | `ease.ts` | allocation-free cubic-bezier easings — **all worklets** |
+  | `board.ts` | verbatim port of the web trace generator (mulberry32 seed 7) — JS only |
+  | `src/components/common/PESLogo/glyphs.ts` | the 5 PES glyph paths (viewBox 0 0 1000 474.3), copied from the web bundle — shared with the static `PESLogo` |
+  | `scene.ts` | `buildScene()` — the ONLY place Skia objects are created, once, after layout |
+  | `draw.ts` | per-frame recorder (board + logo + glows) — **all worklets** |
+  | `useSplashClock.ts` | one `useFrameCallback` state machine (caption → pre-mount → land/abort → dest gating → exit) |
+  | `SplashCanvas.tsx` | memo'd full-screen Skia `<Canvas><Picture/></Canvas>` |
+  | `SplashCaption.tsx` | RN caption + 3-dot Skia canvas |
+  | `index.tsx` | `SplashOverlay` (layout, auth, AppState, JS fallback, status bar) |
+
+### 20.2 Timeline — warped web clock
+
+All model constants stay in **web-ms (`w`)**; only the clock RATE warps.
+Uniform `K = 2200/3610`: the web's 3610 ms (minShow 2750 + landFlare 240 +
+landFade 620) plays in exactly **2200 ms real, exit included**. Rate is `1/K`
+while running and exiting, **1** once `w ≥ minShow` but not landed (auth
+stall), and 1 throughout reduced motion. `dt` is capped at 50 ms.
+Key real-ms beats: pre-mount 0 (as soon as auth is known) · traces 49–329
+· logo stroke 378 · caption 914 · fills 1036 · ignite 1249 · land 1676 ·
+root fade 1822–2200.
+
+Deliberate deviations from the web — **signed off 2026-10-01** (the user
+said "do as you recommend"): `packetsStart` 2250 (web 2500) so packets are
+visible before land; dot-grid fade-in over the first 300 w; reduced-motion
+board fade-in (240 ms); neutral caption **"Powering up"** (no session, or
+auth still loading at minShow); caption in **Poppins** (Regular line,
+SemiBold name — the app's family, already linked; Inter isn't bundled), dots
+aligned by Yoga baseline + `translateY(-1)` with lineHeight 20.3 so Android's
+includeFontPadding cancels out.
+
+**Routing without a definitive auth answer** (`routeWithoutAuth`,
+`storedSession.ts`): the hydrate (`useAuth`) has three outcomes —
+`authenticated` → Drawer; `unauthenticated` (nothing stored, no refresh
+token, or a session-ending Cognito error) → Login; `indeterminate` (offline,
+DNS, Cognito 5xx/429 — Amplify rethrows those) → routed like the 20 s stall
+abort. Both consult an offline stored-session probe started at mount
+(`authTokenStore.loadTokens()`, local only, `STORED_SESSION_PROBE_MS` = 3 s
+cap): a stored **refresh token** → Drawer (user store filled from the stored
+ID-token claims, display only), else Login. The first route decided is final
+(`sentRouteRef`); a late real outcome never re-routes. So an airplane-mode
+launch with a stored session lands in the Drawer with offline/error states,
+not Login. **Nothing in the splash clears the stored session** — a slow or
+flaky network at launch must never sign anyone out; a definitively dead
+session is signed out by `onSessionEnded` (§6). Login can still run while
+Amplify holds a session (e.g. a session-ending error at launch), which makes
+`signIn()` throw UserAlreadyAuthenticatedException; `cognitoSignIn` catches
+exactly that, signs out locally and retries once (the user is re-entering
+credentials, and a different account can't inherit the old session).
+Background > 3 s after auth → fast-forward to land on resume. JS hard-cut
+fallback: auth + 4 s / mount + 24 s. Tests: `splashAbortRouting.test.tsx`,
+`splashColdStart.test.tsx` (real useAuth + Amplify), `useAuthHydrate.test.tsx`.
+
+### 20.3 Invariants (crash rules — see also §19 and MEMORY)
+
+- **All continuous motion is ONE SkPicture per frame**, recorded in a
+  `useDerivedValue` on the UI thread (`recordFrame`). No react-native-svg, no
+  `withRepeat`/`withTiming`, no per-frame Fabric commits. RN styles animate
+  only in two short windows (caption entrance `captionP`, root exit `exitP`),
+  and those shared values are written only when they change.
+- **`'worklet'` on every function** in `ease.ts` / `draw.ts` — enforced by
+  the `__workletHash` test. Don't use Reanimated `Easing.bezierFn` in draw
+  code (the Jest mock replaces it with identity).
+- **Filter sigmas are in viewBox units**: the logo is drawn after
+  `translate(logoX, logoY)·scale(lw/1000)`, so CSS `drop-shadow(Npx)` →
+  σ = N/2 in viewBox space (fill glow 14px → σ7, breathe 22px → σ11, land
+  26px → σ13; stroke glow 2px/10px → σ1/σ5). Every `saveLayer` is bounded
+  by `vbPad`.
+- **Never create or change a blur filter per frame.** Every image filter is
+  built ONCE in `buildScene`; animation changes only layer-paint alpha. The
+  web's animated fill-glow radius is two fixed shadow-only layers (σ7 soft,
+  σ13 wide) crossfaded by alpha. A per-frame `MakeDropShadow` with a moving
+  σ needs new GPU blur kernels and measured a **~300 ms UI-thread stall at
+  ignition on every launch** (iOS simulator, Release).
+- **GPU warm-up on the first frames** (`w < WARMUP_BEFORE_W`): `warmUp()`
+  runs every logo pipeline (both glow blurs, the stroke layer's chained
+  shadows, stroked paths, the bar gradient) once at alpha 1/255 on the still
+  -empty board. Measured A/B on fresh installs: without it, first-use shader
+  compiles froze the logo **245–261 ms as it starts drawing** and
+  **146–156 ms at ignition**; with it those stalls move to the invisible
+  first frame, same total duration. Any NEW filter/shader added to the logo
+  must be added to `warmUp()` too.
+- **Pre-mount at auth-ready, not mid-animation** (`premountAt: 0`). Mounting
+  the destination is a UI-thread stall (70–140 ms for Login); scheduled at
+  the old 2350 w it landed on the ignition climax.
+- **Skia objects only after the first `onLayout`** (`buildScene` in a
+  `useMemo` keyed on the frozen layout size). The Skia Jest mock has no
+  CanvasKit and the test renderer never fires `onLayout`, so App.test never
+  touches Skia. `scene.ts` takes an injectable `api` so the draw-safety tests
+  run against a stub.
+- After `buildScene` returns, **JS never touches its paints/paths again** —
+  they're shared by reference with the UI runtime, which mutates them.
+- `recordFrame` never throws and never returns null; only the recorder is
+  `dispose()`d, never the returned picture. `ContourMeasure.getSegment`
+  throws on failure → only called with `stop > 0.01`, full path at p ≥ 1.
+- `SplashCanvas` is `React.memo` with props frozen after mount (a Skia
+  Canvas re-render restarts its mapper) and **never `opaque`** (Android
+  SurfaceView would ignore the parent's fade/scale).
+- **Activate the clock only via `activateClock()`** (guards
+  `!clock.isActive`): in Reanimated 3.16 `setActive(true)` on an active
+  callback starts a second UI-thread rAF loop.
+- **Status bar is opaque** (`translucent: false`, board-coloured) during the
+  splash, like the rest of the app: a translucent splash resized the Android
+  ≤14 root after the frozen first layout and again on unmount. The overlay's
+  `<StatusBar>` is re-keyed on `destMounted` so it re-pushes in the
+  destination's mount commit (after the destination's own `<StatusBar>`).
+- The frame callback must stay **referentially stable** (`useFrameCallback`
+  re-registers on change) — every JS callback passed to `useSplashClock` is
+  a ref-reading `useCallback`.
+- `DEBUG_FREEZE_REAL_MS` / `DEBUG_HOLD` in `timeline.ts` must be `null` /
+  `false` in commits (asserted by `__tests__/splashBoard.test.ts`).
+- `__tests__/splashBoard.test.ts` also deep-compares `board.ts` against the
+  **verbatim minified web generator** (`__tests__/fixtures/webBoardGenerator.js`,
+  excluded from Jest's testMatch via `testPathIgnorePatterns`) on 4
+  viewports, and steps the real clock callback frame-by-frame (2200 ms
+  reveal, late auth, 20 s abort, reduced motion).
+
+### 20.4 Native colour contract — `#0B0F14` everywhere
+
+The native launch screen is a **plain `#0B0F14` board with NO logo**, so the
+native → JS handoff is seamless and the logo draws itself first. The same
+colour must be used by: iOS `LaunchScreen.storyboard` background, iOS root
+view (`customize(_ rootView:)`) + `window.backgroundColor` in
+`AppDelegate.swift`, Android `@color/splashBg` (`SplashTheme`
+`windowBackground` + status/nav bars) and the Android 12+ system splash
+(`values-v31/styles.xml`, transparent icon). `splashPalette.bg` is the JS
+side of that contract — change them together.
+
+### 20.5 react-native-bootsplash — intentionally unwired
+
+`react-native-bootsplash` is still installed but NOT natively wired (no
+`RNBootSplash.init*`), and `App.tsx` no longer calls `RNBootSplash.hide`.
+Follow-up uninstall PR: `yarn remove react-native-bootsplash` + `cd ios &&
+pod install`, delete `assets/bootsplash/`, `ios/.../BootSplash.storyboard`
+(and its pbxproj refs), `BootSplashLogo-615311.imageset`,
+`android/.../drawable-*/bootsplash_logo.png`, and the bootsplash mock in
+`jest.setup.js`.
+
+---
+
+## 21. Android build — aligned to RN 0.77.3 (Sept 2026)
+
+`android/` had been scaffolded from a **newer** React Native template than the
+installed **0.77.3**, so no Android build had ever worked on this branch. Fixed
+2026-09-30 (verified: Release APK builds, cold-starts on the Pixel 7a /
+Android 15 emulator, no crashes):
+
+- **Gradle wrapper 9.0.0 → 8.11.1** (what RN 0.77.3's gradle-plugin requires;
+  Gradle 9's Kotlin 2.2 metadata broke the plugin build).
+- **`usesCleartextTraffic` placeholder** supplied in `app/build.gradle`
+  (`manifestPlaceholders`: debug `true` for Metro, release `false` — the app
+  only calls https). Newer RN plugins set it automatically; 0.77.3's doesn't.
+- **`MainApplication.kt`** replaced with the official 0.77.3 template form
+  (`DefaultReactNativeHost`, `SoLoader.init(..., OpenSourceMergedSoMapping)`,
+  `load()`); the newer `ReactNativeApplicationEntryPoint.loadReactNative` API
+  doesn't exist in 0.77.3.
+- **`react-native-svg` 15.3.0 → 15.8.0** (exact pin). 15.3.0 links the pre-0.76
+  per-library `react_render_core` target and overrides `setPointerEvents`
+  package-private; 15.8.0 is the smallest release linking the merged
+  `ReactAndroid::reactnative` target. Chosen as the SMALLEST fix to limit iOS
+  risk — iOS Release build + cold start re-verified afterwards. (15.11+ adds RN
+  version gating for 0.77/0.78 Yoga changes in code 15.8 doesn't have.)
+- Kept deliberately: compileSdk/targetSdk 36, Kotlin 2.1.20,
+  `edgeToEdgeEnabled=false` (harmless on 0.77), icon-font trimming, R8, Fresco.
+- **R8 keep rule for `ReactModalHostView`** (2026-10-01). Fabric's C++ finds
+  it BY NAME over JNI (`JReactModalHostView.h` `kJavaDescriptor`); only its
+  method is `@DoNotStrip`, so R8 renamed the class and every core `<Modal>`
+  (date pickers via `PickerSheet`, `ChartFullscreenModal`) crashed the
+  Release build with `ClassNotFoundException`. Debug builds don't minify, so
+  they never showed it. **After adding any native lib or bumping RN, re-audit**:
+  collect every `"Lcom/…;"` descriptor in the libs' `.h`/`.cpp` and check it
+  isn't renamed in `app/build/outputs/mapping/release/mapping.txt`.
+
+**Keep `android/` in step with the installed `react-native` version** when
+upgrading — compare against `@react-native-community/template@<rn-version>`.
+Emulator builds: `./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a`
+with JDK 17 (full 4-ABI Release builds take 30+ min).
+
