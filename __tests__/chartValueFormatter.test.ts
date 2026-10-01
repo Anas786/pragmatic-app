@@ -91,15 +91,59 @@ describe('Y_AXIS_LABEL_FORMATTER (compact axis-tick formatter)', () => {
     expect(fmt(Infinity)).toBe('');
     expect(fmt(-Infinity)).toBe('');
   });
+
+  it('labels the axis readably when a device reading is plotted at its true size', () => {
+    // Lucky Cement 'Customised Report' (web Analysis chart, 2026-10-01):
+    // the y-axis runs from 2.00e+34 down to -1.20e+35 — the app plots the
+    // same values, so its ticks must read as short exponents, sign kept.
+    expect(fmt(-1.2e35)).toBe('-1.2e35');
+    expect(fmt(-1.2000000000000001e35)).toBe('-1.2e35');
+    expect(fmt(-8e34)).toBe('-8e34');
+    expect(fmt(-2e34)).toBe('-2e34');
+    expect(fmt(2e34)).toBe('2e34');
+    expect(fmt(-1.3e34)).toBe('-1.3e34');
+    expect(fmt(-2.66e36)).toBe('-2.66e36');
+    expect(fmt(1e15)).toBe('1e15');
+    expect(fmt(-1e15)).toBe('-1e15');
+    for (const v of [-1.2e35, -8e34, 2e34, -2.66e36]) {
+      expect(fmt(v)).toMatch(/^-?\d(\.\d{1,2})?e\d+$/);
+    }
+  });
+});
+
+describe('Y_AXIS_LABEL_FORMATTER — float-noise guard (echarts passes the tick index)', () => {
+  // How echarts calls it: (value, tickIndex), one axis pass in index
+  // order, index 0 = the axis minimum. The real echarts 5.4.2 sequences
+  // are in __tests__/echartsAxisTicks.test.ts; these pin the rule itself.
+  const fmt = evalFormatter(Y_AXIS_LABEL_FORMATTER) as unknown as (v: unknown, i?: number) => string;
+  const pass = (ticks: number[]) => ticks.map((v, i) => fmt(v, i));
+
+  it('prints the noise tick where 0 belongs as "0", never a made-up value', () => {
+    // echarts 5.4.2 ticks for a -1.1e31 bar (interval 2e30) …
+    expect(
+      pass([-1.2e31, -1e31, -8e30, -6.000000000000001e30, -4e30, -2e30, -562949953421312, 2e30]),
+    ).toEqual(['-1.2e31', '-1e31', '-8e30', '-6e30', '-4e30', '-2e30', '0', '2e30']);
+    // … a -1.3e34 bar, and the Reports axis for -1.2e35 kWh (in TWh)
+    expect(pass([-1.5e34, -1.2e34, -9e33, -6e33, -3e33, -1152921504606847000, 3e33])[5]).toBe('0');
+    expect(pass([-1.2e26, -1e26, -8e25, -6e25, -4e25, -2e25, -8589934592, 2e25])[6]).toBe('0');
+  });
+
+  it('a new pass (index 0) restarts: ordinary ticks after a legend-tap rescale stay as they are', () => {
+    pass([-1.2e31, -1e31, -562949953421312, 2e30]);
+    expect(pass([0, 10000, 20000, 30000])).toEqual(['0', '10K', '20K', '30K']);
+    expect(pass([-500, 0, 500, 1000])).toEqual(['-500', '0', '500', '1K']);
+    expect(pass([0, 0.001, 0.002])).toEqual(['0', '0.001', '0.002']);
+  });
+
+  it('a direct call without an index formats statelessly', () => {
+    pass([-1.2e31, -1e31]);
+    expect(fmt(-562949953421312)).toBe('-563T');
+    expect(fmt(41000)).toBe('41K');
+  });
 });
 
 describe('Trends combo chart tooltip formatter', () => {
-  it('renders compact, noise-free values and "–" for missing data', () => {
-    // buildTrendComboOption's own impossible-reading guard (see
-    // trendComboOption.test.ts) would already null out a ~4e31 point
-    // before it reaches series data — this test instead feeds the
-    // tooltip formatter that value directly, as defense in depth: it
-    // must never produce garbage even if it somehow received one.
+  const tooltipFor = () => {
     const { option }: { option: any } = buildTrendComboOption(
       [{ time: 0, p1: 48000, p2: null }],
       [
@@ -109,23 +153,44 @@ describe('Trends combo chart tooltip formatter', () => {
       1000,
       THEME,
     );
-    const tooltipFmt = evalFormatter(option.tooltip.formatter as string);
-    const html = tooltipFmt([
-      {
-        axisValueLabel: '00:00',
-        marker: '<m/>',
-        seriesName: 'Wind Energy Day',
-        value: 3.9999999999999995e31,
-      },
-      {
-        axisValueLabel: '00:00',
-        marker: '<m/>',
-        seriesName: 'PV Energy Day',
-        value: null,
-      },
+    return evalFormatter(option.tooltip.formatter as string);
+  };
+  const row = (seriesName: string, value: unknown) => ({
+    axisValueLabel: '00:00',
+    marker: '<m/>',
+    seriesName,
+    value,
+  });
+
+  it('shows an invalid-looking reading EXACTLY as the device sent it', () => {
+    const sent = [3.9999999999999995e31, -1.2345678901234567e35, 1.5e15, -1e15];
+    const html = tooltipFor()([
+      ...sent.map((v, i) => row(`S${i}`, v)),
+      row('PV Energy Day', null),
     ] as any);
-    expect(html).toContain('4e31');
-    expect(html).toContain('–');
+    const shown = [...html.matchAll(/<b style="margin-left:10px">([^<]*)<\/b>/g)].map(m => m[1]);
+    // every significant digit (the shortest text that round-trips to the
+    // very same number), e-notation, sign kept — never rounded
+    expect(shown.slice(0, sent.length).map(Number)).toEqual(sent);
+    expect(shown).toEqual([
+      '3.9999999999999994e31',
+      '-1.2345678901234566e35',
+      '1.5e15',
+      '-1e15',
+      '–', // missing data stays a dash
+    ]);
+    expect(html).not.toMatch(/e\+/);
+  });
+
+  it('keeps ordinary values compact and noise-free', () => {
+    const html = tooltipFor()([
+      row('Wind Energy Day', 48213.57),
+      row('PV Energy Day', 0.1 + 0.2),
+      row('Grid', 9.99e14),
+    ] as any);
+    expect(html).toContain('>48.2K</b>');
+    expect(html).toContain('>0.3</b>');
+    expect(html).toContain('>999T</b>');
     expect(html).not.toMatch(/e\+\d+M/);
   });
 });

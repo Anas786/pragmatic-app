@@ -26,6 +26,14 @@
  *
  * Grouping uses en-US separators ('142,781.74') to match the web portal.
  * Formatting is presentation-only: it never changes which value is shown.
+ *
+ * IRRADIANCE (product decision, 2026-10-01): an irradiance reading
+ * (`isIrradiance`) always prints as a whole number with grouping —
+ * '862 W/m²', '1,024 W/m²' — in both modes and whatever `decimals` asks
+ * for. Cards, Live tiles, SLD key rows and the Dashboard all format
+ * through here, so they agree — by unit everywhere; by NAME (a unitless
+ * reading) only where the caller passes `name` (Cards, Live, SLD; not yet
+ * the Dashboard chips). No other unit's decimals change.
  */
 
 export type QuantityMode = 'compact' | 'precise';
@@ -53,6 +61,11 @@ export interface FormatQuantityOptions {
    * e.g. the Summary lifetime yield '142,781.74 MWh'. Default true.
    */
   rescale?: boolean;
+  /**
+   * The reading's name / label. Only consulted to recognise a UNITLESS
+   * irradiance reading by name ('POA Irradiance 4') — see `isIrradiance`.
+   */
+  name?: string | null;
 }
 
 export type UnitFamily = 'energy' | 'power' | 'reactive' | 'apparent' | 'other';
@@ -110,12 +123,27 @@ const OTHER_UNITS: Record<string, string> = {
   degc: '°C',
   'deg c': '°C',
   celsius: '°C',
-  'w/m2': 'W/m²',
-  'w/m^2': 'W/m²',
-  'w/m²': 'W/m²',
-  wm2: 'W/m²',
-  'w/sqm': 'W/m²',
   'm/s': 'm/s',
+};
+
+/** Canonical irradiance unit. */
+export const IRRADIANCE_UNIT = 'W/m²';
+
+/**
+ * Every spelling of watts per square metre the backend / configs use, matched
+ * lowercased with whitespace removed: W/m², W/m2, W/M2, W/m^2, W/m**2,
+ * Wm-2, W m-2, W·m-2, W.m^-2, Wm2, W/sqm, W/sq.m, watt(s)/m2. Never kW/m²
+ * or Wh/m² (different quantities).
+ */
+const IRRADIANCE_UNIT_RE =
+  /^w(?:atts?)?(?:\/(?:m(?:2|²|\^2|\*\*2)|sq\.?m)|[.·*]?m(?:\^?-2|⁻²|2|²))$/;
+
+/** Canonical spelling of a known non-scalable unit, else undefined. */
+const canonicalOtherUnit = (unit: string): string | undefined => {
+  const lower = unit.trim().toLowerCase();
+  const known = OTHER_UNITS[lower];
+  if (known !== undefined) return known;
+  return IRRADIANCE_UNIT_RE.test(lower.replace(/\s+/g, '')) ? IRRADIANCE_UNIT : undefined;
 };
 
 const OTHER_SPOKEN: Record<string, string> = {
@@ -154,7 +182,7 @@ export const normalizeUnit = (unit?: string | null): string => {
   if (t === '') return '';
   const scalable = parseScalable(t);
   if (scalable) return PREFIXES[scalable.prefixIndex] + scalable.base;
-  return OTHER_UNITS[t.toLowerCase()] ?? t;
+  return canonicalOtherUnit(t) ?? t;
 };
 
 /** Which rescaling family a unit belongs to. */
@@ -168,6 +196,62 @@ export const isRateUnit = (unit?: string | null): boolean => {
   const parsed = parseScalable(normalizeUnit(unit));
   return !!parsed && !parsed.base.endsWith('h');
 };
+
+/** Name words that make a UNITLESS reading an irradiance reading (whole
+ *  words, any case; a trailing sensor index is fine: 'POA1', 'GHI_2'). */
+const IRRADIANCE_NAME_RE = /(?:^|[^a-z])(?:irradiance|poa|ghi|gti|insolation)(?=$|[^a-z])/i;
+/** …unless the name is about the sensor's temperature ('POA Module Temp'). */
+const TEMPERATURE_NAME_RE = /(?:^|[^a-z])(?:temp|temperature)(?=$|[^a-z])/i;
+
+/** A bracketed token in a name ('(kW)', '[%]') — a unit candidate. */
+const NAME_BRACKET_RE = /[([]\s*([^()[\]]{1,16}?)\s*[)\]]/g;
+/** A per-area token anywhere in a name ('kWh/m2', 'kW/m²', 'Wh / sq.m'). */
+const NAME_PER_AREA_RE = /([a-z]+)\s*\/\s*(?:m(?:2|²|\^2|\*\*2)?|sq\.?\s*m)(?![a-z0-9])/gi;
+
+/**
+ * True when a reading's NAME states a unit other than W/m² — a recognised
+ * bracketed unit ('POA (%)', 'Irradiance [kW]') or any per-area token that
+ * is not watts per m² ('Insolation (kWh/m2)', 'GHI kW/m²'). The bracket
+ * parser (`splitLabelUnit`) doesn't know per-area units, so without this a
+ * unitless 'Insolation (kWh/m2)' would be rounded as irradiance.
+ */
+const nameStatesOtherUnit = (name: string): boolean => {
+  for (const m of name.matchAll(NAME_BRACKET_RE)) {
+    const u = normalizeUnit(m[1]);
+    const known = parseScalable(u) !== null || canonicalOtherUnit(u) !== undefined;
+    if (known && u !== IRRADIANCE_UNIT) return true;
+  }
+  for (const m of name.matchAll(NAME_PER_AREA_RE)) {
+    if (normalizeUnit(`${m[1]}/m2`) !== IRRADIANCE_UNIT) return true;
+  }
+  return false;
+};
+
+/**
+ * THE irradiance predicate — every screen that prints a reading asks this
+ * one function (via `formatQuantity`), so an irradiance value reads the
+ * same everywhere.
+ *
+ *  - unit normalises to W/m² (any spelling — see IRRADIANCE_UNIT_RE) → true
+ *  - any OTHER stated unit → false: a name never overrides the unit, so
+ *    'POA Insolation' in kWh/m² or a POA temperature in °C keeps its decimals
+ *  - no unit → true when the name says irradiance / POA / GHI / GTI /
+ *    insolation as a whole word, is not a temperature, and does not itself
+ *    state another unit ('Insolation (kWh/m2)' keeps its decimals)
+ */
+export const isIrradiance = (unit?: string | null, name?: string | null): boolean => {
+  const u = normalizeUnit(unit);
+  if (u !== '') return u === IRRADIANCE_UNIT;
+  if (typeof name !== 'string') return false;
+  return (
+    IRRADIANCE_NAME_RE.test(name) &&
+    !TEMPERATURE_NAME_RE.test(name) &&
+    !nameStatesOtherUnit(name)
+  );
+};
+
+/** Fraction digits an irradiance reading prints with (product decision). */
+export const IRRADIANCE_DECIMALS = 0;
 
 /** Unit as a screen reader should say it ('kWh' → 'kilowatt hours'). */
 export const spokenUnit = (unit: string): string => {
@@ -210,8 +294,7 @@ export const splitLabelUnit = (label: string): { label: string; unit: string | n
   if (!m || m[1].trim() === '') return { label: trimmed, unit: null };
   const candidate = m[2];
   const known =
-    parseScalable(candidate) !== null ||
-    OTHER_UNITS[candidate.trim().toLowerCase()] !== undefined;
+    parseScalable(candidate) !== null || canonicalOtherUnit(candidate) !== undefined;
   if (!known) return { label: trimmed, unit: null };
   return { label: m[1].trim(), unit: normalizeUnit(candidate) };
 };
@@ -252,6 +335,28 @@ const TINY_NEGATIVE = '>-0.001';
 const round3 = (x: number): number => (x === 0 ? 0 : Number(x.toPrecision(3)));
 
 /**
+ * |reading| at or above which a device value is physically implausible
+ * (Lucky Cement's daily wind energy came back as ~4e31 and ~-1.2e35 on
+ * 2026-10-01). DETECTION ONLY — such a value is never hidden, clamped or
+ * dropped (user rule: show garbage exactly as the device sent it, like
+ * the web). It is only WRITTEN in 'e' notation, because in full it is a
+ * 30–50-digit string a tile can only truncate into a wrong-looking number,
+ * and charts may add a "shown as sent by the device" note. Shared by the
+ * Live tab, Cards, SLD, Dashboard chips, Reports and the chart note.
+ */
+export const SUSPECT_READING_ABS = 1e15;
+
+/** True for a finite reading at or above {@link SUSPECT_READING_ABS}. */
+export const isSuspectReading = (v: number): boolean =>
+  Number.isFinite(v) && Math.abs(v) >= SUSPECT_READING_ABS;
+
+/** '2.66e36' / '-1.2e35' — 3 significant digits, no '+', no trailing zeros. */
+export const formatScientific = (v: number): string => {
+  const [mantissa, exp] = v.toExponential(2).split('e');
+  return `${mantissa.replace(/\.?0+$/, '')}e${Number(exp)}`;
+};
+
+/**
  * Three-significant-digit text: '850', '15.6', '1.05', '0.987'. Integers
  * below 1000 print as-is ('17', '5'); magnitudes ≥ 1000 (only reachable for
  * non-scalable units or past the top prefix) print grouped with no
@@ -262,6 +367,7 @@ const round3 = (x: number): number => (x === 0 ? 0 : Number(x.toPrecision(3)));
 export const formatSig3 = (x: number): string => {
   if (!Number.isFinite(x)) return MISSING_TEXT;
   if (x === 0) return '0';
+  if (isSuspectReading(x)) return formatScientific(x);
   if (Math.abs(round3(x)) >= 1000) return noNegZero(fixedFormatter(0).format(x));
   if (Number.isInteger(x)) return String(x);
   if (Math.abs(x) < 0.001) return x > 0 ? TINY_POSITIVE : TINY_NEGATIVE;
@@ -285,7 +391,8 @@ const spokenNumber = (text: string): string => {
 /**
  * Format a value + unit for display. Non-numeric input ('NA', null, '',
  * NaN) → `{ text: '—', unit: '', isMissing: true, spoken: 'no data' }`;
- * a real 0 is a value ('0 kWh').
+ * a real 0 is a value ('0 kWh'). An irradiance reading (`isIrradiance(unit,
+ * opts.name)`) prints as a grouped whole number in either mode.
  */
 export const formatQuantity = (
   value: unknown,
@@ -302,7 +409,14 @@ export const formatQuantity = (
   let idx = parsed?.prefixIndex ?? 0;
   let text: string;
 
-  if (mode === 'precise') {
+  if (isSuspectReading(num)) {
+    // A garbage reading is shown, never hidden — in 'e' notation in the
+    // backend's own unit (no prefix rescaling of a value nobody can trust).
+    text = formatScientific(num);
+  } else if (isIrradiance(u, opts.name)) {
+    // W/m² is never rescaled (not a scalable family) — just round.
+    text = noNegZero(fixedFormatter(IRRADIANCE_DECIMALS).format(num));
+  } else if (mode === 'precise') {
     const decimals = Math.max(0, Math.min(6, opts.decimals ?? 2));
     const f = fixedFormatter(decimals);
     if (parsed && Math.abs(num) >= 10_000) {

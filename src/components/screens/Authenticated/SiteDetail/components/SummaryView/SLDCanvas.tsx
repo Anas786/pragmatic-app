@@ -332,7 +332,7 @@ const SourceNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
                 adjustsFontSizeToFit
                 minimumFontScale={0.7}
                 style={styles.metricValue}>
-                {formatSldValue(resolve(k.param))}
+                {formatSldValue(resolve(k.param), k.unit, k.label)}
               </AppText>
               {k.unit ? (
                 <AppText
@@ -401,7 +401,7 @@ const LogoNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
             lineHeight={14}
             color={scheme.textSecondary}
             numberOfLines={1}>
-            {formatSldValue(resolve(primary.param))}
+            {formatSldValue(resolve(primary.param), primary.unit, primary.label)}
             {primary.unit ? ` ${primary.unit}` : ''}
           </AppText>
         ) : null}

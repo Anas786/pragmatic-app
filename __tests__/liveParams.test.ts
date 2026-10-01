@@ -31,7 +31,7 @@ import {
   nextLiveSort,
   resolveLiveParamName,
 } from '../src/utils/liveParams';
-import { energyPalette } from '../src/theme/tokens';
+import { ColorScheme, darkScheme, energyPalette, lightScheme } from '../src/theme/tokens';
 
 const MIN = 60_000;
 const HOUR = 3_600_000;
@@ -804,7 +804,10 @@ jest.mock('src/hooks', () => {
 });
 
 // Imported after the mocks (jest hoists jest.mock above imports anyway).
-import LiveParameterView from '../src/components/screens/Authenticated/SiteDetail/components/LiveParameterView';
+import LiveParameterView, {
+  BRAND_SWEEP_ALPHA,
+  SOURCE_SWEEP_ALPHA,
+} from '../src/components/screens/Authenticated/SiteDetail/components/LiveParameterView';
 
 const textOf = (node: ReactTestInstance): string => {
   const c = node.props.children;
@@ -906,24 +909,65 @@ describe('LiveParameterView (rendered, Lucky Cement excerpt)', () => {
     expect(t.some(s => /\b\d{1,2}:\d{2}\s?(am|pm)\b/i.test(s))).toBe(false);
   });
 
-  it('tiles carry their category icon; only a named source tints the tile', () => {
-    mockState.live = live({});
+  it('tiles carry their category icon; a named source tints strongest, others get a soft brand sweep', () => {
+    const now = Date.now();
+    mockState.live = liveData({
+      p2: { value: 144141.9, update_at: now - 90_000 }, // 'PV Energy Day' → solar
+      p36: { value: 1188413365.85, update_at: now - 90_000 }, // 'Energy Consumed' → no source
+      p10012: { value: null, update_at: now - 90_000 }, // 'Inverter 3 Energy Day', missing
+    });
     const root = render();
     // Energy tiles → the energy glyph on each, and on the selected pill.
     expect(root.findAll(n => n.props.name === 'electric-meter' && typeof n.type !== 'string').length)
-      .toBeGreaterThanOrEqual(3);
-    const sweeps = root
-      .findAll(n => n.props.pointerEvents === 'none' && Array.isArray(n.props.colors))
-      .map(n => (n.props.colors as string[])[0]);
-    // 'PV Energy Day' → a solar-lime sweep. 'Energy Consumed' names no
-    // source → no sweep at all (§22.2: non-source tiles stay neutral)...
-    expect(new Set(sweeps)).toEqual(new Set([`${energyPalette.solar}24`]));
-    // ...but its icon well still carries the brand tint.
-    const wells = root
-      .findAll(n => typeof n.type === 'string' && n.props.style?.width === 34)
-      .map(n => StyleSheet.flatten(n.props.style).backgroundColor as string);
-    expect(wells).toContain(`${energyPalette.solar}24`);
-    expect(wells.some(c => /^#(10B981|34D399)24$/i.test(c))).toBe(true);
+      .toBeGreaterThanOrEqual(4);
+
+    const tileNode = (prefix: string) =>
+      root.findAll(
+        n =>
+          typeof n.type === 'string' &&
+          n.props.accessible === true &&
+          typeof n.props.accessibilityLabel === 'string' &&
+          n.props.accessibilityLabel.startsWith(prefix),
+      )[0];
+    // The gradient mock nests elements that share its props — one sweep
+    // per distinct colour pair.
+    const sweepOf = (tile: ReactTestInstance) => [
+      ...new Set(
+        tile
+          .findAll(n => n.props.pointerEvents === 'none' && Array.isArray(n.props.colors))
+          .map(n => JSON.stringify(n.props.colors)),
+      ),
+    ].map(j => JSON.parse(j) as string[]);
+    const wellOf = (tile: ReactTestInstance) =>
+      tile
+        .findAll(n => typeof n.type === 'string' && StyleSheet.flatten(n.props.style)?.width === 34)
+        .map(n => StyleSheet.flatten(n.props.style).backgroundColor as string)[0];
+
+    // 'PV Energy Day' → the solar-lime sweep at the source alpha.
+    const pv = tileNode('PV Energy Day');
+    expect(sweepOf(pv)).toEqual([[`${energyPalette.solar}${SOURCE_SWEEP_ALPHA}`, `${energyPalette.solar}00`]]);
+    expect(wellOf(pv)).toBe(`${energyPalette.solar}24`);
+
+    // 'Energy Consumed' names no source → a SOFTER brand sweep + brand well
+    // (not the energy palette — §22.2), so the source tile still leads.
+    const consumed = tileNode('Energy Consumed');
+    const [brandSweep] = sweepOf(consumed);
+    expect(brandSweep).toHaveLength(2);
+    const brand = brandSweep[0].slice(0, 7);
+    expect(brand).toMatch(/^#(10B981|34D399)$/i);
+    expect(brandSweep).toEqual([`${brand}${BRAND_SWEEP_ALPHA}`, `${brand}00`]);
+    expect(Object.values(energyPalette).map(c => c.toLowerCase())).not.toContain(brand.toLowerCase());
+    expect(wellOf(consumed)).toBe(`${brand}24`);
+    expect(parseInt(BRAND_SWEEP_ALPHA, 16)).toBeLessThan(parseInt(SOURCE_SWEEP_ALPHA, 16));
+
+    // A missing reading stays fully neutral: no sweep, untinted well.
+    const missing = tileNode('Inverter 3 Energy Day');
+    expect(missing.props.accessibilityLabel).toMatch(/no data/);
+    expect(sweepOf(missing)).toEqual([]);
+    expect(wellOf(missing)).not.toMatch(/^#(10B981|34D399)/i);
+
+    // Exactly the two coloured tiles carry a sweep.
+    expect([pv, consumed, missing].map(t => sweepOf(t).length)).toEqual([1, 1, 0]);
   });
 
   it('the status line uses the header’s site-level sync stamp, not the newest parameter', () => {
@@ -1135,5 +1179,65 @@ describe('LiveParameterView (rendered, Lucky Cement excerpt)', () => {
     mockState.isFetching = false;
     mockState.error = null;
     expect(texts(render()).some(s => /showing the last data/.test(s))).toBe(false);
+  });
+});
+
+/* ─────────── tile text contrast over the sweeps (WCAG AA) ─────────── */
+
+describe('Live tile colours — text stays AA over every sweep, in both themes', () => {
+  type RGB = [number, number, number];
+  const parse = (c: string): { rgb: RGB; a: number } => {
+    const m = /^#([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(c);
+    if (!m) throw new Error(`unparsable colour ${c}`);
+    return {
+      rgb: [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16)) as RGB,
+      a: m[2] ? parseInt(m[2], 16) / 255 : 1,
+    };
+  };
+  const over = (fg: string, bg: RGB): RGB => {
+    const f = parse(fg);
+    return f.rgb.map((v, i) => f.a * v + (1 - f.a) * bg[i]) as RGB;
+  };
+  const lin = (v: number) => {
+    const c = v / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const lum = ([r, g, b]: RGB) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  const ratio = (fg: string, bg: RGB) => {
+    const [hi, lo] = [lum(over(fg, bg)), lum(bg)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+
+  const accents = (s: ColorScheme): [string, string, string][] => [
+    // [name, sweep fill at its strongest stop, glyph ink]
+    ['brand (no source)', `${s.brand}${BRAND_SWEEP_ALPHA}`, s.brandText],
+    ...(Object.keys(energyPalette) as (keyof typeof energyPalette)[]).map(
+      k => [k, `${energyPalette[k]}${SOURCE_SWEEP_ALPHA}`, s.energyInk[k]] as [string, string, string],
+    ),
+  ];
+
+  const SCHEMES: [string, ColorScheme][] = [
+    ['light', lightScheme],
+    ['dark', darkScheme],
+  ];
+
+  it.each(SCHEMES)('%s: every tile text tone ≥ 4.5:1 and the glyph ≥ 3:1 at the sweep’s strongest stop', (_n, s) => {
+    for (const [name, sweep, ink] of accents(s)) {
+      // The tile is `surface` with the sweep on top (strongest at the
+      // top-left corner, where the icon well sits — text only gets lighter).
+      const tile = over(sweep, parse(s.surface).rgb);
+      const tones: [string, string][] = [
+        ['value', s.textPrimary],
+        ['name / unit / age', s.textSecondary],
+        ['Time unknown', s.textTertiary],
+        ['stale age / implausible value', s.statusInk.warning],
+      ];
+      for (const [tone, fg] of tones) {
+        expect([name, tone, ratio(fg, tile) >= 4.5]).toEqual([name, tone, true]);
+      }
+      // Glyph ink on the 24-alpha icon well drawn over the sweep.
+      const well = over(`${sweep.slice(0, 7)}24`, tile);
+      expect([name, 'glyph', ratio(ink, well) >= 3]).toEqual([name, 'glyph', true]);
+    }
   });
 });

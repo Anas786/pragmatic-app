@@ -26,7 +26,7 @@ import { formatClock } from 'src/utils/format';
 import { formatNoProductionCaption } from 'src/utils/reports';
 import { formatEnergy } from 'src/utils/units';
 import { friendlyError } from 'src/utils/errors';
-import { WEBVIEW_SETTINGS } from './chartConfig';
+import { formatInvalidReadingsNote, WEBVIEW_SETTINGS } from './chartConfig';
 import DateRangePickerModal from './DateRangePickerModal';
 import DateFilterHeader from './DateFilterHeader';
 import MonthYearPickerModal from './MonthYearPickerModal';
@@ -35,9 +35,11 @@ import {
   AggregatedSource,
   buildEnergyChartSummary,
   buildStackData,
+  countInvalidReportReadings,
   EnergyStackData,
   heroMixLabel,
   reportingSources,
+  sharesAvailable,
   sourceCountLabel,
   spokenHeroMixLabel,
   spokenPeriod,
@@ -172,6 +174,9 @@ const PerformanceReportCard: FC = () => {
   // Hero total: the same sum as ever (every source bucket, unchanged).
   const grandTotal = aggregated.reduce((acc, s) => acc + s.value, 0);
   const hasData = aggregated.some(s => s.hasData);
+  // A non-positive total (e.g. a device's huge negative reading, summed as
+  // sent) has no shares: the rows say '—' and the hero quotes none.
+  const shareAvailable = sharesAvailable(aggregated);
   const sources = useMemo(() => reportingSources(aggregated), [aggregated]);
   const mixSegments = useMemo(
     () =>
@@ -184,6 +189,10 @@ const PerformanceReportCard: FC = () => {
   const mixLabelSpoken = useMemo(() => spokenHeroMixLabel(aggregated), [aggregated]);
 
   const noProductionCaption = formatNoProductionCaption(stack.zeroBuckets, settled.pill);
+  // Invalid-looking device readings are summed and plotted AS SENT (like
+  // the web) — the note only says where the odd values came from.
+  const invalidCount = useMemo(() => countInvalidReportReadings(rows), [rows]);
+  const invalidNote = invalidCount > 0 ? formatInvalidReadingsNote(invalidCount) : null;
   const chartSummary = useMemo(
     () =>
       buildEnergyChartSummary({
@@ -192,9 +201,12 @@ const PerformanceReportCard: FC = () => {
         pill: settled.pill,
         total: grandTotal,
         noProductionCaption,
+        invalidNote,
       }),
-    [stack, settled.label, settled.pill, grandTotal, noProductionCaption],
+    [stack, settled.label, settled.pill, grandTotal, noProductionCaption, invalidNote],
   );
+  const fullscreenWarning =
+    [invalidNote, noProductionCaption].filter(Boolean).join('. ') || undefined;
 
   // echarts colours from the active scheme (stable per scheme singleton).
   const chartTheme = reportChartThemeFromScheme(scheme);
@@ -314,7 +326,7 @@ const PerformanceReportCard: FC = () => {
         <OverlineLabel>SOURCES</OverlineLabel>
         <View style={styles.sourceList}>
           {sources.map(item => (
-            <SourceRow key={item.token} item={item} />
+            <SourceRow key={item.token} item={item} shareAvailable={shareAvailable} />
           ))}
         </View>
       </SectionCard>
@@ -358,6 +370,11 @@ const PerformanceReportCard: FC = () => {
           {noProductionCaption ? (
             <AppText variant="caption" tone="secondary">
               {noProductionCaption}
+            </AppText>
+          ) : null}
+          {invalidNote ? (
+            <AppText variant="caption" tone="secondary">
+              {invalidNote}
             </AppText>
           ) : null}
         </SectionCard>
@@ -464,7 +481,7 @@ const PerformanceReportCard: FC = () => {
         title="Energy over time"
         option={fullscreenOption ?? EMPTY_CHART_OPTION}
         hint={stack.series.length > 1 ? LEGEND_HINT : undefined}
-        warning={noProductionCaption ?? undefined}
+        warning={fullscreenWarning}
         summary={chartSummary}
       />
     </View>

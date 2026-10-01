@@ -23,9 +23,12 @@ import {
 } from '../src/utils/reports';
 import {
   buildEnergyChartSummary,
+  countInvalidReportReadings,
   formatSharePercent,
   heroMixLabel,
   reportingSources,
+  SHARE_UNAVAILABLE,
+  sharesAvailable,
   sourceCountLabel,
   sourceSecondaryLabel,
   spokenHeroMixLabel,
@@ -207,6 +210,21 @@ describe('buildStackData — outage-honest buckets', () => {
     expect(year.buckets[0].header).toBe('September 2026');
   });
 
+  it("keeps a device's invalid-looking reading exactly as sent (summed, plotted, never dropped)", () => {
+    const garbage: EnergyReportRow[] = [
+      { time: day(1), ed_wind: -1.2345678901234567e35, ed_solar: 63000 },
+      { time: day(2), ed_wind: 41000, ed_solar: 64000 },
+    ];
+    const g = buildStackData(garbage, 'Custom');
+    const wind = g.series.find(s => s.token === 'wind')!;
+    expect(wind.values).toEqual([-1.2345678901234567e35, 41000]);
+    expect(g.buckets[0].total).toBe(-1.2345678901234567e35 + 63000);
+    expect(g.maxStackAbs).toBe(1.2345678901234567e35);
+    const totals = aggregateEnergy(garbage, null);
+    expect(totals.find(a => a.token === 'wind')!.value).toBe(-1.2345678901234567e35 + 41000);
+    expect(countInvalidReportReadings(garbage)).toBe(1);
+  });
+
   it('an empty report is an empty stack', () => {
     const empty = buildStackData([], 'Custom');
     expect(empty).toEqual({ buckets: [], series: [], zeroBuckets: 0, maxStackAbs: 0 });
@@ -301,6 +319,30 @@ describe('Performance Report view-model helpers', () => {
     expect(spokenHeroMixLabel(aggregateEnergy([{ time: day(1), ed_solar: 0 }], null))).toBeNull();
   });
 
+  it('a non-positive total has no shares: no hero mix line, never a false "0%"', () => {
+    // Lucky Cement: a device's -1.2e35 wind reading is summed AS SENT, so
+    // the total goes negative and aggregateEnergy leaves every share at 0
+    // — uncomputed, not "0%". The hero then quotes no share at all.
+    const garbage = aggregateEnergy(
+      [{ time: day(1), ed_wind: -1.2e35, ed_solar: 63000, ed_grid: 1000 }],
+      null,
+    );
+    expect(garbage.every(s => s.percentNum === 0)).toBe(true);
+    expect(sharesAvailable(garbage)).toBe(false);
+    expect(heroMixLabel(garbage)).toBeNull();
+    expect(spokenHeroMixLabel(garbage)).toBeNull();
+    // the values themselves are untouched (shown as sent)
+    expect(garbage.find(s => s.token === 'wind')!.value).toBe(-1.2e35);
+    expect(garbage.find(s => s.token === 'solar')!.value).toBe(63000);
+    expect(SHARE_UNAVAILABLE).toBe('—');
+    // a positive total keeps its shares (incl. a legit negative export)
+    expect(sharesAvailable(agg)).toBe(true);
+    expect(
+      sharesAvailable(aggregateEnergy([{ time: day(1), ed_solar: 500, ed_grid: -100 }], null)),
+    ).toBe(true);
+    expect(sharesAvailable(aggregateEnergy([{ time: day(1), ed_solar: 0 }], null))).toBe(false);
+  });
+
   it('reportingSources: only sources with data, largest first', () => {
     expect(reportingSources(agg).map(s => s.token)).toEqual(['grid', 'wind', 'solar', 'genset']);
   });
@@ -333,6 +375,35 @@ describe('Performance Report view-model helpers', () => {
         'Highest 572 megawatt hours on 1 Sep 2026. ' +
         'Lowest 0 kilowatt hours on 3 Sep 2026. ' +
         '1 day with no production.',
+    );
+  });
+
+  it('countInvalidReportReadings counts only finite source readings at/over 1e15', () => {
+    expect(countInvalidReportReadings(ROWS)).toBe(0);
+    expect(
+      countInvalidReportReadings([
+        // summed columns: counted, either sign
+        { time: day(1), ed_wind: 4e31, ed_grid: -1e15, ed_solar: 9.99e14 },
+        // a column no source sums (not on the chart) is not counted
+        { time: day(2), ed_irradiance: 5e20, ed_genset: null },
+        // missing / non-finite data is a gap, not a device reading
+        { time: day(3), ed_wind: NaN, ed_solar: Infinity } as unknown as EnergyReportRow,
+      ]),
+    ).toBe(2);
+    expect(countInvalidReportReadings([])).toBe(0);
+  });
+
+  it('buildEnergyChartSummary ends with the invalid-readings note when there is one', () => {
+    const stack = buildStackData([{ time: day(1), ed_wind: 4e31 }], 'Custom');
+    const summary = buildEnergyChartSummary({
+      stack,
+      periodLabel: '1 Sep 2026',
+      pill: 'Custom',
+      total: 4e31,
+      invalidNote: '1 reading looks invalid — shown exactly as sent by the device',
+    });
+    expect(summary.endsWith('1 reading looks invalid — shown exactly as sent by the device.')).toBe(
+      true,
     );
   });
 });

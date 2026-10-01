@@ -305,7 +305,8 @@ const normalizeTrend = (
     .filter((a): a is TrendAggregation => a !== null);
   if (aggregations.length === 0) return null;
   return {
-    heading: typeof o.heading === 'string' ? o.heading : 'Trend',
+    // Untitled section: named after its tab ("Analysis", like the web).
+    heading: typeof o.heading === 'string' ? o.heading : 'Analysis',
     subHeading: typeof o.subHeading === 'string' ? o.subHeading : undefined,
     unit: typeof payload.unit === 'string' ? payload.unit : undefined,
     aggregations,

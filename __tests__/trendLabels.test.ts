@@ -175,3 +175,14 @@ describe('period pill labels', () => {
     expect(trendPeriodPillA11yLabel('Custom')).toBe('Custom range, opens date picker');
   });
 });
+
+describe('untitled trend section', () => {
+  it('is named after its tab, "Analysis" (never the old "Trend")', () => {
+    const cfg = {
+      siteComponents: { trends: [{ payload: { aggregations: [{ param: 'p1', type: 'line' }] } }] },
+    };
+    expect(selectTrends(cfg)[0]?.heading).toBe('Analysis');
+    // a configured heading is kept verbatim
+    expect(selectTrends(config([{ param: 'p1', type: 'line' }]))[0]?.heading).toBe('Power');
+  });
+});

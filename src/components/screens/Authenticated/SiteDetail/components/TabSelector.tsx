@@ -99,6 +99,21 @@ interface TabConfig {
   Icon: FC<IconProps>;
 }
 
+/**
+ * What the user sees / hears for each tab. `TabOption` is an internal key
+ * (state, ViewsContent dispatch, refresh-strip rules); the label is the
+ * product name. The 'Trend' tab is called "Analysis", like the web portal.
+ */
+export const TAB_LABELS: Readonly<Record<TabOption, string>> = {
+  Summary: 'Summary',
+  Cards: 'Cards',
+  Live: 'Live',
+  Alarms: 'Alarms',
+  Trend: 'Analysis',
+  Reports: 'Reports',
+  Tables: 'Tables',
+};
+
 const tabs: TabConfig[] = [
   { name: 'Summary', Icon: SummaryTabIcon },
   { name: 'Cards', Icon: CardsTabIcon },
@@ -155,6 +170,7 @@ const TabPillBase: FC<TabPillProps> = ({
   themed,
 }) => {
   const { Icon, name } = config;
+  const label = TAB_LABELS[name];
   const tint = isActive ? scheme.textOnBrand : scheme.textSecondary;
 
   const handleLayout = useCallback(
@@ -176,11 +192,11 @@ const TabPillBase: FC<TabPillProps> = ({
         scaleTo={0.94}
         role={CHIP_ROLE}
         selected={isActive}
-        accessibilityLabel={name}
+        accessibilityLabel={label}
         style={themed.tabInner}>
         <Icon size={ICON_SIZE_SM} color={tint} />
         <AppText variant="bodySm" semi_bold color={tint} numberOfLines={1}>
-          {name}
+          {label}
         </AppText>
       </PressableScale>
     </View>

@@ -2,11 +2,14 @@
  * Pure view-model helpers for the Performance Report (Reports tab).
  * No React, no theme reads — unit-tested in __tests__/aggregations.test.ts.
  */
+import type { EnergyReportRow } from 'src/networking';
 import {
   AggregatedSource,
   EnergyStackData,
 } from 'src/utils/aggregations';
+import { findSourceForColumn } from 'src/utils/sources';
 import { formatEnergy, splitLabelUnit } from 'src/utils/units';
+import { SUSPECT_READING_ABS } from '../chartConfig';
 
 export { aggregateEnergy, buildStackData } from 'src/utils/aggregations';
 export type {
@@ -41,6 +44,19 @@ export const spokenSharePercent = (pct: number): string => {
   return `${n.startsWith('-') ? `minus ${n.slice(1)}` : n} percent`;
 };
 
+/**
+ * Whether the sources' shares of the total mean anything — only when the
+ * summed total is positive. `aggregateEnergy` leaves every `percentNum`
+ * at 0 otherwise (e.g. a device's -1.2e35 reading, summed in as sent,
+ * makes the total negative): a share that was never computed, so it is
+ * shown as '—' / left out, never as a false '0%'.
+ */
+export const sharesAvailable = (sources: AggregatedSource[]): boolean =>
+  sources.reduce((acc, s) => acc + s.value, 0) > 0;
+
+/** Placeholder share for a source row when {@link sharesAvailable} is false. */
+export const SHARE_UNAVAILABLE = '—';
+
 /** Sources that reported anything, largest first (stable for ties). */
 export const reportingSources = (sources: AggregatedSource[]): AggregatedSource[] =>
   sources
@@ -52,12 +68,18 @@ export const reportingSources = (sources: AggregatedSource[]): AggregatedSource[
 /**
  * Hero mix headline: 'Mostly Solar · 72.4%' when one source supplies at
  * least half of the energy, otherwise 'Largest: Wind · 38%'. `null` when
- * nothing positive was produced (no mix to describe).
+ * nothing positive was produced (no mix to describe), or when the total
+ * isn't positive so there are no shares to quote ({@link sharesAvailable}).
  */
 const topMixSource = (sources: AggregatedSource[]): AggregatedSource | null =>
-  sources
-    .filter(s => s.hasData && s.value > 0)
-    .reduce<AggregatedSource | null>((best, s) => (!best || s.value > best.value ? s : best), null);
+  sharesAvailable(sources)
+    ? sources
+        .filter(s => s.hasData && s.value > 0)
+        .reduce<AggregatedSource | null>(
+          (best, s) => (!best || s.value > best.value ? s : best),
+          null,
+        )
+    : null;
 
 const mixLead = (top: AggregatedSource): string =>
   top.percentNum >= 50 ? `Mostly ${top.shortLabel}` : `Largest: ${top.shortLabel}`;
@@ -89,6 +111,27 @@ export const sourceSecondaryLabel = (source: AggregatedSource): string | null =>
   return label;
 };
 
+/**
+ * How many report readings look invalid (|v| ≥ `SUSPECT_READING_ABS`):
+ * finite values in the columns that feed a source total — the same column
+ * rule `aggregateEnergy` / `buildStackData` sum. Every one of them is
+ * still summed into the totals and plotted AS SENT; this count only words
+ * the chart's "N readings look invalid — shown exactly as sent by the
+ * device" note.
+ */
+export const countInvalidReportReadings = (rows: readonly EnergyReportRow[]): number => {
+  let count = 0;
+  for (const row of rows) {
+    for (const column of Object.keys(row)) {
+      if (column === 'time') continue;
+      const v = row[column];
+      if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+      if (Math.abs(v) >= SUSPECT_READING_ABS && findSourceForColumn(column)) count += 1;
+    }
+  }
+  return count;
+};
+
 /** '1 Sep – 1 Oct 2026' → '1 Sep to 1 Oct 2026' for screen readers. */
 export const spokenPeriod = (periodLabel: string): string =>
   periodLabel.replace(/\s*–\s*/g, ' to ');
@@ -112,8 +155,10 @@ export const buildEnergyChartSummary = (args: {
   /** Hero total (kWh) — the same figure the hero shows. */
   total: number;
   noProductionCaption?: string | null;
+  /** The invalid-readings note, when the chart plotted any. */
+  invalidNote?: string | null;
 }): string => {
-  const { stack, periodLabel, pill, total, noProductionCaption } = args;
+  const { stack, periodLabel, pill, total, noProductionCaption, invalidNote } = args;
   const parts: string[] = [
     `Energy over time, ${spokenPeriod(periodLabel)}, ${bucketNoun(pill, stack.buckets.length)}`,
     `Total ${formatEnergy(total).spoken}`,
@@ -130,5 +175,6 @@ export const buildEnergyChartSummary = (args: {
     parts.push(`Lowest ${formatEnergy(lo.total).spoken} on ${lo.header}`);
   }
   if (noProductionCaption) parts.push(noProductionCaption);
+  if (invalidNote) parts.push(invalidNote);
   return `${parts.join('. ')}.`;
 };

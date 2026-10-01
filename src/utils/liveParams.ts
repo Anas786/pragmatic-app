@@ -10,6 +10,8 @@
  *    like the web: en-US grouping, exactly 2 decimals, never rescaled
  *    ('63,683,837.95', '1.00', '-7.68'). An exact 0 prints as a bare '0',
  *    as the web does ('Bus3 kW 0') and as the shared rule says ('0 kWh').
+ *    Irradiance is the one deliberate departure (product decision): a
+ *    whole number, '862 W/m²' (`isIrradiance`, units.ts).
  *  - NAMES resolve like the web: the site's own `globalParams.live` names
  *    first ('WHR kW', 'Captive Plant PF'), then the global params-mapping
  *    ('Wind 1 reactive power'), then the raw code.
@@ -26,10 +28,12 @@ import { tryNumber } from './parsers';
 import { energyTypeFromName } from './sldGroup';
 import {
   formatQuantity,
+  formatScientific,
   isRateUnit,
   normalizeUnit,
   splitLabelUnit,
   spokenUnit,
+  SUSPECT_READING_ABS,
   unitFamily,
 } from './units';
 
@@ -395,22 +399,15 @@ export interface LiveParameter {
 export const LONG_VALUE_CHARS = 12;
 
 /**
- * |value| at or above which a reading is physically implausible — the same
- * ceiling as the Trends impossible-reading guard (Trends/helpers.ts
- * IMPOSSIBLE_READING_CEILING). Lucky Cement's "Wind 3 daily energy"
- * reported 2.66e36 on 2026-10-01; printed in full (as the web does) it is
- * a 50-digit string that a tile can only truncate into a wrong-looking
- * number. Such a value keeps its number but is written in the charts'
- * 'e' notation ('2.66e36') and flagged.
+ * |value| at or above which a reading is physically implausible — the
+ * shared {@link SUSPECT_READING_ABS} (utils/units.ts), also used by the
+ * charts' "shown as sent by the device" note. Lucky Cement's "Wind 3 daily
+ * energy" reported 2.66e36 on 2026-10-01. Such a value is never hidden: it
+ * keeps its number, written in 'e' notation ('2.66e36'), and is flagged.
  */
-export const IMPLAUSIBLE_READING_ABS = 1e15;
+export const IMPLAUSIBLE_READING_ABS = SUSPECT_READING_ABS;
 
-/** '2.66e36' / '-1.2e18' — 3 significant digits, no '+', no trailing zeros. */
-const scientific = (v: number): string => {
-  const [mantissa, exp] = v.toExponential(2).split('e');
-  const m = mantissa.replace(/\.?0+$/, '');
-  return `${m}e${Number(exp)}`;
-};
+const scientific = formatScientific;
 
 const MISSING_TEXT = '—';
 const MISSING_LIKE_RE = /^(na|n\/a|nan|null|undefined|-|—|–)$/i;
@@ -444,7 +441,7 @@ export interface ExtractLiveParamsOptions {
 /**
  * `liveData.live.data.live` → one display-ready row per parameter.
  * Values are never altered — only formatted (precise, 2 decimals, no
- * rescale: exactly the web's number).
+ * rescale: exactly the web's number; irradiance as a whole number).
  */
 export const extractLiveParams = (
   liveData: unknown,
@@ -498,6 +495,9 @@ export const extractLiveParams = (
         // A real zero reads '0' (web + shared rule); anything that merely
         // rounds to zero keeps its 2 decimals ('0.00') — it isn't zero.
         decimals: numeric === 0 ? 0 : 2,
+        // Irradiance ('W/m²', or a unitless 'POA Irradiance 4') prints as a
+        // whole number — formatQuantity applies the shared rule.
+        name: rawName,
       });
       displayValue = q.text;
       displayUnit = q.unit;

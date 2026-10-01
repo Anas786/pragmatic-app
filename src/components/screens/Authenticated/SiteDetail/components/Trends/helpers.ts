@@ -1,7 +1,8 @@
 /**
  * Small shared bits for the trend charts (react-native-echarts-pro):
  *
- *  - value coercion + the impossible-reading guard used when packing series
+ *  - value coercion + the invalid-looking-reading NOTE used when packing
+ *    series (detection only — every finite reading is plotted as sent)
  *  - the card/chart GEOMETRY — one pure function (`trendChartLayout`) gives
  *    the chart height, the legend block and the card height, so the loading
  *    skeleton, the empty/error slot and the real chart card are always the
@@ -15,7 +16,8 @@
 import { Platform } from 'react-native';
 import { TrendAggregation, TrendDataRow } from 'src/types';
 import { formatCompact } from 'src/utils/sources';
-import { formatQuantity, splitLabelUnit } from 'src/utils/units';
+import { formatQuantity, spokenUnit, splitLabelUnit } from 'src/utils/units';
+import { formatInvalidReadingsNote, SUSPECT_READING_ABS } from '../chartConfig';
 
 /**
  * Backend may ship numbers as strings, and a time bucket with no sample
@@ -34,39 +36,26 @@ export const coerceValue = (
   return Number.isFinite(n) ? n : null;
 };
 
-/**
- * Any |value| at or beyond this magnitude is physically impossible for a
- * trend metric in ANY unit the backend ships: even a 1 GW plant only
- * generates ~2.4e7 kWh/day, many orders of magnitude below this ceiling.
- * The backend/sensor pipeline occasionally emits garbage this large (a
- * ~4e31 "Wind Energy Day" reading was reported) which, on a shared
- * y-axis, silently flattens every other series to an invisible sliver.
- * Chosen far above any real reading so there are no false positives.
- */
-export const IMPOSSIBLE_READING_CEILING = 1e15;
+// The invalid-looking-reading threshold and its note are shared with the
+// Reports chart (chartConfig.ts) — re-exported for the Trends modules.
+export { formatInvalidReadingsNote, SUSPECT_READING_ABS };
 
 /**
- * `coerceValue`, plus the physically-impossible-reading guard above.
- * Only a value that WAS a real finite number but exceeds the ceiling is
- * reported as `invalid` (and mapped to `null`, i.e. a chart gap, same as
- * ordinary missing data) — a value that was already missing/non-numeric
- * is not double-counted. Callers tally `invalid` across a series/section
- * and disclose the count to the user (never drop it silently).
+ * `coerceValue`, plus a `looksInvalid` flag for a finite reading at or
+ * beyond {@link SUSPECT_READING_ABS}. The value itself is NEVER changed or
+ * dropped — `value` is always exactly `coerceValue(v)`. Missing /
+ * non-numeric input (null, '', 'NA', NaN, ±Infinity) stays `null` (a gap:
+ * that's missing data, not a device reading) and is not counted.
  */
 export const coerceChartValue = (
   v: number | string | null | undefined,
-): { value: number | null; invalid: boolean } => {
-  const n = coerceValue(v);
-  if (n !== null && Math.abs(n) >= IMPOSSIBLE_READING_CEILING) {
-    return { value: null, invalid: true };
-  }
-  return { value: n, invalid: false };
+): { value: number | null; looksInvalid: boolean } => {
+  const value = coerceValue(v);
+  return {
+    value,
+    looksInvalid: value !== null && Math.abs(value) >= SUSPECT_READING_ABS,
+  };
 };
-
-/** "1 invalid reading hidden" / "N invalid readings hidden" — the
- *  disclosure caption for points `coerceChartValue` dropped. */
-export const formatInvalidReadingsCaption = (count: number): string =>
-  `${count} invalid reading${count === 1 ? '' : 's'} hidden`;
 
 /* ─────────────── geometry ─────────────── */
 
@@ -96,10 +85,12 @@ export const TREND_GRID_BOTTOM = 44;
 export const TREND_GRID_TOP_BARE = 12;
 /** Gap between the legend block and the plot. */
 export const TREND_LEGEND_PLOT_GAP = 10;
-/** Extra grid.top (and the line the note is drawn on) while the
- *  "N invalid readings hidden" note is shown inside the chart. The chart
- *  height doesn't change — the plot gives up this much instead. */
-export const TREND_INVALID_NOTE_HEIGHT = 16;
+/** Gap between the note's last line and the plot area. */
+const TREND_NOTE_GAP = 2;
+/** Extra grid.top for a ONE-line invalid-readings note drawn inside the
+ *  chart (each further wrapped line adds `TREND_LEGEND.lineHeight`). The
+ *  chart height doesn't change — the plot gives up this much instead. */
+export const TREND_INVALID_NOTE_HEIGHT = TREND_LEGEND.lineHeight + TREND_NOTE_GAP;
 /** The card's padding on each side. */
 export const TREND_CARD_PADDING = 16;
 /** Card chrome around the chart, per axis: padding + 1px border, × 2. */
@@ -268,6 +259,46 @@ export const estimateTrendLegend = (
   };
 };
 
+export interface TrendNoteLayout {
+  /** The note with '\n' at the estimated line breaks — echarts draws
+   *  exactly these lines (no echarts-side wrapping to disagree with). */
+  text: string;
+  lines: number;
+  /** Extra grid.top the note needs (lines + the gap to the plot). */
+  height: number;
+}
+
+/**
+ * Word-wrap the in-chart note to `width` px with the same calibrated,
+ * never-narrower text widths as the legend, so every line fits and
+ * `grid.top` reserves exactly the lines drawn. Never truncates.
+ */
+export const layoutTrendNote = (
+  note: string,
+  width: number,
+  platform: TrendFontPlatform = DEFAULT_FONT_PLATFORM,
+): TrendNoteLayout => {
+  const { fontSize, lineHeight } = TREND_LEGEND;
+  const maxWidth = Math.max(80, width);
+  const lines: string[] = [];
+  let line = '';
+  for (const word of note.split(' ')) {
+    const next = line === '' ? word : `${line} ${word}`;
+    if (line !== '' && estimateTextWidth(next, fontSize, platform) > maxWidth) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  }
+  if (line !== '') lines.push(line);
+  return {
+    text: lines.join('\n'),
+    lines: lines.length,
+    height: lines.length * lineHeight + TREND_NOTE_GAP,
+  };
+};
+
 export interface TrendChartLayout {
   legend: TrendLegendLayout;
   /** WebView height (px = pt). */
@@ -309,8 +340,19 @@ const SCALE_WORDS: Record<string, string> = {
 
 /** A value as screen readers should say it: the unit from a trailing
  *  '(kW)' in the series name when there is one ('18.9 megawatts'),
- *  otherwise the compact number with its scale in words ('18.9 thousand'). */
+ *  otherwise the compact number with its scale in words ('18.9 thousand').
+ *  An invalid-looking magnitude is said in powers of ten, exactly as the
+ *  chart plots it ('minus 1.2 times 10 to the power 35') — never a
+ *  36-digit number. */
 const spokenValue = (value: number, unit: string | null): string => {
+  if (Math.abs(value) >= SUSPECT_READING_ABS) {
+    // |value| ≥ 1e15 → the exponent is always a positive integer.
+    const [mantissa, exp] = value.toExponential(2).split('e');
+    const m = String(Number(mantissa));
+    const n = m.startsWith('-') ? `minus ${m.slice(1)}` : m;
+    const u = unit ? ` ${spokenUnit(unit)}` : '';
+    return `${n} times 10 to the power ${Number(exp)}${u}`;
+  }
   if (unit) return formatQuantity(value, unit, { mode: 'compact' }).spoken;
   const text = formatCompact(value);
   const m = /^(.*?)([KMBT])$/.exec(text);
@@ -334,8 +376,8 @@ export interface TrendChartSummaryInput {
 /**
  * One-sentence-per-fact description of a trend chart for VoiceOver /
  * TalkBack: what it shows, the period, each series' latest and peak value
- * (impossible readings excluded, exactly as the chart excludes them), and
- * the invalid-reading disclosure.
+ * (every finite reading, invalid-looking ones included — exactly what the
+ * chart plots), and the invalid-readings note.
  */
 export const buildTrendChartSummary = ({
   heading,
@@ -368,6 +410,6 @@ export const buildTrendChartSummary = ({
   if (count > SUMMARY_MAX_SERIES) {
     parts.push(`and ${count - SUMMARY_MAX_SERIES} more`);
   }
-  if (invalidCount > 0) parts.push(formatInvalidReadingsCaption(invalidCount));
+  if (invalidCount > 0) parts.push(formatInvalidReadingsNote(invalidCount));
   return `${parts.join('. ')}.`;
 };

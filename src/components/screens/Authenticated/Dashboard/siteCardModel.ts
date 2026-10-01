@@ -258,7 +258,7 @@ export const buildSiteCardModel = (site: ISite): SiteCardModel => {
       source: name ? sourceTokenFromName(name) : undefined,
       accent: resolveCardColor({ name, color: card?.color }),
       period: name ? periodFromName(name) : undefined,
-      quantity: formatQuantity(card?.value, unit, { mode: 'compact' }),
+      quantity: formatQuantity(card?.value, unit, { mode: 'compact', name }),
     };
   });
 

@@ -7,12 +7,18 @@ import { metricA11yLabel } from 'src/utils/a11y';
 import {
   AggregatedSource,
   formatSharePercent,
+  SHARE_UNAVAILABLE,
   sourceSecondaryLabel,
   spokenSharePercent,
 } from './helpers';
 
 interface SourceRowProps {
   item: AggregatedSource;
+  /**
+   * `false` when the report total isn't positive (`sharesAvailable`): the
+   * share reads '—' instead of the uncomputed '0%'. Defaults to `true`.
+   */
+  shareAvailable?: boolean;
 }
 
 /**
@@ -28,13 +34,15 @@ interface SourceRowProps {
  * right-aligned share and a 3pt share bar in the source colour. ONE
  * accessible element ('Solar, 450.7 megawatt hours, 100 percent, …').
  */
-const SourceRowBase: FC<SourceRowProps> = ({ item }) => {
+const SourceRowBase: FC<SourceRowProps> = ({ item, shareAvailable = true }) => {
   const themed = useThemedStyles(createThemedStyles);
   const q = formatEnergy(item.value, { mode: 'precise', decimals: 1 });
   const secondary = sourceSecondaryLabel(item);
-  const share = formatSharePercent(item.percentNum);
+  const share = shareAvailable ? formatSharePercent(item.percentNum) : SHARE_UNAVAILABLE;
   const a11yLabel = metricA11yLabel(item.shortLabel, q, [
-    `${spokenSharePercent(item.percentNum)} of total`,
+    shareAvailable
+      ? `${spokenSharePercent(item.percentNum)} of total`
+      : 'share of total not available',
     secondary ?? '',
   ]);
 

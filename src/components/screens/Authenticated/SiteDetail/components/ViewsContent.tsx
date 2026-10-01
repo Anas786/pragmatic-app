@@ -2,7 +2,7 @@ import React, { FC, memo } from 'react';
 import { RouteProp, useRoute } from '@react-navigation/native';
 import { ErrorBoundary } from 'src/components/common';
 import { DashboardStackParamList } from 'src/types';
-import { TabOption } from './TabSelector';
+import { TAB_LABELS, TabOption } from './TabSelector';
 import SummaryView from './SummaryView';
 import CardsView from './CardsView';
 import LiveParameterView from './LiveParameterView';
@@ -64,7 +64,7 @@ const ViewsContent: FC<ViewsContentProps> = ({ tab }) => {
   const route = useRoute<SiteDetailRouteProp>();
   const siteId = route.params?.siteId ?? '';
   return (
-    <ErrorBoundary label={tab} resetKey={`${siteId}:${tab}`}>
+    <ErrorBoundary label={TAB_LABELS[tab]} resetKey={`${siteId}:${tab}`}>
       {renderTab(tab)}
     </ErrorBoundary>
   );

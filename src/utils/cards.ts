@@ -3,8 +3,10 @@ import { tryNumber } from './parsers';
 import { CardPeriod, periodFromCard, periodFromName } from './sources';
 import {
   formatQuantity,
+  formatScientific,
   FormattedQuantity,
   isRateUnit,
+  isSuspectReading,
   unitFamily,
 } from './units';
 
@@ -177,6 +179,9 @@ export const formatCardValue = (
   if (raw === null || raw === undefined || raw === '') return '—';
   const num = tryNumber(raw);
   if (num !== undefined) {
+    // A garbage reading is shown as sent, in 'e' notation — never a
+    // 30–50-digit string (units.ts SUSPECT_READING_ABS).
+    if (isSuspectReading(num)) return formatScientific(num);
     const dp =
       typeof decimalPlaces === 'number' && decimalPlaces >= 0
         ? decimalPlaces
@@ -363,19 +368,23 @@ const MISSING_WORDS = /^(na|n\/a|nan|null|undefined|none|-+|—)$/i;
 /**
  * A Cards-tab value as displayed: `formatQuantity` precise, 2 decimals,
  * in the backend's own unit (`rescale: false`) so every tile reads exactly
- * like the web portal ('147,786.00 kWh', '14,463.03 kW'). Non-numeric
- * backend TEXT (a status such as 'Running') is shown verbatim without a
- * unit; 'NA' / null / '' are missing ('No data'). The value itself is
- * never altered.
+ * like the web portal ('147,786.00 kWh', '14,463.03 kW'). Irradiance
+ * (W/m², or a unitless card the `name` calls irradiance / POA / GHI …)
+ * is the one exception: a whole number, '862 W/m²' (`isIrradiance`).
+ * Non-numeric backend TEXT (a status such as 'Running') is shown verbatim
+ * without a unit; 'NA' / null / '' are missing ('No data'). The value
+ * itself is never altered.
  */
 export const formatCardDisplay = (
   raw: unknown,
   unit?: string | null,
+  name?: string | null,
 ): FormattedQuantity => {
   const q = formatQuantity(raw, unit, {
     mode: 'precise',
     decimals: 2,
     rescale: false,
+    name,
   });
   if (!q.isMissing) return q;
   const text =

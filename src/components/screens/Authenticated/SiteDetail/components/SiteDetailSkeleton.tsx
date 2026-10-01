@@ -22,10 +22,11 @@ const ENV_TILE_HEIGHT = 130;
 // Same height as the inline SLD panel / DiagramPlaceholder, so the
 // skeleton → Summary swap doesn't move anything below it.
 const SLD_HEIGHT = normalizeHeight(480);
-// Approximate chip widths for the six visible tabs (Alarms is hidden).
+// Approximate chip widths for the six visible tabs (Alarms is hidden):
+// Summary, Cards, Live, Analysis, Reports, Tables.
 // Only the HEIGHT must match TabSelector exactly (TAB_PILL_HEIGHT +
 // TAB_TRACK_INSET), and it does by construction; widths are cosmetic.
-const TAB_PILL_WIDTHS = [98, 80, 70, 82, 94, 86];
+const TAB_PILL_WIDTHS = [98, 80, 70, 100, 94, 86];
 
 const stagger = (i: number) =>
   FadeInDown.delay(60 * i).duration(duration.slow).springify().damping(22);

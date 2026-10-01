@@ -62,7 +62,7 @@ const LUCKY_CARDS: {
     })} kWh`,
   })),
   { name: 'Total Energy Consumed', value: 1188328.16, web: '1,188,328.16' },
-  { name: 'Irradiance', unit: 'W/m2', value: 862, web: '862.00 W/m²' },
+  { name: 'Irradiance', unit: 'W/m2', value: 862, web: '862 W/m²' },
 ];
 
 /* ─────────── cardBucket ─────────── */
@@ -389,7 +389,7 @@ describe('CardsView (rendered)', () => {
       'Wind Energy Today, 147,786.00 kilowatt hours, wind',
     );
     expect(labels).toContain('Total Energy Consumed, 1,188,328.16');
-    expect(labels).toContain('Irradiance, 862.00 watts per square metre');
+    expect(labels).toContain('Irradiance, 862 watts per square metre');
 
     // Visible value + unit pairs read like the web.
     for (const c of LUCKY_CARDS) {

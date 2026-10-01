@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import React from 'react';
 import renderer, { act, ReactTestInstance, ReactTestRenderer } from 'react-test-renderer';
-import { StyleSheet, Text } from 'react-native';
+import { Dimensions, StyleSheet, Text } from 'react-native';
 
 jest.mock('@react-navigation/native', () => {
   const actual = jest.requireActual('@react-navigation/native') as object;
@@ -190,6 +190,50 @@ describe('PerformanceReportCard', () => {
     expect(option.xAxis.data).toHaveLength(5);
   });
 
+  it("a device's invalid-looking reading is plotted as sent, with the note (never hidden)", () => {
+    const rows: Record<string, number | null>[] = solarRows(3);
+    rows[1] = { time: day(2), ed_solar: 14540.31, ed_wind: -1.2e35 };
+    mockQuery = { data: { data: rows } };
+    const t = render();
+    const note = '1 reading looks invalid — shown exactly as sent by the device';
+    expect(texts(t)).toContain(note);
+    // the wind bucket is on the chart at its true (scaled) value
+    const option = charts(t)[0].props.option as {
+      yAxis: { name: string };
+      series: { id: string; data: (number | null)[] }[];
+    };
+    const wind = option.series.find(s => s.id === 'wind');
+    expect(option.yAxis.name).toBe('TWh');
+    expect(wind?.data).toEqual([null, -1.2e35 / 1e9, null]);
+    // screen readers hear it too, and full screen repeats it
+    const img = t.root.find(
+      n => n.props.accessibilityRole === 'image' && typeof n.type === 'string',
+    );
+    expect(img.props.accessibilityLabel).toContain(`${note}.`);
+    expect(t.root.findByType(ChartFullscreenModal).props.warning).toBe(note);
+    // Summed as sent, the -1.2e35 makes the total negative: there are no
+    // shares to quote, so no 'Largest: Solar · 0%' and no '0%' rows.
+    const all = texts(t);
+    expect(all.some(s => /^(Mostly|Largest)/.test(s))).toBe(false);
+    expect(all).not.toContain('0%');
+    expect(all.filter(s => s === '—')).toHaveLength(2); // Solar + Wind rows
+    const windRow = t.root.find(
+      n =>
+        typeof n.type === 'string' &&
+        typeof n.props.accessibilityLabel === 'string' &&
+        n.props.accessibilityLabel.startsWith('Wind, '),
+    );
+    expect(windRow.props.accessibilityLabel).toContain('share of total not available');
+    expect(windRow.props.accessibilityLabel).not.toMatch(/percent/);
+  });
+
+  it('no note when every reading looks plausible', () => {
+    mockQuery = { data: { data: solarRows(3) } };
+    const t = render();
+    expect(texts(t).some(s => /looks? invalid/.test(s))).toBe(false);
+    expect(t.root.findByType(ChartFullscreenModal).props.warning).toBeUndefined();
+  });
+
   it('period pills: radio group; re-tapping the active pill opens its picker', () => {
     mockQuery = { data: { data: solarRows(3) } };
     const t = render();
@@ -233,7 +277,7 @@ describe('ChartFullscreenModal — rotated canvas uses the real safe area', () =
       right: 0,
     }));
   });
-  const renderModal = (top: number, bottom: number) => {
+  const renderModal = (top: number, bottom: number, warning?: string) => {
     (useSafeAreaInsets as jest.Mock).mockReturnValue({ top, bottom, left: 0, right: 0 });
     act(() => {
       tree = renderer.create(
@@ -242,11 +286,20 @@ describe('ChartFullscreenModal — rotated canvas uses the real safe area', () =
           onClose={() => {}}
           title="Energy over time"
           option={{}}
+          warning={warning}
           summary="Energy over time, 1 to 30 Sep 2026, 30 days."
         />,
       );
     });
     return tree as ReactTestRenderer;
+  };
+  /** The title row reports its laid-out height (the test renderer never
+   *  runs layout itself). */
+  const layoutHeader = (t: ReactTestRenderer, height: number) => {
+    const header = t.root.find(n => typeof n.type === 'string' && typeof n.props.onLayout === 'function');
+    act(() =>
+      header.props.onLayout({ nativeEvent: { layout: { x: 0, y: 0, width: 600, height } } }),
+    );
   };
   const canvas = (t: ReactTestRenderer) =>
     t.root.find(
@@ -284,6 +337,28 @@ describe('ChartFullscreenModal — rotated canvas uses the real safe area', () =
       n => n.props.accessibilityRole === 'image' && typeof n.type === 'string',
     );
     expect(img.props.accessibilityLabel).toMatch(/^Energy over time/);
+    layoutHeader(t, 54);
     expect(charts(t)).toHaveLength(1);
+  });
+
+  it('a long data-quality note wraps to 2 lines; the header grows and the chart takes the rest', () => {
+    const note =
+      '12 readings look invalid — shown exactly as sent by the device. 3 days with no production';
+    const t = renderModal(0, 0, note);
+    const warning = t.root.find(n => n.type === Text && n.props.children === note);
+    expect(warning.props.numberOfLines).toBe(2);
+    // the title row has a minimum, never a fixed, height
+    const header = t.root.find(n => typeof n.type === 'string' && typeof n.props.onLayout === 'function');
+    const headerStyle = StyleSheet.flatten(header.props.style);
+    expect(headerStyle.height).toBeUndefined();
+    expect(headerStyle.minHeight).toBeGreaterThanOrEqual(touch.min);
+    // The WebView sizes its chart ONCE at load, so it mounts only after
+    // the header's real height is known — and fills exactly what is left.
+    expect(charts(t)).toHaveLength(0);
+    layoutHeader(t, 88);
+    const { width, height } = Dimensions.get('window');
+    const landscapeH = Math.min(width, height);
+    expect(charts(t)).toHaveLength(1);
+    expect(charts(t)[0].props.height).toBe(landscapeH - 88 - 12 - 12);
   });
 });

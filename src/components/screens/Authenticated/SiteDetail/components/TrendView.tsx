@@ -111,8 +111,8 @@ const TrendView: FC = () => {
       <View style={styles.container}>
         <EmptyStateCard
           kind="notConfigured"
-          title="No trends set up"
-          message="This site has no trend charts configured yet."
+          title="No analysis charts set up"
+          message="This site has no analysis charts configured yet."
         />
       </View>
     );

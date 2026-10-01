@@ -459,7 +459,7 @@ Performance Report, Inverter Table) share the same filter UX:
 - **Default Custom range** = the full cap: `today - (cap − 1)` → `today` (`DEFAULT_CUSTOM_RANGE_DAYS = REPORT_CUSTOM_MAX_DAYS − 1`; Trends seeds `daysAgo(TREND_CUSTOM_MAX_RANGE)`).
 - **Chart value labels**: every ECharts Y-axis (Trends + Reports) and the Trends tooltip use ONE formatter, `Y_AXIS_LABEL_FORMATTER` / `COMPACT_VALUE_FN_SRC` in `chartConfig.ts` — a JS **source string** evaluated inside the WebView (`enableParseStringFunction`), so it must stay self-contained (no closures over RN values). K/M/B/T with ≤3 significant digits, float noise stripped, `4e31`-style beyond T. Unit-tested by evaluating the string (`__tests__/chartValueFormatter.test.ts`).
 - **Trend charts use ONE shared scale in both the card and fullscreen** (bars on a left axis; a right axis only when bars and lines are mixed). Per-series axes were removed on purpose: per-series scales drew a 48K bar and a 750M bar at the same height, misrepresenting relative magnitude (and made fullscreen diverge from the card). `detailed` (fullscreen) changes density only — axis assignment must never branch on it.
-- **Impossible-reading guard** (`IMPOSSIBLE_READING_CEILING = 1e15`, Trends/helpers.ts): finite values with |v| ≥ 1e15 become gaps and a visible "N invalid readings hidden" caption appears in both views — real backend data shipped ~4e31 for "Wind Energy Day", which flattened every other series on the shared scale. Never hide such points silently.
+- **Device garbage is SHOWN, never hidden** (user rule, Oct 2026 — "hide kuch nahi karna… show karna ha ka device sa aya ha garbage", and "follow the same" as the web): every finite reading is plotted at its TRUE value on the shared scale (Trends card + fullscreen, Reports chart), exactly like the web portal's Analysis chart, even when one value (Lucky Cement "Wind Energy Day" ≈ −1.2e35) flattens the others. Value axes have no forced min/max; when any reading is negative every series shares the left axis (no mismatched zeros). `SUSPECT_READING_ABS` = 1e15 (`src/utils/units.ts`, re-exported by chartConfig.ts) is DETECTION ONLY: it words one note per chart — "N readings look invalid — shown exactly as sent by the device" (inline: drawn inside the chart, pre-wrapped by `layoutTrendNote`, card height unchanged; full screen: the `warning` prop; screen-reader summary includes it; Reports' Energy-over-time card too, via `countInvalidReportReadings`). The tooltip shows such a value exactly (`toExponential()`); axis ticks use compact e-notation ("-1.2e35"), with a guard against echarts' float-noise ticks past 2^53. Only null / blank / non-numeric / NaN / ±Infinity is a gap ("—"). **Never reintroduce a magnitude filter, clamp or gap.** Everywhere else (Cards, SLD, Live, Dashboard chips, Reports text) such a value prints in the same e-notation via `formatScientific` (`formatSig3` / `formatQuantity` / `formatCompact` / `formatCardValue`), in the backend's own unit, never a 30–50-digit string and never "—". Tests: `__tests__/suspectReadings.test.ts`, `trendComboOption`, `echartsAxisTicks`.
 
 Each card holds its own `startDate`, `endDate`, `selectedMonth: MonthSelection`,
 `selectedYear: number`, `activeFilter: InverterFilterOption` state. They feed
@@ -490,9 +490,21 @@ row when any inverter is 0) → **compact `InverterRow`s** (64–72pt, hairline
 separators, neutral number badge — the energy palette is reserved for
 sources) with PR + uptime mini-bars and sort (worst first / number /
 energy). PR/uptime are `number | null`: a missing value shows "—" and is
-never coerced to 0 (a dead inverter must be able to be WORST). PR status
-bands stay 90/80/70 (`PR_STATUS_THRESHOLDS`); the web colours its PR bars at
-40/62/82 — product decision pending.
+never coerced to 0 (a dead inverter must be able to be WORST).
+
+**PR bands = the web's rule** (`InverterTable/prBands.ts`, read from the web
+bundle 2026-10-01): < 40 Poor (web `err`) · 40–< 62 Fair (`warn`) · 62–< 82
+Good (`lime`) · ≥ 82 Excellent (`ok`); missing = neutral "No data", never
+Poor. PR bar = the band's gradient (`prBandPalette` in tokens.ts — the web's
+exact hexes, same in light and dark, fills only); PR text in
+`scheme.prBandInk[band]` (AA, tokenContrast-tested). Uptime bar is ALWAYS
+the excellent gradient (the web never grades uptime), its caption neutral,
+≥ 99.95 shows as 100, missing → "Up —" with no bar. Cells print up to 2
+decimals with no trailing zeros (61 / 61.46, like the web); the hero
+average is rounded ONCE to 1 decimal and that value drives both the text and
+the band (no "82% · Good"). Hero shows band dots (ringed for contrast on the
+emerald hero). Rows are 72pt (PR + uptime bars). The old 90/80/70
+`src/utils/colors.ts` classifier is deleted.
 
 ---
 
@@ -575,9 +587,12 @@ compact-K via `formatCompact` for hero / chip contexts.
     orange, "PV …" → solar lime, "WTG …"/"Wind …" → wind cyan, "Grid …" →
     grid blue, "BESS …" → battery purple): a `LinearGradient` diagonal sweep
     (`fill+'24'` → transparent) + the `IconWell` in that colour
-    (`energyInk` glyph). No source (load, bus, WHR …) → a flat, neutral
-    tile whose icon well alone is brand-tinted (`brandText` glyph) — a full
-    brand sweep read as solar / "OK" (§22.2). Categories never get colours.
+    (`energyInk` glyph), sweep alpha `SOURCE_SWEEP_ALPHA` '24' (~14%). No
+    source (load, bus, WHR …) → a SOFT brand sweep (`BRAND_SWEEP_ALPHA`
+    '14', ~8%) + brand icon well (`brandText` glyph), so every tile has
+    colour but source tiles still lead (user asked for more colour; a full
+    '24' brand sweep failed textTertiary contrast in dark). Text ≥ 4.5:1 and
+    glyph ≥ 3:1 over each sweep are tested. Categories never get colours.
     One per-theme accent table (WeakMap on the scheme singleton), so tiles
     allocate nothing per render. A missing reading is neutral throughout.
   - The time row stays full-width under the value — a stale reading's date
@@ -908,7 +923,7 @@ respect:
 - **Removed deps** (zero imports): lodash, @reduxjs/toolkit, i18next,
   @react-navigation/bottom-tabs, react-native-otp-entry,
   react-native-sticky-range-slider, @react-native-community/geolocation,
-  sharp. **Keep `@react-native-community/netinfo`** — required by
+  sharp, react-native-bootsplash (§20.5). **Keep `@react-native-community/netinfo`** — required by
   @aws-amplify/react-native AND used by onlineManager.
 - **Deleted assets**: `src/assets/lotties-icons/`, `src/assets/lottie-gif/`,
   legacy GIF wrapper components, `summary-icons.ts`, 19 unreferenced Lottie
@@ -1076,15 +1091,18 @@ view (`customize(_ rootView:)`) + `window.backgroundColor` in
 (`values-v31/styles.xml`, transparent icon). `splashPalette.bg` is the JS
 side of that contract — change them together.
 
-### 20.5 react-native-bootsplash — intentionally unwired
+### 20.5 react-native-bootsplash — removed (Oct 2026)
 
-`react-native-bootsplash` is still installed but NOT natively wired (no
-`RNBootSplash.init*`), and `App.tsx` no longer calls `RNBootSplash.hide`.
-Follow-up uninstall PR: `yarn remove react-native-bootsplash` + `cd ios &&
-pod install`, delete `assets/bootsplash/`, `ios/.../BootSplash.storyboard`
-(and its pbxproj refs), `BootSplashLogo-615311.imageset`,
-`android/.../drawable-*/bootsplash_logo.png`, and the bootsplash mock in
-`jest.setup.js`.
+The dependency, its pod, `BootSplash.storyboard` (+ pbxproj refs), the
+`BootSplashLogo-615311` imageset, the `BootSplashBackground` colorset,
+`assets/bootsplash/`, Android `drawable-*/bootsplash_logo.png` and the jest
+mock are gone (`sharp`, which it pulled in, left yarn.lock with it). The
+native launch screen is `LaunchScreen.storyboard` (plain `#0B0F14`) and
+Android `SplashTheme` (`@color/splashBg`) — §20.4. Leftovers outside the
+build: the tracked, unused Yarn-PnP files `.pnp.cjs` / `.pnp.loader.mjs`
+still mention it (the repo runs yarn 1 with node_modules). The next Android
+build may need `rm -rf android/app/.cxx android/app/build` once (stale
+RNBootSplashSpec CMake cache).
 
 ---
 
@@ -1180,8 +1198,19 @@ live outside the repo; this section is the durable summary.
   `DARK_SCHEME` exported. `__tests__/tokenContrast.test.ts` computes WCAG
   ratios for every declared pair — keep it green when touching colours.
 - **Energy palette = energy sources only** (dots, bars, series, tints).
-  Inverter badges, Live categories, PR status, load/other tiles are neutral
-  or semantic.
+  Inverter badges, Live categories and load/other Cards tiles are neutral or
+  semantic; non-source Live tiles take a soft BRAND sweep (§11); PR bands
+  use their own `prBandPalette` (the web's colours, §8).
+- **Irradiance is a whole number** (user decision, the one exception to
+  2-decimal web parity): `isIrradiance(unit, name)` in `src/utils/units.ts`
+  (any W/m² spelling; or, unitless, a whole-word irradiance / POA / GHI /
+  GTI / insolation name, unless the name states another unit) →
+  `formatQuantity` rounds to 0 decimals ("862 W/m²", "1,024 W/m²") on
+  Cards, Live, SLD (grouped = averaged then rounded), Dashboard chips, and
+  the Analysis chart's irradiance series. Callers pass `name`.
+- **"Analysis" tab**: the SiteDetail "Trend" tab is labelled "Analysis"
+  like the web (`TAB_LABELS` in TabSelector.tsx; the internal key stays
+  `Trend`).
 - **New primitives** (`src/components/common`): `ScreenHeader` (stack
   screens), `Pill` / `PillGroup` (radio semantics, select haptic on change),
   `FreshnessStatus` (self-ticking via `useNow`, never pulses),

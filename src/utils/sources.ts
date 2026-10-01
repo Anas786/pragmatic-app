@@ -10,7 +10,7 @@
  */
 
 import { energyPalette } from 'src/theme';
-import { formatSig3, isRateUnit, MISSING_TEXT } from './units';
+import { formatScientific, formatSig3, isRateUnit, isSuspectReading, MISSING_TEXT } from './units';
 
 export type SourceToken = keyof typeof energyPalette;
 
@@ -155,6 +155,8 @@ export const formatCompact = (value: number | string | null | undefined): string
     return MISSING_TEXT;
   }
   if (!Number.isFinite(n)) return MISSING_TEXT;
+  // A garbage reading is shown as sent, in 'e' notation (not '4e19T').
+  if (isSuspectReading(n)) return formatScientific(n);
   const suffixes = ['', 'K', 'M', 'B', 'T'];
   let i = 0;
   let x = n;

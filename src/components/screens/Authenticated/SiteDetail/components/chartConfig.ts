@@ -11,11 +11,15 @@
  *   - `chartThemeFromScheme()` — stable-reference `ChartTheme` per scheme
  *   - `COMPACT_VALUE_FN_SRC`   — JS source of a single-value compact formatter
  *   - `Y_AXIS_LABEL_FORMATTER` — the above wrapped as an axisLabel formatter
+ *   - `SUSPECT_READING_ABS` / `formatInvalidReadingsNote()` — the
+ *     invalid-looking-reading threshold + the note every chart shows for
+ *     it (detection only: such readings are always plotted as sent)
  */
 
 import type { ComponentProps } from 'react';
 import type { WebView } from 'react-native-webview';
 import { Scheme } from 'src/theme';
+import { SUSPECT_READING_ABS } from 'src/utils/units';
 
 // Spread by react-native-echarts-pro onto its <WebView> AFTER its own
 // defaults, so these win. Module-level so the prop reference stays stable
@@ -98,8 +102,10 @@ export const chartThemeFromScheme = (scheme: Scheme): ChartTheme => {
  *     noise rounded away (e.g. `3.9999999999999995` → `4`). A value that
  *     rounds up into the next bucket (e.g. `999999` → `1000K`) is bumped
  *     to that bucket instead (`"1M"`).
- *   - beyond the `T` range → a short exponent form (`"4e31"`, never the
- *     `toFixed`-on-a-huge-number garbage this replaces, e.g. `"4e+25M"`)
+ *   - beyond the `T` range → a short exponent form (`"4e31"`, `"-1.2e35"`,
+ *     never the `toFixed`-on-a-huge-number garbage this replaces, e.g.
+ *     `"4e+25M"`). Charts plot a device's invalid-looking readings at their
+ *     true value, so ticks this large are real and must stay readable.
  *   - negative input keeps its sign; non-finite input → `""`
  */
 export const COMPACT_VALUE_FN_SRC = `function __fmtCompactVal(v){
@@ -142,5 +148,63 @@ export const COMPACT_VALUE_FN_SRC = `function __fmtCompactVal(v){
   return sign+String(mant)+'e'+exp;
 }`;
 
-/** Compact axis-tick formatter (string fn — needs `enableParseStringFunction`). */
-export const Y_AXIS_LABEL_FORMATTER = `function(v){${COMPACT_VALUE_FN_SRC} return __fmtCompactVal(v);}`;
+/**
+ * A tick smaller than this fraction of the largest tick already formatted
+ * on the same axis pass is float noise standing in for 0 (see
+ * {@link Y_AXIS_LABEL_FORMATTER}). Real ticks are whole multiples of the
+ * axis interval, so a non-zero one is never below ~1/20 of the largest;
+ * the accumulated noise is ~1e-16 of it.
+ */
+const AXIS_TICK_NOISE_RATIO = 1e-9;
+
+/**
+ * Compact axis-tick formatter (string fn — needs `enableParseStringFunction`).
+ *
+ * Float-noise guard: echarts 5.4.2 builds value-axis ticks by adding the
+ * interval step by step. Past ~2^53 (a device's 1e31–1e35 garbage, plotted
+ * as sent) the steps aren't exact, so the tick where 0 belongs comes out
+ * as noise (-562949953421312, -1.15e18 …) — which would print a made-up
+ * "-563T" on the axis. echarts formats one axis's ticks in index order,
+ * smallest first (index 0 = the axis minimum), so the formatter keeps the
+ * largest |tick| of the current pass and prints '0' for a tick that is a
+ * vanishing fraction of it. The pass restarts at index 0, so after a
+ * legend tap rescales the axis (garbage series hidden) ordinary small
+ * ticks are never mistaken for noise. The state lives on the WebView's
+ * global (`new Function` bodies can't close over anything — the library's
+ * own `formatterVariable` uses the same channel); a direct call without
+ * an index (tests, tooltips) formats statelessly.
+ */
+export const Y_AXIS_LABEL_FORMATTER = `function(v,i){${COMPACT_VALUE_FN_SRC}
+  if(typeof i==='number'&&typeof v==='number'&&isFinite(v)){
+    var __g=typeof window!=='undefined'?window:globalThis;
+    var __a=Math.abs(v);
+    if(i===0){__g.__pesAxisTickMax=__a;}
+    else{var __m=__g.__pesAxisTickMax||0;if(__a>0&&__a<__m*${AXIS_TICK_NOISE_RATIO})return '0';if(__a>__m)__g.__pesAxisTickMax=__a;}
+  }
+  return __fmtCompactVal(v);
+}`;
+
+/**
+ * |value| at or beyond which a device reading LOOKS invalid: no metric in
+ * any unit the backend ships gets near it (even a 1 GW plant only makes
+ * ~2.4e7 kWh/day). Devices do send such values — Lucky Cement's "Wind
+ * Energy Day" daily aggregate came back as ~4e31 and later ~-1.2e35; the
+ * web portal's Analysis chart plots it as-is.
+ *
+ * DETECTION ONLY — never a filter, clamp or gap. A chart plots such a
+ * reading at its TRUE value on the shared scale (like the web), even though
+ * it flattens the other series: hiding it would hide that the device sent
+ * garbage. The count only words {@link formatInvalidReadingsNote}. The
+ * threshold lives in utils/units.ts (shared with the Live tab, Cards, SLD
+ * and Dashboard chips, which write such values in 'e' notation).
+ */
+export { SUSPECT_READING_ABS };
+
+/**
+ * The data-quality note a chart shows when it plotted invalid-looking
+ * readings. It hides nothing — it says where the odd values came from:
+ * '1 reading looks invalid — shown exactly as sent by the device' /
+ * 'N readings look invalid — …'.
+ */
+export const formatInvalidReadingsNote = (count: number): string =>
+  `${count} ${count === 1 ? 'reading looks' : 'readings look'} invalid — shown exactly as sent by the device`;

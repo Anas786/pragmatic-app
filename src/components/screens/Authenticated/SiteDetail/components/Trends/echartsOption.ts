@@ -10,15 +10,24 @@
  * Axis strategy: ONE shared code path for both inline (compact) and
  * full-screen (`detailed`) — bars share a single left axis, and lines
  * get a second (right) axis only when the section mixes bar + line/area
- * series. There is deliberately never one axis per series: per-series
- * scales draw a 48K bar and a 750M bar at the same height, which reads as
+ * series AND no reading is negative. Two axes share a baseline only while
+ * both start at 0: with a negative reading (a device's -1.2e35, or real
+ * export) the bar axis's 0 rises off the bottom while the line axis's 0
+ * stays there, so the line would be read against the wrong baseline —
+ * such a section puts every series on the left axis (the web portal's
+ * layout) and hides the right one. There is deliberately never one axis
+ * per series: per-series scales draw a 48K bar and a 750M bar at the same height, which reads as
  * "comparable" when they differ ~15,000× — the full-screen view used to do
  * this and diverged from the card. A shared scale keeps relative
- * magnitudes honest (the value guard below — `coerceChartValue` /
- * `IMPOSSIBLE_READING_CEILING` — keeps one garbage-magnitude reading from
- * wrecking that shared scale for everyone else). `detailed` only changes
- * presentation density (a larger tick font, rotated x labels, every x
- * label shown) — never the axis count or the series→axis mapping.
+ * magnitudes honest. Every finite reading is plotted at its TRUE value —
+ * an invalid-looking one too (|v| ≥ `SUSPECT_READING_ABS`, e.g. a device
+ * that sent -1.2e35), even though it flattens the other series: exactly
+ * like the web portal's Analysis chart, nothing is hidden, and a note says
+ * the values are shown as the device sent them. The axes have no forced
+ * min, so negative readings extend below 0 instead of being clipped.
+ * `detailed` only changes presentation density (a larger tick font,
+ * rotated x labels, every x label shown) — never the axis count or the
+ * series→axis mapping.
  *
  * Chrome: the legend is echarts' 'plain' type and WRAPS (it never
  * paginates and never truncates a name); `grid.top` comes from
@@ -30,14 +39,16 @@
 
 import { TrendAggregation, TrendDataRow } from 'src/types';
 import { formatTrendLabel, isBarType } from 'src/utils';
+import { isIrradiance } from 'src/utils/units';
 import { ChartTheme, COMPACT_VALUE_FN_SRC, Y_AXIS_LABEL_FORMATTER } from '../chartConfig';
 import {
   coerceChartValue,
   DEFAULT_TREND_CHART_WIDTH,
   estimateTrendLegend,
-  formatInvalidReadingsCaption,
+  formatInvalidReadingsNote,
+  layoutTrendNote,
+  SUSPECT_READING_ABS,
   TREND_GRID_BOTTOM,
-  TREND_INVALID_NOTE_HEIGHT,
   TREND_LEGEND,
 } from './helpers';
 
@@ -48,16 +59,20 @@ const INVALID_NOTE_ID = 'trend-invalid-note';
 /**
  * Axis-trigger tooltip formatter (string fn, eval'd in the WebView via
  * `enableParseStringFunction`). Renders the x-label header then one
- * colour-marked row per series with a compact value; null → "–". Shares
- * the same compact-number rules as `Y_AXIS_LABEL_FORMATTER` (see
- * `COMPACT_VALUE_FN_SRC` in `chartConfig.ts`) — formatter strings can't
- * share a JS closure across WebView evals, so its source is spliced in.
+ * colour-marked row per series; null → "–". An ordinary value is compact
+ * (the same rules as `Y_AXIS_LABEL_FORMATTER` — see `COMPACT_VALUE_FN_SRC`
+ * in `chartConfig.ts`; formatter strings can't share a JS closure across
+ * WebView evals, so its source is spliced in). An invalid-looking value
+ * (|v| ≥ `SUSPECT_READING_ABS`) shows the EXACT number the device sent,
+ * every significant digit, in e-notation ('-1.2345678901234567e35') — the
+ * axis tick already gives the rounded magnitude.
  */
 const TOOLTIP_FORMATTER = `function(params){
   ${COMPACT_VALUE_FN_SRC}
+  function __fmtTipVal(v){if(typeof v!=='number'||!isFinite(v))return '–';if(Math.abs(v)>=${SUSPECT_READING_ABS})return v.toExponential().replace('e+','e');return __fmtCompactVal(v);}
   if(!params||!params.length)return '';
   var s='<div style="font-size:11px;font-weight:600;margin-bottom:4px">'+params[0].axisValueLabel+'</div>';
-  for(var i=0;i<params.length;i++){var p=params[i];var val=(p.value==null?'–':__fmtCompactVal(p.value));s+='<div style="display:flex;align-items:center;gap:6px;line-height:1.7">'+p.marker+'<span style="flex:1">'+p.seriesName+'</span><b style="margin-left:10px">'+val+'</b></div>';}
+  for(var i=0;i<params.length;i++){var p=params[i];var val=(p.value==null?'–':__fmtTipVal(p.value));s+='<div style="display:flex;align-items:center;gap:6px;line-height:1.7">'+p.marker+'<span style="flex:1">'+p.seriesName+'</span><b style="margin-left:10px">'+val+'</b></div>';}
   return s;
 }`;
 
@@ -85,10 +100,11 @@ export interface TrendComboBuildResult {
   /** The echarts option — pass straight to `RNEChartsPro`. */
   option: object;
   /**
-   * Count of points dropped by the impossible-reading guard (see
-   * `IMPOSSIBLE_READING_CEILING` in `./helpers`) across every series in
-   * this section. Callers must disclose this to the user (e.g. a small
-   * "N invalid readings hidden" caption) rather than drop it silently.
+   * Count of invalid-looking readings (|v| ≥ `SUSPECT_READING_ABS` in
+   * `./helpers`) across every series in this section. They are all
+   * PLOTTED as sent — this only words the note ("N readings look invalid
+   * — shown exactly as sent by the device"), which the inline build draws
+   * inside the chart and callers show next to the full-screen chart.
    */
   invalidCount: number;
 }
@@ -112,14 +128,36 @@ export const buildTrendComboOption = (
   const hasBar = aggregations.some(a => isBarType(a.type));
   const hasLine = aggregations.some(a => !isBarType(a.type));
 
+  // Every finite reading goes into the series AS SENT — the ONE shared
+  // path both modes' series go through. Invalid-looking ones are only
+  // counted, for the note; missing / non-numeric input is a gap (`null`).
+  let invalidCount = 0;
+  let hasNegative = false;
+  // Irradiance is the one display exception (user decision): whole W/m²,
+  // so its tooltip reads '862', like the Cards / Live / SLD values. A
+  // garbage-sized reading is left exactly as sent.
+  const columns = aggregations.map(a => {
+    const wholeNumbers = isIrradiance(undefined, a.display);
+    return sorted.map(r => {
+      const { value, looksInvalid } = coerceChartValue(r[a.param]);
+      if (looksInvalid) invalidCount++;
+      if (value !== null && value < 0) hasNegative = true;
+      return wholeNumbers && value !== null && !looksInvalid ? Math.round(value) : value;
+    });
+  });
+
   // ONE shared axis-assignment path for both compact and full-screen:
   // bars share a left axis, lines get a second (right) axis only when
-  // bar + line/area series are mixed — never one axis per series (see
-  // the module doc above for why). `detailed` only bumps the tick font.
-  const dualAxis = hasBar && hasLine;
+  // bar + line/area series are mixed and nothing is negative (two axes
+  // only share a baseline while both start at 0 — see the module doc) —
+  // never one axis per series. `detailed` only bumps the tick font.
+  const mixed = hasBar && hasLine;
+  const dualAxis = mixed && !hasNegative;
+  // No forced min/max: echarts' value axis keeps 0 on the scale and
+  // extends below it for negative readings (a forced `min: 0` clipped
+  // them off the plot — a device's -1.2e35 vanished).
   const yAxisBase = {
     type: 'value' as const,
-    min: 0,
     axisLine: { show: false },
     axisTick: { show: false },
     axisLabel: {
@@ -128,10 +166,19 @@ export const buildTrendComboOption = (
       formatter: Y_AXIS_LABEL_FORMATTER,
     },
   };
-  const yAxis: object[] = dualAxis
+  // A mixed section always declares BOTH axes and only hides the right
+  // one while it shares the left: the inline chart is updated in merge
+  // mode (same WebView), which never removes an axis, so the axis count
+  // must stay fixed per section for a refetch to flip layouts cleanly.
+  const yAxis: object[] = mixed
     ? [
         { ...yAxisBase, position: 'left', splitLine: splitLineStyle },
-        { ...yAxisBase, position: 'right', splitLine: { show: false } },
+        {
+          ...yAxisBase,
+          show: dualAxis,
+          position: 'right',
+          splitLine: { show: false },
+        },
       ]
     : [{ ...yAxisBase, splitLine: splitLineStyle }];
   const lineYIndex = dualAxis ? 1 : 0;
@@ -142,16 +189,8 @@ export const buildTrendComboOption = (
   const gridLeft = 8;
   const gridRight = dualAxis ? 8 : 12;
 
-  // Physically-impossible readings (see `IMPOSSIBLE_READING_CEILING`) are
-  // dropped to a chart gap here — the ONE shared path both modes' series
-  // go through — and tallied so the caller can disclose the count.
-  let invalidCount = 0;
-  const series = aggregations.map(a => {
-    const data = sorted.map(r => {
-      const { value, invalid } = coerceChartValue(r[a.param]);
-      if (invalid) invalidCount++;
-      return value;
-    });
+  const series = aggregations.map((a, i) => {
+    const data = columns[i];
     if (isBarType(a.type)) {
       return {
         name: a.display,
@@ -178,17 +217,22 @@ export const buildTrendComboOption = (
     };
   });
 
+  const width = options.width ?? DEFAULT_TREND_CHART_WIDTH;
   const legend = estimateTrendLegend(
     aggregations.map(a => a.display),
-    options.width ?? DEFAULT_TREND_CHART_WIDTH,
+    width,
   );
-  // Inline only: the "N invalid readings hidden" disclosure is drawn
-  // INSIDE the chart (the plot gives up one line; the card height never
-  // changes when data arrives). Full screen shows it as RN text instead
-  // (ChartFullscreenModal `warning`). The element always exists so a
-  // merge-mode update can hide it again.
+  // Inline only: the invalid-readings note ("N readings look invalid —
+  // shown exactly as sent by the device") is drawn INSIDE the chart,
+  // wrapped to its width (the plot gives up those lines; the card height
+  // never changes when data arrives). Full screen shows the same note as
+  // RN text instead (ChartFullscreenModal `warning`). The element always
+  // exists so a merge-mode update can hide it again.
   const showNote = !detailed && invalidCount > 0;
-  const gridTop = legend.gridTop + (showNote ? TREND_INVALID_NOTE_HEIGHT : 0);
+  const note = showNote
+    ? layoutTrendNote(formatInvalidReadingsNote(invalidCount), width)
+    : null;
+  const gridTop = legend.gridTop + (note ? note.height : 0);
 
   const option = {
     backgroundColor: 'transparent',
@@ -234,9 +278,10 @@ export const buildTrendComboOption = (
             silent: true,
             invisible: !showNote,
             style: {
-              text: showNote ? formatInvalidReadingsCaption(invalidCount) : '',
+              text: note ? note.text : '',
               fill: theme.textSecondary,
               fontSize: TREND_LEGEND.fontSize,
+              lineHeight: TREND_LEGEND.lineHeight,
             },
           },
         ],

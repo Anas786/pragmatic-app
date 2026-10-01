@@ -16,7 +16,7 @@ import { chartThemeFromScheme, WEBVIEW_SETTINGS } from '../chartConfig';
 import { buildTrendComboOption } from './echartsOption';
 import {
   buildTrendChartSummary,
-  formatInvalidReadingsCaption,
+  formatInvalidReadingsNote,
   TREND_CARD_CHROME,
   TREND_CARD_PADDING,
 } from './helpers';
@@ -108,11 +108,11 @@ const TrendComboChart: FC<TrendComboChartProps> = ({
   // singleton) — safe as a single useMemo dep for both option builds.
   const chartTheme = chartThemeFromScheme(scheme);
 
-  // `invalidCount` (points dropped by the impossible-reading guard, see
-  // `IMPOSSIBLE_READING_CEILING` in `./helpers`) is data-driven — it comes
-  // out identical for the compact and detailed builds given the same
-  // rows/aggregations — so the compact build's count is reused for the
-  // full-screen caption too instead of recomputing it there.
+  // `invalidCount` (invalid-looking readings — plotted as sent, only
+  // counted for the note, see `SUSPECT_READING_ABS` in `./helpers`) is
+  // data-driven — identical for the compact and detailed builds given the
+  // same rows/aggregations — so the compact build's count also words the
+  // full-screen note instead of recomputing it there.
   const { option, invalidCount } = useMemo(
     () =>
       buildTrendComboOption(rows, aggregations, windowMs, chartTheme, {
@@ -200,7 +200,7 @@ const TrendComboChart: FC<TrendComboChartProps> = ({
         option={detailedOption ?? EMPTY_CHART_OPTION}
         hint={aggregations.length > 1 ? LEGEND_HINT : undefined}
         warning={
-          invalidCount > 0 ? formatInvalidReadingsCaption(invalidCount) : undefined
+          invalidCount > 0 ? formatInvalidReadingsNote(invalidCount) : undefined
         }
         summary={summary}
       />

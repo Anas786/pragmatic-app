@@ -6,12 +6,15 @@
  * meter for energy, bolt for power, …). When the parameter's name names an
  * ENERGY SOURCE ('DG 1 …' → genset orange, 'PV …' → solar lime, 'WTG …' →
  * wind cyan, 'Grid …' → grid blue — `liveSourceFromName`, the SLD
- * grouping's tag rules) the well and a soft diagonal sweep take that
- * source colour. Any other parameter (load, bus, WHR, …) keeps a neutral
- * flat tile with a brand-tinted icon well — a full brand sweep read as
- * solar / "OK" (CLAUDE.md §22.2: non-source tiles stay neutral). A missing
- * reading is neutral throughout. Colours come from one per-theme table,
- * so tiles allocate nothing per render.
+ * grouping's tag rules) the well and a diagonal sweep take that source
+ * colour (SOURCE_SWEEP_ALPHA). Any other parameter ('Bus3 Export Energy',
+ * 'Captive Plant Energy', WHR, load …) gets a brand icon well and a SOFTER
+ * brand sweep (BRAND_SWEEP_ALPHA, about half the source tint) — a flat
+ * tile read as too plain, a full-strength brand sweep read as solar / "OK",
+ * so named-source tiles still lead. The brand is not an energy-palette
+ * colour (§22.2). A missing reading is neutral throughout: flat, grey well.
+ * Colours come from one per-theme table, so tiles allocate nothing per
+ * render. Text over either sweep is AA in both themes (liveParams.test.ts).
  *
  * Crash / perf lessons that still hold (see CLAUDE.md §11, §19):
  *   - No per-tile `Animated.View` / `entering`. At 100+ tiles concurrent
@@ -193,9 +196,16 @@ const TILE_GLYPH = 18;
 const GRADIENT_TL = { x: 0, y: 0 } as const;
 const GRADIENT_BR = { x: 1, y: 1 } as const;
 
+/**
+ * Sweep start alphas (hex suffix). A named source at ~14%; a tile that
+ * names no source at ~8% brand, so source tiles stay the stronger signal.
+ */
+export const SOURCE_SWEEP_ALPHA = '24';
+export const BRAND_SWEEP_ALPHA = '14';
+
 interface TileAccent {
-  /** Diagonal sweep: the accent at ~14% → transparent; null = flat tile. */
-  sweep: [string, string] | null;
+  /** Diagonal sweep: the accent at its sweep alpha → transparent. */
+  sweep: [string, string];
   /** Icon-well fill colour (IconWell applies its own alpha). */
   well: string;
   /** Glyph ink — legible on the tinted well in both themes. */
@@ -213,8 +223,8 @@ const accentTables = new WeakMap<Scheme, Record<AccentKey, TileAccent>>();
 const tileAccents = (scheme: Scheme): Record<AccentKey, TileAccent> => {
   let table = accentTables.get(scheme);
   if (!table) {
-    const make = (fill: string, ink: string, sweep = true): TileAccent => ({
-      sweep: sweep ? [`${fill}24`, `${fill}00`] : null,
+    const make = (fill: string, ink: string, sweepAlpha = SOURCE_SWEEP_ALPHA): TileAccent => ({
+      sweep: [`${fill}${sweepAlpha}`, `${fill}00`],
       well: fill,
       ink,
     });
@@ -224,8 +234,8 @@ const tileAccents = (scheme: Scheme): Record<AccentKey, TileAccent> => {
       grid: make(energyPalette.grid, scheme.energyInk.grid),
       genset: make(energyPalette.genset, scheme.energyInk.genset),
       battery: make(energyPalette.battery, scheme.energyInk.battery),
-      // No source: neutral tile, only the icon well carries the brand.
-      brand: make(scheme.brand, scheme.brandText, false),
+      // No source: brand well + a softer brand sweep than any source.
+      brand: make(scheme.brand, scheme.brandText, BRAND_SWEEP_ALPHA),
     };
     accentTables.set(scheme, table);
   }
@@ -262,7 +272,7 @@ const ParamTile: FC<ParamTileProps> = memo(({ param, showCategory, themed }) => 
       accessibilityLabel={
         showCategory ? `${param.a11yLabel}, ${param.categoryLabel}` : param.a11yLabel
       }>
-      {accent?.sweep ? (
+      {accent ? (
         <LinearGradient
           colors={accent.sweep}
           start={GRADIENT_TL}

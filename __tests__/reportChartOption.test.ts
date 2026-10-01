@@ -72,6 +72,25 @@ describe('buildReportStackBarOption — scale & axis', () => {
     expect(opt.yAxis.min).toBeUndefined();
   });
 
+  it("plots a device's invalid-looking reading at its true value (no clamp, no gap)", () => {
+    // The scale follows the garbage (as on the web): the other buckets
+    // flatten, but nothing is dropped and the axis labels stay readable.
+    const opt = build([
+      { time: day(1), ed_wind: -1.2e35, ed_solar: 63000 },
+      { time: day(2), ed_wind: 41000, ed_solar: 64000 },
+    ]);
+    expect(opt.yAxis.name).toBe('TWh');
+    const wind = opt.series.find((s: AnyOption) => s.id === 'wind');
+    expect(wind.data[0]).toBeCloseTo(-1.2e35 / 1e9, -10);
+    expect(wind.data[1]).toBeCloseTo(41000 / 1e9, 15);
+    expect(opt.yAxis.min).toBeUndefined();
+    const tick = evalLikeWebView(opt.yAxis.axisLabel.formatter);
+    expect(tick(-1.2e26)).toBe('-1.2e26');
+    const tip = evalLikeWebView(opt.tooltip.formatter);
+    const html = tip([{ dataIndex: 0, axisValueLabel: '1 Sep', marker: '', seriesName: 'Wind', value: wind.data[0] }]);
+    expect(html).toContain('-1.2e26 TWh');
+  });
+
   it('keeps every bucket: null → gap, 0 and negatives kept', () => {
     const opt = build([
       { time: day(1), ed_solar: 800, ed_grid: -400 },

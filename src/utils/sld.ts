@@ -19,6 +19,7 @@ import {
   SLDValueResolver,
 } from 'src/types';
 import { formatCardValue } from './cards';
+import { formatQuantity, isIrradiance } from './units';
 
 /* ─────────── node sizing (graph-space units) ─────────── */
 
@@ -305,9 +306,24 @@ export const evalAnimation = (
   }
 };
 
-/** Format a node-key value for display (2 decimals, em-dash on empty). */
-export const formatSldValue = (value: number | string | null | undefined): string =>
-  formatCardValue(value, 2);
+/**
+ * Format a node-key value for display (2 decimals, em-dash on empty). An
+ * irradiance key (`isIrradiance(unit, label)`: W/m², or a unitless 'POA' /
+ * 'GHI' … label) prints as a whole number with en-US grouping ('1,024'),
+ * like every other screen. Grouped cards pass their averaged value through
+ * here too, so a grouped irradiance row is also a whole number.
+ */
+export const formatSldValue = (
+  value: number | string | null | undefined,
+  unit?: string | null,
+  label?: string | null,
+): string => {
+  if (isIrradiance(unit, label)) {
+    const q = formatQuantity(value, unit, { mode: 'precise', rescale: false, name: label });
+    if (!q.isMissing) return q.text;
+  }
+  return formatCardValue(value, 2);
+};
 
 /** Edge stroke colour (falls back to the marker colour). */
 export const edgeColor = (edge: SLDEdge): string =>

@@ -156,10 +156,12 @@ describe('TabSelector — pinned strip semantics + geometry', () => {
       'Summary',
       'Cards',
       'Live',
-      'Trend',
+      'Analysis',
       'Reports',
       'Tables',
     ]);
+    // The visible chip text matches what VoiceOver / TalkBack say.
+    expect(texts(t.root)).toEqual(['Summary', 'Cards', 'Live', 'Analysis', 'Reports', 'Tables']);
     expect(chips).toHaveLength(TAB_COUNT);
     for (const c of chips) {
       expect(c.props.accessibilityRole).toBe('button');
@@ -194,6 +196,18 @@ describe('TabSelector — pinned strip semantics + geometry', () => {
     expect(spy).toHaveBeenCalledTimes(1);
     expect(onSelect).toHaveBeenLastCalledWith('Cards');
     spy.mockRestore();
+  });
+
+  it("labels the 'Trend' tab \"Analysis\" (web name) but still selects the internal key", () => {
+    const onSelect = jest.fn();
+    const t = render(<TabSelector selected="Trend" onSelect={onSelect} />);
+    const chips = tabPressables(t.root);
+    const analysis = chips.find(c => c.props.accessibilityLabel === 'Analysis');
+    expect(analysis?.props.accessibilityState.selected).toBe(true);
+    expect(chips.some(c => c.props.accessibilityLabel === 'Trend')).toBe(false);
+    expect(texts(t.root)).not.toContain('Trend');
+    act(() => analysis?.props.onPress());
+    expect(onSelect).toHaveBeenLastCalledWith('Trend');
   });
 
   it('the skeleton strip has the same gutter, inset and chip height (no jump)', () => {

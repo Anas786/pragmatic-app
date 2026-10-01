@@ -1,5 +1,6 @@
-import React, { FC, useCallback, useMemo, useRef } from 'react';
+import React, { FC, useCallback, useMemo, useRef, useState } from 'react';
 import {
+  LayoutChangeEvent,
   Modal,
   StatusBar,
   StyleSheet,
@@ -16,8 +17,9 @@ import { ChartExportRef, exportChartImage } from './exportChart';
 
 /** Minimum breathing room on every edge of the landscape canvas. */
 const PAD = 12;
-/** Title row height — fits the ≥ touch.min action buttons. */
-const HEADER_H = Math.max(54, touch.min + space.sm);
+/** Minimum title-row height — fits the ≥ touch.min action buttons. The
+ *  row grows past it when the captions wrap (large text, a long note). */
+const HEADER_MIN_H = Math.max(54, touch.min + space.sm);
 
 interface ChartFullscreenModalProps {
   visible: boolean;
@@ -28,12 +30,13 @@ interface ChartFullscreenModalProps {
   /** Optional caption under the title (e.g. a legend hint). */
   hint?: string;
   /**
-   * Optional second caption line below `hint` — e.g. a data-quality
-   * disclosure ("N invalid readings hidden"). Kept separate from `hint`
-   * (rather than appended to it) so a data-quality note is never
-   * truncated by the single-line legend hint sharing its space. Rendered
-   * in the same muted style as `hint`; the TEXT itself carries the
-   * meaning, not colour.
+   * Optional caption below `hint` — e.g. a data-quality note ("2 readings
+   * look invalid — shown exactly as sent by the device"). Kept separate
+   * from `hint` (rather than appended to it) so a data-quality note is
+   * never truncated by the single-line legend hint sharing its space. It
+   * wraps onto a second line (and shrinks only past that) — the header
+   * grows to fit and the chart takes the rest. Rendered in the same muted
+   * style as `hint`; the TEXT itself carries the meaning, not colour.
    */
   warning?: string;
   /**
@@ -108,6 +111,14 @@ const FullscreenBody: FC<ChartFullscreenModalProps> = ({
   const insets = useSafeAreaInsets();
   const { width: W, height: H } = useWindowDimensions();
   const chartRef = useRef<ChartExportRef | null>(null);
+  // The header's real height (it grows when captions wrap). The chart
+  // mounts only once it is known: the injected JS sizes the echarts
+  // container ONCE at load, so a WebView must never be resized under it.
+  const [headerH, setHeaderH] = useState<number | null>(null);
+  const onHeaderLayout = useCallback((e: LayoutChangeEvent) => {
+    const h = Math.ceil(e.nativeEvent.layout.height);
+    setHeaderH(prev => (prev === h ? prev : h));
+  }, []);
 
   // Landscape canvas = (long edge × short edge).
   const landscapeW = Math.max(W, H);
@@ -154,10 +165,13 @@ const FullscreenBody: FC<ChartFullscreenModalProps> = ({
   );
 
   const chartW = landscapeW - pad.left - pad.right;
-  const chartH = landscapeH - HEADER_H - pad.top - pad.bottom;
+  const chartH = landscapeH - (headerH ?? HEADER_MIN_H) - pad.top - pad.bottom;
 
-  const chart = visible ? (
+  const chart = visible && headerH !== null ? (
     <RNEChartsPro
+      // A new height needs a fresh WebView (see `headerH`); only happens
+      // if the header re-wraps while open (e.g. a longer note).
+      key={chartH}
       ref={chartRef as never}
       height={chartH}
       width={chartW}
@@ -170,7 +184,7 @@ const FullscreenBody: FC<ChartFullscreenModalProps> = ({
 
   return (
     <View style={rotatedStyle}>
-      <View style={styles.header} pointerEvents="box-none">
+      <View style={styles.header} pointerEvents="box-none" onLayout={onHeaderLayout}>
         <View style={styles.titleBlock}>
           <AppText
             variant="bodySm"
@@ -186,7 +200,15 @@ const FullscreenBody: FC<ChartFullscreenModalProps> = ({
             </AppText>
           ) : null}
           {warning ? (
-            <AppText variant="caption" tone="secondary" center numberOfLines={1}>
+            // Wraps to a second line (the header grows to fit), then
+            // shrinks: a data-quality note must be read in full.
+            <AppText
+              variant="caption"
+              tone="secondary"
+              center
+              numberOfLines={2}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}>
               {warning}
             </AppText>
           ) : null}
@@ -241,11 +263,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    height: HEADER_H,
+    minHeight: HEADER_MIN_H,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
     paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
   },
   titleBlock: {
     flex: 1,

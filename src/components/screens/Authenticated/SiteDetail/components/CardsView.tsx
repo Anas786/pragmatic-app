@@ -124,6 +124,7 @@ const CardsView: FC = () => {
       const quantity = formatCardDisplay(
         resolveCardValue(card, liveData),
         card.unit,
+        card.name,
       );
       const baseKey = `${card.objKey}:${card.name}`;
       const dup = seen.get(baseKey) ?? 0;

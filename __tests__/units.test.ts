@@ -8,6 +8,8 @@ import {
   formatEnergy,
   formatQuantity,
   formatSig3,
+  IRRADIANCE_UNIT,
+  isIrradiance,
   isRateUnit,
   normalizeUnit,
   pickScale,
@@ -211,5 +213,114 @@ describe('unit helpers', () => {
     expect(formatSig3(0.001)).toBe('0.00100');
     expect(formatSig3(0)).toBe('0');
     expect(formatSig3(NaN)).toBe('—');
+  });
+});
+
+/* ─────────── irradiance: whole numbers everywhere (product decision) ─────────── */
+
+describe('isIrradiance — the one shared predicate', () => {
+  it('every W/m² spelling the configs use normalises to W/m² and is irradiance', () => {
+    for (const unit of [
+      'W/m²', 'W/m2', 'W/M2', 'w/m2', 'W/m^2', 'W/m**2', 'Wm-2', 'W m-2', 'W·m-2',
+      'W.m^-2', 'Wm2', 'W/sqm', 'W/sq.m', ' W / m2 ', 'Watt/m2', 'watts/m²',
+    ]) {
+      expect([unit, normalizeUnit(unit), isIrradiance(unit)]).toEqual([unit, IRRADIANCE_UNIT, true]);
+    }
+    // …and the bracket parser (Live tab unit index) recognises them too.
+    expect(splitLabelUnit('POA Irradiance (Wm-2)')).toEqual({ label: 'POA Irradiance', unit: 'W/m²' });
+  });
+
+  it('other quantities per square metre are not irradiance', () => {
+    for (const unit of ['kW/m2', 'Wh/m2', 'kWh/m²', 'W', 'kW', '%', '°C', 'm/s']) {
+      expect([unit, isIrradiance(unit)]).toEqual([unit, false]);
+    }
+  });
+
+  it('a unitless reading is irradiance when its name says so (whole words)', () => {
+    for (const name of [
+      'Irradiance', 'POA Irradiance 4', 'Solar irradiance', 'GHI', 'GTI', 'POA1', 'ghi_2',
+      'Insolation', 'Plane-of-array (POA)',
+    ]) {
+      expect([name, isIrradiance('', name)]).toEqual([name, true]);
+      expect([name, isIrradiance(null, name)]).toEqual([name, true]);
+    }
+    for (const name of ['Poach', 'Ghibli', 'Irradiation total', 'Active Power', 'POA Module Temp', 'GHI sensor temperature']) {
+      expect([name, isIrradiance(undefined, name)]).toEqual([name, false]);
+    }
+    expect(isIrradiance()).toBe(false);
+  });
+
+  it('a stated non-irradiance unit always wins over the name', () => {
+    expect(isIrradiance('kWh/m²', 'POA Insolation')).toBe(false);
+    expect(isIrradiance('°C', 'POA')).toBe(false);
+    expect(isIrradiance('W/m2', 'Anything')).toBe(true);
+  });
+
+  it('a unit written into a unitless NAME wins too (only W/m² keeps it irradiance)', () => {
+    for (const name of [
+      'Insolation (kWh/m2)', 'POA Irradiance (kWh/m2)', 'GHI kWh/m² today', 'Irradiance [kW/m2]',
+      'POA Insolation (Wh / sq.m)', 'POA Irradiance (%)', 'GHI (kW)',
+    ]) {
+      expect([name, isIrradiance('', name)]).toEqual([name, false]);
+    }
+    for (const name of [
+      'POA Irradiance (W/m2)', 'GHI (Wm-2)', 'Irradiance W/m²', 'GTI watts/m2', 'Irradiance (Block A)',
+    ]) {
+      expect([name, isIrradiance(null, name)]).toEqual([name, true]);
+    }
+    // …and the formatter keeps such a reading's decimals.
+    expect(q(5.43, '', { mode: 'precise', name: 'Insolation (kWh/m2)' })).toEqual(['5.43', '']);
+  });
+});
+
+describe('formatQuantity — irradiance prints as a grouped whole number', () => {
+  it("precise mode ignores `decimals`: '862', '1,024', never '862.00'", () => {
+    expect(q(862, 'W/m2', { mode: 'precise', decimals: 2, rescale: false })).toEqual(['862', 'W/m²']);
+    expect(q(1024.4, 'W/m²', { mode: 'precise', decimals: 2 })).toEqual(['1,024', 'W/m²']);
+    expect(q(861.5, 'Wm-2', { mode: 'precise' })).toEqual(['862', 'W/m²']);
+    expect(q('409.7', 'W/m2', { mode: 'precise' })).toEqual(['410', 'W/m²']);
+  });
+
+  it('compact mode too (no 3-significant-digit fraction)', () => {
+    expect(q(45.67, 'W/m2')).toEqual(['46', 'W/m²']);
+    expect(q(1024.6, 'W/m2')).toEqual(['1,025', 'W/m²']);
+  });
+
+  it('night-time readings: 0 and sensor offsets read 0, never -0', () => {
+    expect(q(0, 'W/m2', { mode: 'precise' })).toEqual(['0', 'W/m²']);
+    expect(q(-0.3, 'W/m2', { mode: 'precise' })).toEqual(['0', 'W/m²']);
+    expect(q(0.4, 'W/m2')).toEqual(['0', 'W/m²']);
+    expect(q(-4.6, 'W/m2', { mode: 'precise' })).toEqual(['-5', 'W/m²']);
+  });
+
+  it('a unitless reading named as irradiance rounds the same way', () => {
+    expect(q(862.37, '', { mode: 'precise', decimals: 2, name: 'POA Irradiance 4' })).toEqual(['862', '']);
+    expect(q(862.37, '', { mode: 'precise', decimals: 2, name: 'Bus Voltage' })).toEqual(['862.37', '']);
+  });
+
+  it('missing stays the muted dash', () => {
+    for (const raw of [null, undefined, '', 'NA', NaN]) {
+      expect(formatQuantity(raw, 'W/m2', { mode: 'precise' })).toMatchObject({
+        text: '—',
+        unit: '',
+        isMissing: true,
+        spoken: 'no data',
+      });
+    }
+  });
+
+  it('keeps the untouched value and speaks the rounded text', () => {
+    const r = formatQuantity(862.37, 'W/m2', { mode: 'precise' });
+    expect(r.value).toBe(862.37);
+    expect(r.spoken).toBe('862 watts per square metre');
+    expect(metricA11yLabel('Irradiance', r)).toBe('Irradiance, 862 watts per square metre');
+  });
+
+  it("no other unit's decimals change", () => {
+    expect(q(862, 'kW', { mode: 'precise', rescale: false })).toEqual(['862.00', 'kW']);
+    expect(q(49.745, 'Hz', { mode: 'precise' })).toEqual(['49.75', 'Hz']);
+    expect(q(31.25, '°C', { mode: 'precise' })).toEqual(['31.25', '°C']);
+    expect(q(5.43, 'kWh/m²', { mode: 'precise', name: 'POA Insolation' })).toEqual(['5.43', 'kWh/m²']);
+    expect(q(45.67, '%')).toEqual(['45.7', '%']);
   });
 });

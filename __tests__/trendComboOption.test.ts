@@ -4,21 +4,24 @@
  * 1. Axis assignment is ONE shared path for compact (`detailed: false`)
  *    and full-screen (`detailed: true`): bars share a left axis, lines
  *    get a right axis only when the section mixes bar + line/area
- *    series — never one axis per series. `detailed` may only change
- *    presentation density (tick font, grid margins), never the axis
- *    count or the series→yAxisIndex mapping.
+ *    series and no reading is negative (with one, every series shares
+ *    the left axis and the right one is hidden — two zeros would sit at
+ *    different heights) — never one axis per series. `detailed` may
+ *    only change presentation density (tick font, grid margins), never
+ *    the axis count or the series→yAxisIndex mapping.
  *
- * 2. The impossible-reading guard (`coerceChartValue` /
- *    `IMPOSSIBLE_READING_CEILING` in `./helpers`) — a ~4e31 "Wind Energy
- *    Day" reading was reported in production, which on a shared axis
- *    would flatten every other series to an invisible sliver. Such
- *    points become a chart gap (`null`), and the drop is counted and
- *    disclosed rather than hidden.
+ * 2. Device garbage is shown, never hidden (`coerceChartValue` /
+ *    `SUSPECT_READING_ABS`) — Lucky Cement's "Wind Energy Day" came back
+ *    as ~4e31 and later ~-1.2e35. Like the web portal's Analysis chart,
+ *    every finite reading is plotted at its TRUE value on the shared scale
+ *    (no gap, no clamp, no forced axis min — negatives go below 0), and a
+ *    note says "N readings look invalid — shown exactly as sent by the
+ *    device". Only missing / non-numeric input is a gap.
  *
  * 3. Chrome (TR-1): no x-axis name, a wrapping 'plain' legend (never
  *    paginated, never truncated, hidden for one series) whose rows set
  *    `grid.top`, theme-only dataZoom colours, the invalid-readings note
- *    drawn inside the chart, and ONE geometry (`trendChartLayout`) shared
+ *    drawn (wrapped) inside the chart, and ONE geometry (`trendChartLayout`) shared
  *    by the skeleton, the empty/error slot and the chart card. The legend
  *    row estimate is checked against widths measured in the WebView's
  *    real fonts, on a real site's series names.
@@ -37,8 +40,9 @@ import {
   DEFAULT_TREND_CHART_WIDTH,
   estimateTextWidth,
   estimateTrendLegend,
-  formatInvalidReadingsCaption,
-  IMPOSSIBLE_READING_CEILING,
+  formatInvalidReadingsNote,
+  layoutTrendNote,
+  SUSPECT_READING_ABS,
   TREND_CARD_CHROME,
   TREND_GRID_BOTTOM,
   TREND_GRID_TOP_BARE,
@@ -115,6 +119,37 @@ describe('buildTrendComboOption — shared axis assignment', () => {
     },
   );
 
+  it('a negative reading puts a mixed section on ONE visible axis (zeros never misaligned)', () => {
+    const aggregations = [agg('p1', 'bar'), agg('p2', 'line'), agg('p3', 'column')];
+    const withNegative: TrendDataRow[] = [
+      { time: 0, p1: -500, p2: 1200, p3: 3 },
+      { time: 1000, p1: 2000, p2: 1500, p3: 4 },
+    ];
+    for (const detailed of [false, true]) {
+      const shared = buildTrendComboOption(withNegative, aggregations, 1000, THEME, { detailed });
+      expect(yAxisIndices(shared)).toEqual([0, 0, 0]);
+      // Both axes are still declared — the inline chart updates in merge
+      // mode, which never removes one — but the right axis is hidden.
+      const axes = (shared.option as any).yAxis;
+      expect(axes).toHaveLength(2);
+      expect(axes[0].show).toBeUndefined();
+      expect(axes[1].show).toBe(false);
+    }
+    // The same section without a negative reading: lines on a visible
+    // right axis (both axes start at 0, so their zeros coincide).
+    const positive = buildTrendComboOption(rows, aggregations, 1000, THEME);
+    expect(yAxisIndices(positive)).toEqual([0, 1, 0]);
+    expect((positive.option as any).yAxis[1].show).toBe(true);
+    // A missing reading is not a negative one.
+    const gap = buildTrendComboOption(
+      [{ time: 0, p1: null, p2: 'NA', p3: 0 } as unknown as TrendDataRow],
+      aggregations,
+      1000,
+      THEME,
+    );
+    expect(yAxisIndices(gap)).toEqual([0, 1, 0]);
+  });
+
   it('grid gutters are the same shared computation in both modes (no per-series offset stacking)', () => {
     const aggregations = [agg('p1', 'bar'), agg('p2', 'line')];
     const compact = buildTrendComboOption(rows, aggregations, 1000, THEME);
@@ -142,35 +177,40 @@ describe('buildTrendComboOption — shared axis assignment', () => {
   });
 });
 
-describe('coerceChartValue — impossible-reading guard', () => {
-  it('drops and flags a reading at/over the ceiling', () => {
-    expect(coerceChartValue(4e31)).toEqual({ value: null, invalid: true });
-    expect(coerceChartValue(IMPOSSIBLE_READING_CEILING)).toEqual({
-      value: null,
-      invalid: true,
+describe('coerceChartValue — flags invalid-looking readings, never drops them', () => {
+  it('keeps the exact value of a reading at/over the threshold, and flags it', () => {
+    expect(coerceChartValue(4e31)).toEqual({ value: 4e31, looksInvalid: true });
+    expect(coerceChartValue(SUSPECT_READING_ABS)).toEqual({
+      value: SUSPECT_READING_ABS,
+      looksInvalid: true,
     });
-    // Ceiling applies symmetrically to the magnitude, not just positives.
-    expect(coerceChartValue(-4e31)).toEqual({ value: null, invalid: true });
+    // Symmetric on the magnitude: the device's -1.2e35 is kept as -1.2e35.
+    expect(coerceChartValue(-1.2345678901234567e35)).toEqual({
+      value: -1.2345678901234567e35,
+      looksInvalid: true,
+    });
+    // A numeric string is coerced, never rounded or capped.
+    expect(coerceChartValue('-1.2e35')).toEqual({ value: -1.2e35, looksInvalid: true });
   });
 
-  it('keeps ordinary-magnitude values, however large the real reading', () => {
-    expect(coerceChartValue(7.5e8)).toEqual({ value: 7.5e8, invalid: false });
-    expect(coerceChartValue(48000)).toEqual({ value: 48000, invalid: false });
-    expect(coerceChartValue(0)).toEqual({ value: 0, invalid: false });
-    expect(coerceChartValue(-500)).toEqual({ value: -500, invalid: false });
+  it('keeps ordinary-magnitude values unflagged, however large the real reading', () => {
+    expect(coerceChartValue(7.5e8)).toEqual({ value: 7.5e8, looksInvalid: false });
+    expect(coerceChartValue(9.99e14)).toEqual({ value: 9.99e14, looksInvalid: false });
+    expect(coerceChartValue(48000)).toEqual({ value: 48000, looksInvalid: false });
+    expect(coerceChartValue(0)).toEqual({ value: 0, looksInvalid: false });
+    expect(coerceChartValue(-500)).toEqual({ value: -500, looksInvalid: false });
   });
 
-  it('drops non-finite input without counting it as an "invalid reading"', () => {
-    // NaN/Infinity were already missing/garbage before the ceiling check
-    // ever runs (coerceValue maps them to null) — not a NEW anomaly this
-    // guard caught, so they must not inflate the disclosed count.
-    expect(coerceChartValue(NaN)).toEqual({ value: null, invalid: false });
-    expect(coerceChartValue(Infinity)).toEqual({ value: null, invalid: false });
-    expect(coerceChartValue(-Infinity)).toEqual({ value: null, invalid: false });
+  it('missing / non-numeric input stays a gap and is not counted as a reading', () => {
+    // NaN / Infinity / null / '' / 'NA' are missing data, not a device
+    // reading — they stay null (a gap) and never inflate the note's count.
+    for (const v of [NaN, Infinity, -Infinity, null, undefined, '', '  ', 'NA']) {
+      expect(coerceChartValue(v as never)).toEqual({ value: null, looksInvalid: false });
+    }
   });
 });
 
-describe('buildTrendComboOption — impossible-reading guard end-to-end', () => {
+describe('buildTrendComboOption — device garbage plotted as sent (like the web)', () => {
   const aggregations = [
     agg('wind', 'line'),
     agg('pv', 'line'),
@@ -181,7 +221,7 @@ describe('buildTrendComboOption — impossible-reading guard end-to-end', () => 
     { time: 1000, wind: 12, pv: 51000, genset: 7.6e8 },
   ];
 
-  it('nulls only the impossible point, tallies invalidCount, and leaves the rest untouched', () => {
+  it('plots every finite reading at its true value and counts the invalid-looking ones', () => {
     const { option, invalidCount } = buildTrendComboOption(
       rows,
       aggregations,
@@ -193,9 +233,46 @@ describe('buildTrendComboOption — impossible-reading guard end-to-end', () => 
     const windSeries = series.find(s => s.name === 'wind');
     const pvSeries = series.find(s => s.name === 'pv');
     const gensetSeries = series.find(s => s.name === 'genset');
-    expect(windSeries.data).toEqual([null, 12]);
+    expect(windSeries.data).toEqual([3.9999999999999995e31, 12]);
     expect(pvSeries.data).toEqual([48000, 51000]);
     expect(gensetSeries.data).toEqual([7.5e8, 7.6e8]);
+  });
+
+  it("Lucky Cement 'Customised Report': a -1.2e35 bar is drawn below 0, not clipped", () => {
+    const lucky = [
+      named('Wind Energy Day', 'bar'),
+      named('PV Energy Day', 'bar'),
+      named('Cost of Total Energy($)', 'line'),
+    ];
+    const luckyRows: TrendDataRow[] = [
+      {
+        time: 0,
+        'Wind Energy Day': -1.2345678901234567e35,
+        'PV Energy Day': 63000,
+        'Cost of Total Energy($)': 2e34,
+      },
+      { time: 1000, 'Wind Energy Day': 41000, 'PV Energy Day': null, 'Cost of Total Energy($)': 5 },
+    ];
+    for (const detailed of [false, true]) {
+      const { option, invalidCount }: { option: any; invalidCount: number } =
+        buildTrendComboOption(luckyRows, lucky, 1000, THEME, { detailed });
+      expect(invalidCount).toBe(2);
+      const data = (name: string) => option.series.find((s: any) => s.name === name).data;
+      expect(data('Wind Energy Day')).toEqual([-1.2345678901234567e35, 41000]);
+      expect(data('PV Energy Day')).toEqual([63000, null]); // missing stays a gap
+      expect(data('Cost of Total Energy($)')).toEqual([2e34, 5]);
+      // No forced axis bounds on either axis: echarts keeps 0 on the scale
+      // and extends below it, so the negative bar is visible at true size.
+      for (const y of option.yAxis) {
+        expect(y.min).toBeUndefined();
+        expect(y.max).toBeUndefined();
+        expect(y.scale).toBeUndefined();
+      }
+      // The Cost line shares the bars' axis (and so their baseline) —
+      // like the web — instead of a right axis whose 0 sits elsewhere.
+      expect(option.series.map((x: any) => x.yAxisIndex)).toEqual([0, 0, 0]);
+      expect(option.yAxis[1].show).toBe(false);
+    }
   });
 
   it('reports the same invalidCount regardless of `detailed`', () => {
@@ -207,7 +284,7 @@ describe('buildTrendComboOption — impossible-reading guard end-to-end', () => 
     expect(detailed.invalidCount).toBe(1);
   });
 
-  it('reports zero when nothing exceeds the ceiling', () => {
+  it('reports zero when nothing looks invalid', () => {
     const cleanRows: TrendDataRow[] = [
       { time: 0, wind: 10, pv: 48000, genset: 7.5e8 },
     ];
@@ -221,11 +298,15 @@ describe('buildTrendComboOption — impossible-reading guard end-to-end', () => 
   });
 });
 
-describe('formatInvalidReadingsCaption', () => {
-  it('pluralizes correctly', () => {
-    expect(formatInvalidReadingsCaption(1)).toBe('1 invalid reading hidden');
-    expect(formatInvalidReadingsCaption(2)).toBe('2 invalid readings hidden');
-    expect(formatInvalidReadingsCaption(5)).toBe('5 invalid readings hidden');
+describe('formatInvalidReadingsNote', () => {
+  it('says the values are shown as the device sent them — never "hidden"', () => {
+    expect(formatInvalidReadingsNote(1)).toBe(
+      '1 reading looks invalid — shown exactly as sent by the device',
+    );
+    expect(formatInvalidReadingsNote(2)).toBe(
+      '2 readings look invalid — shown exactly as sent by the device',
+    );
+    expect(formatInvalidReadingsNote(5)).not.toMatch(/hidden/i);
   });
 });
 
@@ -386,13 +467,43 @@ describe('buildTrendComboOption — invalid-readings note inside the chart', () 
   const bad: TrendDataRow[] = [{ time: 0, 'Wind Energy Day': 4e31, 'PV Energy Day': 5 }];
   const good: TrendDataRow[] = [{ time: 0, 'Wind Energy Day': 3, 'PV Energy Day': 5 }];
 
-  it('shows the note and gives up one line of plot (not card height) when points were dropped', () => {
+  it('shows the note and gives up its lines of plot (not card height) when readings look invalid', () => {
     const withNote = buildTrendComboOption(bad, aggs, 1000, THEME);
     const clean = buildTrendComboOption(good, aggs, 1000, THEME);
     const note = (withNote.option as any).graphic[0];
+    const expected = layoutTrendNote(
+      formatInvalidReadingsNote(1),
+      DEFAULT_TREND_CHART_WIDTH,
+    );
     expect(note.invisible).toBe(false);
-    expect(note.style.text).toBe('1 invalid reading hidden');
-    expect(gridOf(withNote).top).toBe(gridOf(clean).top + TREND_INVALID_NOTE_HEIGHT);
+    expect(note.style.text).toBe(expected.text);
+    expect(note.style.text.replace(/\n/g, ' ')).toBe(formatInvalidReadingsNote(1));
+    expect(note.style.lineHeight).toBe(TREND_LEGEND.lineHeight);
+    expect(gridOf(withNote).top).toBe(gridOf(clean).top + expected.height);
+    // …and the reading itself is still plotted, as sent.
+    expect((withNote.option as any).series[0].data).toEqual([4e31]);
+  });
+
+  it('wraps the note (never truncates) and reserves exactly the lines drawn', () => {
+    const narrow = 200;
+    const r = buildTrendComboOption(bad, aggs, 1000, THEME, { width: narrow });
+    const note = (r.option as any).graphic[0];
+    const layout = layoutTrendNote(formatInvalidReadingsNote(1), narrow);
+    expect(layout.lines).toBeGreaterThan(1);
+    expect(note.style.text.split('\n')).toHaveLength(layout.lines);
+    // every drawn line fits the chart width (never-narrower estimate)
+    for (const line of note.style.text.split('\n')) {
+      expect(estimateTextWidth(line, TREND_LEGEND.fontSize)).toBeLessThanOrEqual(narrow);
+    }
+    expect(layout.height).toBe(layout.lines * TREND_LEGEND.lineHeight + 2);
+    expect(gridOf(r).top).toBe(estimateTrendLegend(aggs.map(a => a.display), narrow).gridTop + layout.height);
+  });
+
+  it('a single line takes TREND_INVALID_NOTE_HEIGHT', () => {
+    const wide = layoutTrendNote(formatInvalidReadingsNote(3), 900);
+    expect(wide.lines).toBe(1);
+    expect(wide.height).toBe(TREND_INVALID_NOTE_HEIGHT);
+    expect(wide.text).toBe(formatInvalidReadingsNote(3));
   });
 
   it('keeps a hidden note element with the same id so a merge update can clear it', () => {
@@ -405,7 +516,7 @@ describe('buildTrendComboOption — invalid-readings note inside the chart', () 
     expect(b.style.text).toBe('');
   });
 
-  it('full screen discloses it as RN text instead (no in-chart note)', () => {
+  it('full screen shows the same note as RN text instead (no in-chart note)', () => {
     const detailed = buildTrendComboOption(bad, aggs, 1000, THEME, { detailed: true });
     expect((detailed.option as any).graphic).toBeUndefined();
     expect(detailed.invalidCount).toBe(1);
@@ -542,7 +653,7 @@ describe('buildTrendChartSummary', () => {
     { time: 1000, 'Solar Power (kW)': 25300, Wind: 1500, Grid: null },
   ];
 
-  it('names the chart, period, series count, latest + peak per series and the disclosure', () => {
+  it('names the chart, period, series count, latest + peak per series and the note', () => {
     const text = buildTrendChartSummary({
       heading: 'Power',
       periodSpoken: 'Last 24 hours, 30 Sep 14:35 to 1 Oct 14:35',
@@ -553,10 +664,28 @@ describe('buildTrendChartSummary', () => {
     expect(text).toBe(
       'Power chart. Last 24 hours, 30 Sep 14:35 to 1 Oct 14:35. 3 series. ' +
         'Solar Power (kW): latest 18.9 megawatts, peak 25.3 megawatts. ' +
-        // the impossible 4e31 is excluded, exactly as the chart excludes it
-        'Wind: latest 1.50 thousand, peak 1.50 thousand. ' +
-        'Grid: no data. 1 invalid reading hidden.',
+        // the device's 4e31 is included, exactly as the chart plots it
+        'Wind: latest 4 times 10 to the power 31, peak 4 times 10 to the power 31. ' +
+        'Grid: no data. 1 reading looks invalid — shown exactly as sent by the device.',
     );
+  });
+
+  it('says a negative invalid-looking reading in powers of ten, with the unit', () => {
+    const text = buildTrendChartSummary({
+      heading: 'Customised Report',
+      periodSpoken: 'Last 24 hours',
+      rows: [
+        { time: 1000, 'Wind Energy Day (kWh)': 41000 },
+        { time: 2000, 'Wind Energy Day (kWh)': -1.2345e35 },
+      ],
+      aggregations: [named('Wind Energy Day (kWh)')],
+      invalidCount: 1,
+    });
+    expect(text).toContain(
+      'Wind Energy Day (kWh): latest minus 1.23 times 10 to the power 35 kilowatt hours, ' +
+        'peak 41 megawatt hours',
+    );
+    expect(text).toContain('1 reading looks invalid — shown exactly as sent by the device');
   });
 
   it('caps the listed series', () => {
@@ -612,6 +741,7 @@ import EmptyStateCard from '../src/components/common/EmptyStateCard';
 import Skeleton from '../src/components/common/Skeleton';
 import Surface from '../src/components/common/Surface';
 import TrendSection from '../src/components/screens/Authenticated/SiteDetail/components/Trends/TrendSection';
+import ChartFullscreenModal from '../src/components/screens/Authenticated/SiteDetail/components/ChartFullscreenModal';
 
 describe('TrendSection (rendered)', () => {
   const DAY = 24 * 60 * 60 * 1000;
@@ -734,6 +864,28 @@ describe('TrendSection (rendered)', () => {
         n => n.props.accessibilityRole === 'radiogroup' && n.props.accessibilityLabel === 'Power period',
       ).length,
     ).toBeGreaterThan(0);
+  });
+
+  it('device garbage: plotted as sent, one note for the card, the same note in full screen', () => {
+    const garbage: TrendDataRow[] = [
+      { time: NOW - 2 * 3600e3, 'Wind Power': -1.2e35, 'Solar Power': 18942.4 },
+      { time: NOW - 3600e3, 'Wind Power': 14000, 'Solar Power': 4e31 },
+    ];
+    const root = show({ data: { data: garbage, windowMs: DAY }, dataUpdatedAt: NOW });
+    const note = formatInvalidReadingsNote(2);
+    const option = root.findByType(RNEChartsPro).props.option as any;
+    expect(option.series.find((x: any) => x.name === 'Wind Power').data).toEqual([-1.2e35, 14000]);
+    expect(option.series.find((x: any) => x.name === 'Solar Power').data).toEqual([18942.4, 4e31]);
+    // one in-chart note (wrapped to the chart width), never "hidden"
+    expect(option.graphic).toHaveLength(1);
+    expect(option.graphic[0].style.text.replace(/\n/g, ' ')).toBe(note);
+    expect(JSON.stringify(option)).not.toMatch(/hidden/i);
+    // full screen repeats the same note as text; screen readers hear it
+    expect(root.findByType(ChartFullscreenModal).props.warning).toBe(note);
+    const img = root.findAll(
+      n => n.props.accessibilityRole === 'image' && heightOf(n.props.style) === layout.chartHeight,
+    )[0];
+    expect(img.props.accessibilityLabel).toContain(note);
   });
 
   it("'Custom' is the range editor: calendar glyph + a label that says it opens the picker", () => {
