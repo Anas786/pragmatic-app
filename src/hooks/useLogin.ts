@@ -65,7 +65,10 @@ export const useLogin = () => {
   const onSubmit = loginForm.handleSubmit(async ({ email, password }) => {
     setLoading(true);
     try {
-      const result = await cognitoSignIn(email.trim(), password);
+      // Belt-and-braces with LoginSchema's .trim()/.lowercase() transforms:
+      // the API matches the address case-sensitively, so this must never go
+      // out un-normalized even if the resolver is bypassed or changed.
+      const result = await cognitoSignIn(email.trim().toLowerCase(), password);
 
       if (result.isSignedIn) {
         await finalizeSignIn();

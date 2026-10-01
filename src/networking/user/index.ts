@@ -84,7 +84,7 @@ const sanitizeSearch = (q: string | undefined): string | undefined => {
 /**
  * GET /private/user/site-list?page={n}&pageSize={n}&q={search}
  *
- * Auth: Bearer idToken — attached automatically by the axios request
+ * Auth: Bearer accessToken — attached automatically by the axios request
  * interceptor. 401 triggers a silent refresh-and-retry.
  *
  * The optional `q` param does a case-insensitive substring match

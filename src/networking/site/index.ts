@@ -10,8 +10,8 @@ import { appAxios } from '../config';
  *
  * Drives every tab on SiteDetail (Summary, Cards, Alarms, Trend).
  *
- * Auth: Bearer idToken — attached automatically by the axios request
- * interceptor via `getValidIdToken()`. 401s trigger a single
+ * Auth: Bearer accessToken — attached automatically by the axios request
+ * interceptor via `getValidAccessToken()`. 401s trigger a single
  * refresh-and-retry before the user is signed out.
  *
  * Spec: openapi.yaml#/paths/protected/data/all/{id}/get
@@ -41,7 +41,7 @@ export const getSiteAllData = async (
  * Site configuration — devices, inverters, parameter codes, dashboard
  * layout, etc. Used as input by every per-site API that follows.
  *
- * Auth: Bearer idToken — attached automatically by the axios request
+ * Auth: Bearer accessToken — attached automatically by the axios request
  * interceptor. 401s trigger a single refresh-and-retry.
  *
  * Spec: openapi.yaml#/paths/protected/config/site/{id}/get
@@ -142,7 +142,7 @@ export interface InverterReportResponse {
  *   - Year      → `year=<YYYY>`
  *   - Custom    → `start=<epoch_ms>&end=<epoch_ms>`
  *
- * Auth: Bearer idToken — attached automatically by the axios request
+ * Auth: Bearer accessToken — attached automatically by the axios request
  * interceptor.
  *
  * Spec: openapi.yaml#/paths/protected/data/v2/report/{id}/get
@@ -202,7 +202,7 @@ export interface EnergyReportResponse {
  * `getInverterReport` — only `type` differs. Drives the Performance
  * Report pie chart by aggregating the rows.
  *
- * Auth: Bearer idToken — attached automatically by the axios request
+ * Auth: Bearer accessToken — attached automatically by the axios request
  * interceptor.
  *
  * Spec: openapi.yaml#/paths/protected/data/v2/report/{id}/get
@@ -252,7 +252,7 @@ export interface TrendDataArgs {
  * is one time bucket keyed by `time` (unix-ms) plus one key per the
  * section's aggregation `param`s.
  *
- * Auth: Bearer idToken — attached automatically by the axios request
+ * Auth: Bearer accessToken — attached automatically by the axios request
  * interceptor.
  */
 export const getTrendData = async (

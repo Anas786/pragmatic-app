@@ -1,7 +1,8 @@
 /**
  * Minimal JWT helpers — decode payload without verification.
- * We only use this for reading Cognito idToken claims on-device. Cognito
- * already validates tokens server-side at API Gateway via the authorizer.
+ * We only use this on-device to read Cognito claims (idToken → user profile,
+ * accessToken → expiry). Cognito already validates tokens server-side at API
+ * Gateway via the authorizer.
  */
 
 export interface CognitoIdTokenClaims {
@@ -26,6 +27,24 @@ export interface CognitoIdTokenClaims {
   'custom:companyId'?: string;
   'custom:company'?: string;
   'custom:phone'?: string;
+}
+
+/**
+ * Cognito accessToken claims — the token the mobile API authenticates with.
+ * Deliberately NOT a superset of the idToken: an access token carries no
+ * `email` and no `custom:*` attributes, only the basics below. Anything
+ * user-profile-shaped must come from the idToken (see `userFromClaims`).
+ */
+export interface CognitoAccessTokenClaims {
+  sub: string;
+  username?: string;
+  client_id?: string;
+  scope?: string;
+  'cognito:groups'?: string[];
+  iss?: string;
+  exp: number;
+  iat: number;
+  token_use?: 'access';
 }
 
 const base64UrlDecode = (input: string): string => {
