@@ -13,15 +13,32 @@
  *   - `Y_AXIS_LABEL_FORMATTER` — the above wrapped as an axisLabel formatter
  */
 
+import type { ComponentProps } from 'react';
+import type { WebView } from 'react-native-webview';
 import { Scheme } from 'src/theme';
 
-// react-native-echarts-pro hardcodes androidHardwareAccelerationDisabled
-// on its WebView but spreads `webViewSettings` AFTER it — so this
-// override wins and re-enables GPU compositing on Android. Module-level
-// so the prop reference stays stable across renders. Pass it to EVERY
-// RNEChartsPro instance (CLAUDE.md §19) — a missed one silently regresses
-// that chart to software rendering on Android.
-export const WEBVIEW_SETTINGS = { androidHardwareAccelerationDisabled: false };
+// Spread by react-native-echarts-pro onto its <WebView> AFTER its own
+// defaults, so these win. Module-level so the prop reference stays stable
+// across renders. Pass it to EVERY RNEChartsPro instance (CLAUDE.md §19,
+// enforced by __tests__/chartWebViewSettings.test.ts). `satisfies` checks
+// every key against react-native-webview's own props — echarts-pro types
+// `webViewSettings` as `any`, so a misspelt or removed prop would otherwise
+// be dropped silently (that is how `androidHardwareAccelerationDisabled`,
+// which react-native-webview ≥ 11 no longer has, sat here as a no-op; the
+// charts are GPU-composited by default — androidLayerType 'none').
+//
+// autoManageStatusBarEnabled: false — iOS. react-native-webview 13.16
+// snapshots the status-bar style when a WebView is created and re-applies
+// that snapshot on EVERY window show / hide anywhere in the app (alerts,
+// keyboards, dev banners — RNCWebViewImpl.m showFullScreenVideoStatusBars /
+// hideFullScreenVideoStatusBars, observers on object:nil). Fabric pools the
+// views, so the snapshot outlives the chart: a chart first drawn in dark
+// mode turned the status bar white-on-white in light mode after the
+// Sign-out alert (reproduced in Release, 2026-10-01). RN <StatusBar> must
+// stay the only writer of the style.
+export const WEBVIEW_SETTINGS = {
+  autoManageStatusBarEnabled: false,
+} satisfies Partial<ComponentProps<typeof WebView>>;
 
 /**
  * The scheme-derived colour/typography subset every echarts `option`

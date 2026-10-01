@@ -768,11 +768,32 @@ respect:
 - **Entrance-animation cap convention**: `entering` only for `index <
   ANIM_LIMIT`, and the wrapper-type decision is frozen at first mount
   (`useState(() => ...)`) so list reordering can't remount rows (SiteCard).
-- **ECharts WebViews**: always pass `webViewSettings={{
-  androidHardwareAccelerationDisabled: false }}` (the lib defaults to software
-  rendering) and wrap `RNEChartsPro` in a memo so parent state changes don't
-  rebuild its ~1MB inline-HTML props (see `ReportChart` in
+- **ECharts WebViews**: always pass `webViewSettings={WEBVIEW_SETTINGS}`
+  (`chartConfig.ts`) and wrap `RNEChartsPro` in a memo so parent state
+  changes don't rebuild its ~1MB inline-HTML props (see `ReportChart` in
   PerformanceReportCard, memoized `TrendComboChart`).
+  - `WEBVIEW_SETTINGS = { autoManageStatusBarEnabled: false }` — iOS.
+    react-native-webview 13.16 snapshots the status-bar style when a WebView
+    is created and re-applies it on EVERY window show/hide in the app
+    (alerts, keyboards, Metro's dev banners); Fabric pools the views, so the
+    stale snapshot outlives the chart. A chart first drawn in dark mode
+    turned the bar white-on-white in light mode after the Sign-out alert
+    (reproduced in Release 2026-10-01, fixed + re-verified both ways; in
+    Debug every "Refreshing…" banner did it). RN `<StatusBar>` must stay the
+    ONLY writer of the status-bar style.
+  - The object is typed `satisfies Partial<ComponentProps<typeof WebView>>`
+    because echarts-pro types `webViewSettings` as `any`: the old
+    `androidHardwareAccelerationDisabled: false` key (and echarts-pro's own
+    hard-coded `true`) is NOT a react-native-webview ≥ 11 prop — both were
+    silent no-ops; Android charts are GPU-composited by default
+    (`androidLayerType` 'none'). Don't switch to `androidLayerType:
+    'hardware'` without a device test.
+  - `__tests__/chartWebViewSettings.test.ts` parses `src` with the
+    TypeScript compiler API: every element imported from
+    `react-native-echarts-pro` must end with
+    `webViewSettings={WEBVIEW_SETTINGS}`, every direct `react-native-webview`
+    element with `autoManageStatusBarEnabled={false}` (no later spread or
+    duplicate).
 - **`react-native-echarts-pro` is PATCHED** via `patch-package`
   (`patches/react-native-echarts-pro+1.9.3.patch`, applied by the
   `postinstall` script). Its `getInstance()` never cleared the previous
