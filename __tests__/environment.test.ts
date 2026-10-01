@@ -93,16 +93,20 @@ jest.mock(
 
 jest.mock(
   '../src/components/screens/Authenticated/SiteDetail/components/useSldModel',
-  () => ({
-    useSldModel: () => ({
+  () => {
+    const layout = {
       graph: { nodes: [{ id: 'n1' }], edges: [] },
-      bounds: { x: 0, y: 0, width: 10, height: 10 },
-      resolve: () => undefined,
+      bounds: { minX: -12, minY: -12, width: 360, height: 605 },
+      focus: { x: 180, y: 370 },
       mode: 'grouped',
       setMode: () => undefined,
-      canGroup: false,
-    }),
-  }),
+      canGroup: true,
+    };
+    return {
+      useSldLayout: () => ({ ...layout, groups: [] }),
+      useSldModel: () => ({ ...layout, resolve: () => undefined }),
+    };
+  },
 );
 
 import SummaryView from '../src/components/screens/Authenticated/SiteDetail/components/SummaryView';
@@ -111,9 +115,11 @@ import { HeroStatusBadge } from '../src/components/common/HeroRow';
 import PulseDot from '../src/components/common/PulseDot';
 import Skeleton from '../src/components/common/Skeleton';
 import {
-  SLD_INLINE_HEIGHT,
+  SLD_INLINE_MAX_HEIGHT,
+  SLD_INLINE_MIN_HEIGHT,
   SLD_INLINE_WIDTH,
   SLDDiagramPlaceholder,
+  sldInlineHeight,
 } from '../src/components/screens/Authenticated/SiteDetail/components/SLDDiagram';
 
 /* ─────────── fixtures ─────────── */
@@ -398,10 +404,15 @@ describe('Energy-flow section', () => {
     expect(texts).toContain('Live');
     expect(a11yLabels(root)).toContain('Live data');
     expect(texts).not.toContain('No energy-flow diagram for this site');
-    // Deferred mount pending → the placeholder has the viewport's geometry.
+    // Deferred mount pending → the placeholder already has the viewport's
+    // geometry: the inline width and the DIAGRAM's own height (the panel
+    // follows its phone layout), so the 300 ms swap doesn't jump.
     const skeleton = root.findByType(SLDDiagramPlaceholder).findByType(Skeleton);
     expect(skeleton.props.width).toBe(SLD_INLINE_WIDTH);
-    expect(skeleton.props.height).toBe(SLD_INLINE_HEIGHT);
+    const height = sldInlineHeight({ minX: -12, minY: -12, width: 360, height: 605 }, true);
+    expect(skeleton.props.height).toBe(height);
+    expect(height).toBeGreaterThanOrEqual(SLD_INLINE_MIN_HEIGHT);
+    expect(height).toBeLessThanOrEqual(SLD_INLINE_MAX_HEIGHT);
   });
 
   it('diagram + stale site stamp → no Live tag (same stamp as the badge)', () => {

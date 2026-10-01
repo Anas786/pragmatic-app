@@ -3,9 +3,9 @@
  * ("all solar in one box, totalled; same for wind, …").
  *
  * Implemented as a PURE TRANSFORM of the graph + a resolver wrapper, so every
- * downstream piece (getGraphBounds, resolveNodeRects de-overlap, the RN card
- * layer, the Skia edge layer, evalAnimation / isEdgeAnimated) runs unchanged
- * on the grouped graph:
+ * downstream piece (the phone layout, resolveNodeRects de-overlap, the RN
+ * card layer, the Skia edge layer, evalAnimation / isEdgeAnimated) runs
+ * unchanged on the grouped graph:
  *
  *   - {@link buildSldGrouping}(graph) → { graph, groups } — STRUCTURE ONLY.
  *     Depends on nothing but the graph (siteConfig), and is cached per graph
@@ -21,7 +21,6 @@
 import {
   SLDEdge,
   SLDGraph,
-  SLDHandle,
   SLDNode,
   SLDNodeIcon,
   SLDNodeKey,
@@ -30,6 +29,7 @@ import {
 import { energyPalette } from 'src/theme/tokens';
 import {
   bezierControlPoints,
+  facingHandles,
   getGraphBounds,
   handlePoint,
   isEdgeAnimated,
@@ -39,6 +39,7 @@ import {
   resolveNodeRects,
   SLDPoint,
   SLDRect,
+  SLD_EDGE_STUB,
   SLD_NODE_H,
   SLD_NODE_W,
 } from './sld';
@@ -510,10 +511,12 @@ const placeGroup = (members: SLDNode[], targets: SLDNode[]): GroupPlacement => {
 /* ─────────── route clearance ─────────── */
 
 /**
- * Rendered height of a source card with `rows` metric rows — mirrors the
- * `SLDCanvas` source-card styles (padding 11/12, 42pt icon header, divider
- * 9 + hairline + 7, 18pt rows spaced 5, 1pt borders). Cards use `minHeight`,
- * so they're never shorter than the designed {@link SLD_NODE_H} footprint.
+ * Height of a group card with `rows` metric rows in the BACKEND canvas's
+ * geometry (the 214 × {@link SLD_NODE_H} footprint: padding 11/12, 42pt
+ * icon header, divider 9 + hairline + 7, 18pt rows spaced 5, 1pt borders).
+ * Group placement + the route-clearance settle run in the backend's
+ * coordinate space, so they keep that geometry; what is DRAWN is the phone
+ * layout's card (`sldPhoneCardHeight`, src/utils/sldPhoneLayout.ts).
  */
 export const sldCardRenderedHeight = (rows: number): number =>
   Math.max(SLD_NODE_H, 11 + 42 + 16.5 + rows * 18 + Math.max(0, rows - 1) * 5 + 12 + 2);
@@ -583,9 +586,10 @@ export const sldEdgeRoutes = (edge: SLDEdge, rects: Map<string, SLDRect>): SLDPo
   if (!s || !t) return [];
   const from = handlePoint(s, edge.sourceHandle);
   const to = handlePoint(t, edge.targetHandle);
-  const [c1, c2] = bezierControlPoints(from, edge.sourceHandle, to, edge.targetHandle);
+  const stub = edge.routeStub ?? SLD_EDGE_STUB;
+  const [c1, c2] = bezierControlPoints(from, edge.sourceHandle, to, edge.targetHandle, stub);
   return [
-    orthogonalEdgePoints(from, edge.sourceHandle, to, edge.targetHandle),
+    orthogonalEdgePoints(from, edge.sourceHandle, to, edge.targetHandle, stub),
     sampleBezier(from, c1, c2, to),
   ];
 };
@@ -612,18 +616,6 @@ const withFacingHandles = (
     const [sourceHandle, targetHandle] = facingHandles(sr, tr);
     return { ...e, sourceHandle, targetHandle };
   });
-
-/** Handles facing each other along the dominant axis (source, target). */
-const facingHandles = (src: SLDRect, tgt: SLDRect): [SLDHandle, SLDHandle] => {
-  const s = centreOf(src);
-  const t = centreOf(tgt);
-  const dx = s.x - t.x;
-  const dy = s.y - t.y;
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    return dx >= 0 ? ['l', 'r'] : ['r', 'l'];
-  }
-  return dy >= 0 ? ['t', 'b'] : ['b', 't'];
-};
 
 const cache = new WeakMap<SLDGraph, SldGrouping>();
 

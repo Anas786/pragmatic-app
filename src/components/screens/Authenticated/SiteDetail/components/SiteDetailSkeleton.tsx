@@ -10,18 +10,19 @@ import {
   useScheme,
   useThemedStyles,
 } from 'src/theme';
-import { normalizeHeight } from 'src/utils/format';
 import {
   TAB_PILL_HEIGHT,
   TAB_STRIP_GUTTER,
   TAB_TRACK_INSET,
 } from './TabSelector';
+import { SLD_INLINE_DEFAULT_HEIGHT } from './SLDDiagram';
 
 const HERO_HEIGHT = 188;
 const ENV_TILE_HEIGHT = 130;
-// Same height as the inline SLD panel / DiagramPlaceholder, so the
-// skeleton → Summary swap doesn't move anything below it.
-const SLD_HEIGHT = normalizeHeight(480);
+// The inline SLD panel's height follows its diagram and isn't known before
+// the site config loads, so the skeleton uses the panel's documented default
+// (the SLD is the last Summary section — nothing below it can jump).
+const SLD_HEIGHT = SLD_INLINE_DEFAULT_HEIGHT;
 // Approximate chip widths for the six visible tabs (Alarms is hidden):
 // Summary, Cards, Live, Analysis, Reports, Tables.
 // Only the HEIGHT must match TabSelector exactly (TAB_PILL_HEIGHT +

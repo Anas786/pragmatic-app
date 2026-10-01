@@ -1,7 +1,7 @@
 /**
- * Pure SLD viewport geometry: safe-area insets through the full-screen
- * rotation, the Grouped/Units pill's footprint, and the initial "fit the
- * whole diagram" transform.
+ * Pure SLD viewport geometry: the Grouped/Units pill's footprint, the
+ * initial fit (fill the WIDTH, scroll-pan the rest) and the inline panel's
+ * content-driven height.
  *
  * No React / React Native imports — unit-tested in
  * `__tests__/sldViewportFit.test.ts`.
@@ -14,10 +14,19 @@
  *     viewportCentre + (translateX, translateY) + scale · (p − frameCentre)
  *
  * i.e. the translation is in VIEWPORT points (not scaled) and moves the
- * diagram's centre away from the viewport's centre.
+ * diagram's centre away from the viewport's centre. A scale change alone
+ * therefore pivots on the FRAME centre; zooming keeps the content under the
+ * viewport centre fixed by scaling the translation with it
+ * ({@link sldZoomTo}), and every resting translation is clamped to the fit
+ * area ({@link sldClampTranslate}) so the diagram can't be zoomed or panned
+ * out of view.
+ *
+ * Both hosts are portrait and unrotated (the phone layout is a tall,
+ * 2-column diagram — see src/utils/sldPhoneLayout.ts), so safe-area insets
+ * are used as the device reports them.
  */
 
-/** Edge insets in points, in the frame they're expressed in. */
+/** Edge insets in points. */
 export interface SldInsets {
   top: number;
   right: number;
@@ -28,47 +37,14 @@ export interface SldInsets {
 export const SLD_NO_INSETS: SldInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 
 /**
- * Rotation applied to the full-screen SLD container (RN `rotate`, degrees).
- * The OS orientation never changes (that crashes Fabric — see
- * SLDFullscreenScreen); a portrait container is turned by this angle to read
- * as landscape. `SLDFullscreenScreen` builds its transform from this constant
- * and maps the safe-area insets with {@link rotateInsets}, so the two can't
- * drift apart. NOTE: `SLDViewport`'s `rotated` pan remap
- * (`tx += dy; ty -= dx`) is the inverse of a +90° turn — change it too if
- * this ever changes.
+ * Largest initial scale: a graph unit never opens larger than a point. The
+ * phone layout is ~360 units wide and sized for ≈ 1, so wide phones and
+ * tablets show it at its designed size (centred) instead of blowing it up.
  */
-export const SLD_FULLSCREEN_ROTATION_DEG = 90;
+export const SLD_MAX_FIT_SCALE = 1;
 
-/** Clockwise edge order — the order a clockwise quarter-turn walks through. */
-const EDGES_CW: ReadonlyArray<keyof SldInsets> = ['top', 'right', 'bottom', 'left'];
-
-/**
- * Device (portrait) safe-area insets → the insets of content drawn inside a
- * full-screen container rotated by `rotationDeg` (quarter turns only; other
- * angles round to the nearest quarter turn).
- *
- * Derivation: RN's `rotate: θ` is CLOCKWISE on screen (y grows downward):
- * a content direction `d` is drawn along `R(θ)·d`, R = [[cos −sin] [sin cos]].
- * For θ = +90°, R = [[0 −1] [1 0]]:
- *   content right (+x) → screen (0, +1)  = device BOTTOM
- *   content down  (+y) → screen (−1, 0)  = device LEFT
- *   content left  (−x) → screen (0, −1)  = device TOP
- *   content up    (−y) → screen (+1, 0)  = device RIGHT
- * so the content's left edge lies along the device's top edge (the notch /
- * Dynamic Island), its top along the device's right, its right along the
- * device's bottom (home indicator / Android nav bar) and its bottom along
- * the device's left. Generally, each clockwise quarter turn moves content
- * edge i (in top→right→bottom→left order) onto device edge i + 1:
- *   content[EDGES_CW[i]] = device[EDGES_CW[(i + q) mod 4]].
- */
-export const rotateInsets = (device: SldInsets, rotationDeg: number): SldInsets => {
-  const q = (((Math.round(rotationDeg / 90) % 4) + 4) % 4);
-  const out = { ...SLD_NO_INSETS };
-  EDGES_CW.forEach((edge, i) => {
-    out[edge] = device[EDGES_CW[(i + q) % 4]];
-  });
-  return out;
-};
+/** Border of the inline viewport frame, points (fullscreen has none). */
+export const SLD_VIEWPORT_BORDER = 1;
 
 /** A fixed-size overlay anchored to the TOP-RIGHT corner of the safe area. */
 export interface SldOverlayBox {
@@ -152,20 +128,40 @@ export interface SldFitInput {
   /** Diagram (graph bounds) size, in graph units. */
   contentWidth: number;
   contentHeight: number;
-  /** Safe-area insets in the VIEWPORT's frame (already rotated). */
+  /** Safe-area insets in the viewport's frame. */
   insets?: SldInsets;
   /** Persistent overlay the fitted diagram must not sit under. */
   overlay?: SldOverlayBox;
+  /** Initial-scale cap (default {@link SLD_MAX_FIT_SCALE}). */
+  maxScale?: number;
+  /**
+   * Content y (FRAME coordinates, bounds origin) to centre when the diagram
+   * is taller than the view — the hub. Defaults to the frame's centre.
+   */
+  focusY?: number;
 }
 
 /** Strip given up so the diagram clears the overlay. */
-export type SldFitReserve = 'none' | 'top' | 'right';
+export type SldFitReserve = 'none' | 'top';
 
 export interface SldFit {
+  /** Initial scale: the diagram's width fills the safe area (≤ maxScale). */
   scale: number;
   translateX: number;
   translateY: number;
+  /**
+   * Scale that shows the WHOLE diagram in the same area (≤ `scale`): the
+   * zoom-out floor, so a diagram taller than the view can be pinched out to
+   * an overview.
+   */
+  overviewScale: number;
   reserve: SldFitReserve;
+  /**
+   * The area the diagram was fitted into, as insets from the view's edges:
+   * the safe area plus the overlay's top strip when `reserve` is `'top'`.
+   * Zoom / pan clamp to the same area ({@link sldClampTranslate}).
+   */
+  insets: SldInsets;
 }
 
 interface Rect {
@@ -175,20 +171,133 @@ interface Rect {
   h: number;
 }
 
-/** Whole diagram, as large as possible, centred in the inset rect. */
-const fitInto = (
-  { viewWidth: W, viewHeight: H, contentWidth, contentHeight }: SldFitInput,
-  ins: SldInsets,
-  reserve: SldFitReserve,
-): SldFit => {
+/**
+ * Clamp a translation on ONE axis (see the transform model above) so the
+ * diagram box — `content × scale` — stays inside the area between the
+ * insets when it fits there, and covers that area (no empty band at either
+ * edge) when it is larger. Pass the x-axis values for `translateX`
+ * (view width, content width, left / right insets) and the y-axis ones for
+ * `translateY`.
+ *
+ * `'worklet'`: the gesture handlers call it on the UI thread when a pan or
+ * pinch ends; the JS-thread callers (fit, zoom buttons) call it normally.
+ */
+export const sldClampTranslate = (
+  translate: number,
+  scale: number,
+  view: number,
+  content: number,
+  insetStart: number,
+  insetEnd: number,
+): number => {
+  'worklet';
+  const box = content * scale;
+  // The box's far edge on the area's far edge … its near edge on the near
+  // edge; which bound is the lower one depends on whether the box fits.
+  const toEnd = view / 2 - insetEnd - box / 2;
+  const toStart = insetStart - view / 2 + box / 2;
+  return Math.min(Math.max(translate, Math.min(toEnd, toStart)), Math.max(toEnd, toStart));
+};
+
+/** Zoom factor of one +/- button press. */
+export const SLD_ZOOM_STEP = 1.25;
+
+/**
+ * Zoom range for a fit: down to 0.9 × the whole-diagram overview (so a
+ * diagram taller than the view can be pinched out to see all of it), up to
+ * 3 × the fit (at least 2 units per point).
+ */
+export const sldZoomLimits = (fit: SldFit): { min: number; max: number } => ({
+  min: fit.overviewScale * 0.9,
+  max: Math.max(fit.scale * 3, 2),
+});
+
+/** What {@link sldZoomTo} needs to know about the viewport. */
+export interface SldViewGeometry {
+  viewWidth: number;
+  viewHeight: number;
+  contentWidth: number;
+  contentHeight: number;
+  /** The fit area (`SldFit.insets`). */
+  insets: SldInsets;
+}
+
+export interface SldViewTransform {
+  scale: number;
+  translateX: number;
+  translateY: number;
+}
+
+/**
+ * The transform after zooming `from` to `scale` about the VIEWPORT centre:
+ * the translation scales with the zoom (so the content point under the
+ * centre stays put), then is clamped to the fit area — zooming out to the
+ * overview always ends with the whole diagram in view, wherever the hub
+ * focus had panned it. A transform that is already in the area never needs
+ * the clamp when zooming IN.
+ */
+export const sldZoomTo = (
+  geo: SldViewGeometry,
+  from: SldViewTransform,
+  scale: number,
+): SldViewTransform => {
+  const ratio = scale / from.scale;
+  return {
+    scale,
+    translateX: sldClampTranslate(
+      from.translateX * ratio,
+      scale,
+      geo.viewWidth,
+      geo.contentWidth,
+      geo.insets.left,
+      geo.insets.right,
+    ),
+    translateY: sldClampTranslate(
+      from.translateY * ratio,
+      scale,
+      geo.viewHeight,
+      geo.contentHeight,
+      geo.insets.top,
+      geo.insets.bottom,
+    ),
+  };
+};
+
+/**
+ * Fill the inset rect's WIDTH (capped at `maxScale`), centred horizontally.
+ * Vertically: a diagram that fits is centred; a taller one centres
+ * `focusY` (the hub), clamped so the diagram still covers the whole inset
+ * rect — no empty band above its top or below its bottom.
+ */
+const fitInto = (input: SldFitInput, ins: SldInsets, reserve: SldFitReserve): SldFit => {
+  const { viewWidth: W, viewHeight: H } = input;
+  const cw = Math.max(1, input.contentWidth);
+  const ch = Math.max(1, input.contentHeight);
   const availW = Math.max(1, W - ins.left - ins.right);
   const availH = Math.max(1, H - ins.top - ins.bottom);
+  const scale = Math.min(input.maxScale ?? SLD_MAX_FIT_SCALE, availW / cw);
+  // Centre of the inset rect, relative to the viewport centre.
+  const centreY = (ins.top - ins.bottom) / 2;
+  const boxH = ch * scale;
+  let translateY = centreY;
+  if (boxH > availH) {
+    const focusY = input.focusY ?? ch / 2;
+    translateY = sldClampTranslate(
+      centreY - scale * (focusY - ch / 2),
+      scale,
+      H,
+      ch,
+      ins.top,
+      ins.bottom,
+    );
+  }
   return {
-    scale: Math.min(availW / Math.max(1, contentWidth), availH / Math.max(1, contentHeight)),
-    // Centre of the inset rect, relative to the viewport centre.
+    scale,
     translateX: (ins.left - ins.right) / 2,
-    translateY: (ins.top - ins.bottom) / 2,
+    translateY,
+    overviewScale: Math.min(scale, availH / ch),
     reserve,
+    insets: ins,
   };
 };
 
@@ -208,18 +317,25 @@ const diagramBox = (input: SldFitInput, fit: SldFit): Rect => {
 const overlaps = (a: Rect, b: Rect): boolean =>
   a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
+/** Height of the strip a top reservation gives up for `overlay`. */
+export const sldOverlayStrip = (overlay: SldOverlayBox): number =>
+  overlay.edge + overlay.height + overlay.gap;
+
 /**
- * Initial fit: the whole diagram, centred in the safe area. With an
- * `overlay` (the persistent Grouped/Units pill, top-right), the diagram must
- * also clear it: when the plain fit's box would reach under the overlay (+
- * `gap`), the diagram is re-fitted with EITHER a top strip (down to the
- * overlay's bottom + gap) OR a right strip (left of it − gap) reserved,
- * whichever keeps the larger scale (ties → top). A diagram with spare room
- * — the common inline case — keeps its plain fit unchanged.
+ * Initial fit: the diagram's width fills the safe area (see `fitInto`).
+ * With an `overlay` (the persistent Grouped/Units pill, top-right), the
+ * diagram must also clear it: when the plain fit's box would reach under the
+ * overlay (+ `gap`), it is re-fitted with a top strip reserved (down to the
+ * overlay's bottom + gap). The scale is set by the width, so the strip costs
+ * no zoom — the diagram only moves down (the inline panel grows by the strip,
+ * see {@link sldPanelHeight}); a side strip could only shrink it, so it is
+ * never used. A diagram with spare room keeps its plain fit unchanged.
  *
  * Conservative by construction: the test uses the full graph BOUNDS, which
  * contain every card (`resolveNodeRects` clamps cards inside them), so a fit
- * that clears the bounds clears every card.
+ * that clears the bounds clears every card. A diagram taller than the view
+ * always reaches under the overlay somewhere; the top strip then keeps its
+ * TOP row clear whenever the view is panned to the top (the clamp above).
  */
 export const computeSldFit = (input: SldFitInput): SldFit => {
   const ins = input.insets ?? SLD_NO_INSETS;
@@ -234,12 +350,37 @@ export const computeSldFit = (input: SldFitInput): SldFit => {
     h: ov.height + ov.gap * 2,
   };
   if (!overlaps(diagramBox(input, plain), zone)) return plain;
+  return fitInto(input, { ...ins, top: ins.top + sldOverlayStrip(ov) }, 'top');
+};
 
-  const top = fitInto(input, { ...ins, top: ins.top + ov.edge + ov.height + ov.gap }, 'top');
-  const right = fitInto(
-    input,
-    { ...ins, right: ins.right + ov.edge + ov.width + ov.gap },
-    'right',
-  );
-  return top.scale >= right.scale ? top : right;
+export interface SldPanelHeightInput {
+  /** The panel's content-box width (inside its border). */
+  viewWidth: number;
+  contentWidth: number;
+  contentHeight: number;
+  /** Overlay the fit will reserve a top strip for (the mode pill). */
+  overlay?: SldOverlayBox;
+  minHeight: number;
+  maxHeight: number;
+  maxScale?: number;
+}
+
+/**
+ * Content-box height of an inline panel that shows the WHOLE diagram at the
+ * width-filling scale ({@link computeSldFit}), plus the pill's top strip,
+ * clamped to `[minHeight, maxHeight]` (`minHeight` wins if they cross).
+ * Past `maxHeight` the panel opens on the hub and the rest is panned.
+ */
+export const sldPanelHeight = ({
+  viewWidth,
+  contentWidth,
+  contentHeight,
+  overlay,
+  minHeight,
+  maxHeight,
+  maxScale = SLD_MAX_FIT_SCALE,
+}: SldPanelHeightInput): number => {
+  const scale = Math.min(maxScale, Math.max(1, viewWidth) / Math.max(1, contentWidth));
+  const needed = Math.ceil(contentHeight * scale + (overlay ? sldOverlayStrip(overlay) : 0));
+  return Math.max(minHeight, Math.min(maxHeight, needed));
 };

@@ -136,6 +136,24 @@ describe('AppText', () => {
     expect(fixed.props.allowFontScaling).toBe(false);
   });
 
+  it('fixedSize="exact" uses the size verbatim (canvas units — the SLD cards)', () => {
+    const t = render(
+      <>
+        <AppText fontSize={16} lineHeight={20} fixedSize="exact">
+          value
+        </AppText>
+        <AppText fontSize={4} fixedSize="exact">
+          tiny
+        </AppText>
+      </>,
+    );
+    const [value, tiny] = t.root.findAllByType(Text);
+    expect(flat(value.props.style).fontSize).toBe(16);
+    expect(flat(value.props.style).lineHeight).toBe(20);
+    expect(flat(tiny.props.style).fontSize).toBe(4); // no 11pt floor either
+    expect(value.props.allowFontScaling).toBe(false);
+  });
+
   it('variant sets weight/size; explicit props override it', () => {
     const t = render(
       <>

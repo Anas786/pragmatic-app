@@ -40,11 +40,15 @@ interface AppTextProps extends TextProps {
   /** Semantic colour role. `color` wins over `tone`; default 'primary'. */
   tone?: TextTone;
   /**
-   * Fixed-geometry canvases only (SLD node cards): no OS font scaling,
-   * no 11pt floor and the legacy size formula — renders exactly as the
-   * pre-v3 AppText did.
+   * Fixed-geometry canvases only: no OS font scaling and no 11pt floor.
+   *   - `true`    — the legacy size formula; renders exactly as the pre-v3
+   *                 AppText did (splash caption).
+   *   - `'exact'` — the size is used verbatim, in canvas units: for text
+   *                 inside a canvas that is itself scaled to the screen (SLD
+   *                 node cards), where width-scaling the font as well would
+   *                 scale it twice and break the canvas's layout maths.
    */
-  fixedSize?: boolean;
+  fixedSize?: boolean | 'exact';
   bold?: boolean;
   color?: ColorValue;
   style?: StyleProp<TextStyle>;
@@ -132,7 +136,12 @@ const AppText: FC<AppTextProps> = ({
     : 'regular';
 
   const requested = fontSize ?? v?.size ?? 14;
-  const scaled = fixedSize ? normalizeFontLegacy(requested) : normalizeFont(requested);
+  const scaled =
+    fixedSize === 'exact'
+      ? requested
+      : fixedSize
+        ? normalizeFontLegacy(requested)
+        : normalizeFont(requested);
   const size = fixedSize ? scaled : Math.max(MIN_FONT_SIZE, scaled);
   // How much the 11pt floor enlarged the text — line heights follow it so
   // a floored 10→11pt label with lineHeight 13 doesn't clip descenders.

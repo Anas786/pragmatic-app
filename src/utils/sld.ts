@@ -2,9 +2,9 @@
  * SLD graph geometry + value resolution helpers.
  *
  * The backend ships node `position`s in an absolute web-canvas space
- * (~1800×860). We honour those coordinates verbatim (graph space) and let the
- * outer pan/zoom surface explore them — these helpers stay in graph space and
- * never normalise, so they're resolution-independent.
+ * (~1800×860). On screen the diagram is re-arranged for a phone first
+ * (`buildSldPhoneLayout`, which assigns new positions + card sizes); these
+ * helpers stay in graph space and never normalise, so they serve both.
  */
 
 import {
@@ -47,8 +47,15 @@ export interface SLDPoint {
 export const isLogoNode = (node: SLDNode): boolean =>
   node.data.type === 'logo' || node.data.edgesConnect === 'target';
 
-/** Footprint (top-left + size) of a node in graph space. */
+/**
+ * Footprint (top-left + size) of a node in graph space: the node's own
+ * client-side `size` when a layout assigned one (the phone layout sizes
+ * every card), else the backend-canvas footprint.
+ */
 export const nodeRect = (node: SLDNode): SLDRect => {
+  if (node.size) {
+    return { x: node.position.x, y: node.position.y, w: node.size.w, h: node.size.h };
+  }
   const logo = isLogoNode(node);
   return {
     x: node.position.x,
@@ -140,20 +147,46 @@ export interface SLDEdgeGeometry {
 }
 
 /**
+ * Length of the perpendicular stub an orthogonal edge leaves / enters a
+ * handle with, graph units (the default; an edge may carry its own
+ * `routeStub`). The phone layout spaces linked cards 2 × this apart so its
+ * bus routes have no back-tracking segments.
+ */
+export const SLD_EDGE_STUB = 20;
+
+/**
  * React-Flow-style handle-anchored bezier. Control points push outward along
  * each handle's normal, so the curve leaves/enters perpendicular to the node
- * side (matching the web diagram).
+ * side (matching the web diagram). `stub` = the edge's `routeStub`.
  */
 export const buildEdgeGeometry = (
   from: SLDPoint,
   fromHandle: SLDHandle,
   to: SLDPoint,
   toHandle: SLDHandle,
+  stub: number = SLD_EDGE_STUB,
 ): SLDEdgeGeometry => {
-  const [c1, c2] = bezierControlPoints(from, fromHandle, to, toHandle);
+  const [c1, c2] = bezierControlPoints(from, fromHandle, to, toHandle, stub);
   const path = `M ${from.x} ${from.y} C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${to.x} ${to.y}`;
   return { path, arrowPath: buildArrowPath(c2, to) };
 };
+
+/**
+ * How far a control point sits out along its handle's normal: half the
+ * distance the OTHER end lies ahead along that normal (React Flow's rule),
+ * or `stub` when it lies level with / behind the handle.
+ *
+ * Bounded by the gap the curve crosses — not by the edge's length — so the
+ * curve's control polygon (and therefore the curve: a bezier stays inside
+ * its control points' hull) never reaches past the far end's line. In the
+ * phone layout that keeps every curve inside the gap its orthogonal route
+ * uses: the bus between rows, the trunk between the columns, the lane
+ * outside a stack (a level/behind end bulges ¾ · stub). A length-based
+ * reach (the old max(48, 0.4 · length)) swung inner-side curves across the
+ * trunk into the other column, behind its cards.
+ */
+const controlReach = (ahead: number, stub: number): number =>
+  ahead > 0 ? ahead / 2 : stub;
 
 /** The two cubic control points {@link buildEdgeGeometry} draws with. */
 export const bezierControlPoints = (
@@ -161,21 +194,30 @@ export const bezierControlPoints = (
   fromHandle: SLDHandle,
   to: SLDPoint,
   toHandle: SLDHandle,
+  stub: number = SLD_EDGE_STUB,
 ): [SLDPoint, SLDPoint] => {
-  const dist = Math.hypot(to.x - from.x, to.y - from.y);
-  const k = Math.max(48, dist * 0.4);
   const ds = handleDir(fromHandle);
   const dt = handleDir(toHandle);
+  const ks = controlReach((to.x - from.x) * ds.x + (to.y - from.y) * ds.y, stub);
+  const kt = controlReach((from.x - to.x) * dt.x + (from.y - to.y) * dt.y, stub);
   return [
-    { x: from.x + ds.x * k, y: from.y + ds.y * k },
-    { x: to.x + dt.x * k, y: to.y + dt.y * k },
+    { x: from.x + ds.x * ks, y: from.y + ds.y * ks },
+    { x: to.x + dt.x * kt, y: to.y + dt.y * kt },
   ];
 };
+
+/**
+ * Arrowhead length, graph units. The phone layout renders at ≈ 1 pt per
+ * unit (the old backend canvas fitted at ≈ 0.2), so it is sized for that:
+ * shorter than the orthogonal stub ({@link SLD_EDGE_STUB}), so the head
+ * never wraps round the last bend.
+ */
+const ARROW_LEN = 11;
 
 /** Closed-triangle arrowhead at `tip`, oriented along (tip - ctrl). */
 export const buildArrowPath = (ctrl: SLDPoint, tip: SLDPoint): string => {
   const angle = Math.atan2(tip.y - ctrl.y, tip.x - ctrl.x);
-  const len = 16;
+  const len = ARROW_LEN;
   const spread = Math.PI / 7;
   const lx = tip.x - len * Math.cos(angle - spread);
   const ly = tip.y - len * Math.sin(angle - spread);
@@ -194,8 +236,9 @@ export const buildOrthogonalEdgeGeometry = (
   fromHandle: SLDHandle,
   to: SLDPoint,
   toHandle: SLDHandle,
+  stub: number = SLD_EDGE_STUB,
 ): SLDEdgeGeometry => {
-  const clean = orthogonalEdgePoints(from, fromHandle, to, toHandle);
+  const clean = orthogonalEdgePoints(from, fromHandle, to, toHandle, stub);
   const path = clean
     .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`)
     .join(' ');
@@ -204,27 +247,45 @@ export const buildOrthogonalEdgeGeometry = (
   return { path, arrowPath: buildArrowPath(prev, tip) };
 };
 
-/** The polyline vertices {@link buildOrthogonalEdgeGeometry} draws through. */
+/**
+ * The polyline vertices {@link buildOrthogonalEdgeGeometry} draws through.
+ * `stub` is the perpendicular run at each end (the edge's `routeStub`).
+ *
+ * Handles on opposite / crossing sides bend half-way between the stubs.
+ * Handles on the SAME side (`l`/`l`, `t`/`t`, …) run along the OUTERMOST
+ * stub instead, wrapping round both cards — a half-way bend there would
+ * double back through the card whose stub sits farther out.
+ */
 export const orthogonalEdgePoints = (
   from: SLDPoint,
   fromHandle: SLDHandle,
   to: SLDPoint,
   toHandle: SLDHandle,
+  stub: number = SLD_EDGE_STUB,
 ): SLDPoint[] => {
   const ds = handleDir(fromHandle);
   const dt = handleDir(toHandle);
-  const STUB = 20;
-  const p1 = { x: from.x + ds.x * STUB, y: from.y + ds.y * STUB };
-  const p2 = { x: to.x + dt.x * STUB, y: to.y + dt.y * STUB };
+  const p1 = { x: from.x + ds.x * stub, y: from.y + ds.y * stub };
+  const p2 = { x: to.x + dt.x * stub, y: to.y + dt.y * stub };
   const sourceH = ds.x !== 0;
   const targetH = dt.x !== 0;
 
   const pts: SLDPoint[] = [from, p1];
   if (sourceH && targetH) {
-    const midX = (p1.x + p2.x) / 2;
+    const midX =
+      ds.x !== dt.x
+        ? (p1.x + p2.x) / 2
+        : ds.x < 0
+          ? Math.min(p1.x, p2.x)
+          : Math.max(p1.x, p2.x);
     pts.push({ x: midX, y: p1.y }, { x: midX, y: p2.y });
   } else if (!sourceH && !targetH) {
-    const midY = (p1.y + p2.y) / 2;
+    const midY =
+      ds.y !== dt.y
+        ? (p1.y + p2.y) / 2
+        : ds.y < 0
+          ? Math.min(p1.y, p2.y)
+          : Math.max(p1.y, p2.y);
     pts.push({ x: p1.x, y: midY }, { x: p2.x, y: midY });
   } else if (sourceH) {
     pts.push({ x: p2.x, y: p1.y });
@@ -237,6 +298,19 @@ export const orthogonalEdgePoints = (
   return pts.filter(
     (p, i) => i === 0 || p.x !== pts[i - 1].x || p.y !== pts[i - 1].y,
   );
+};
+
+/**
+ * Handles facing each other along the dominant axis between two rects'
+ * centres, as `[source, target]` (source right of target → `l` / `r`, …).
+ */
+export const facingHandles = (src: SLDRect, tgt: SLDRect): [SLDHandle, SLDHandle] => {
+  const dx = src.x + src.w / 2 - (tgt.x + tgt.w / 2);
+  const dy = src.y + src.h / 2 - (tgt.y + tgt.h / 2);
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    return dx >= 0 ? ['l', 'r'] : ['r', 'l'];
+  }
+  return dy >= 0 ? ['t', 'b'] : ['b', 't'];
 };
 
 /* ─────────── value resolution ─────────── */
@@ -530,6 +604,8 @@ const normalizeSldEdge = (raw: unknown): SLDEdge | null => {
   };
 };
 
+const sldGraphCache = new WeakMap<object, SLDGraph | null>();
+
 /**
  * Read + normalize `siteConfig.siteComponents.sldV2` into a typed
  * {@link SLDGraph}. Mirrors {@link selectTrends} — every malformed node/edge
@@ -537,9 +613,22 @@ const normalizeSldEdge = (raw: unknown): SLDEdge | null => {
  * returned when the site has no diagram configured (caller shows an empty
  * state). The renderer is value-source-agnostic, so the only remaining step
  * is feeding it {@link makeLiveResolver}.
+ *
+ * Cached per config reference: React Query hands every consumer (the
+ * Summary section, the inline diagram, the full-screen route) the same
+ * config object, so they share ONE graph — and through it the grouping and
+ * phone-layout caches, which are keyed by graph reference. Treat the result
+ * as read-only.
  */
 export const selectSldGraph = (config: unknown): SLDGraph | null => {
   if (!config || typeof config !== 'object') return null;
+  if (sldGraphCache.has(config)) return sldGraphCache.get(config) ?? null;
+  const graph = readSldGraph(config);
+  sldGraphCache.set(config, graph);
+  return graph;
+};
+
+const readSldGraph = (config: object): SLDGraph | null => {
   const components = (config as Record<string, unknown>).siteComponents;
   if (!components || typeof components !== 'object') return null;
   const sld = (components as Record<string, unknown>).sldV2;

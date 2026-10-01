@@ -68,6 +68,12 @@ export interface SLDNode {
   type: string;
   position: SLDPosition;
   data: SLDNodeData;
+  /**
+   * Card footprint in graph units. Client-side only (never shipped by the
+   * backend): the phone layout (`buildSldPhoneLayout`) sizes every card it
+   * places. Absent ⇒ the backend-canvas footprint (`nodeRect`).
+   */
+  size?: { w: number; h: number };
 }
 
 export interface SLDEdgeMarker {
@@ -100,6 +106,13 @@ export interface SLDEdge {
    * can't express. It takes priority over the node's condition.
    */
   data?: { type?: string; mode?: 'flow' | 'idle'; animation?: SLDNodeAnimation };
+  /**
+   * Perpendicular run at each end of this edge's route, graph units.
+   * Client-side only (never shipped by the backend): the phone layout sets
+   * it on a nested side lane so lanes to different parents never share one
+   * vertical line. Absent ⇒ the default stub (`SLD_EDGE_STUB`).
+   */
+  routeStub?: number;
 }
 
 export interface SLDGraph {

@@ -466,7 +466,9 @@ const SummaryView: FC = () => {
         ) : showDiagram && diagramState === 'ready' ? (
           <SLDDiagram />
         ) : (
-          <SLDDiagramPlaceholder />
+          // Sized to the diagram's own (phone-layout) height once the config
+          // is known, so the 300 ms swap lands without a jump.
+          <SLDDiagramPlaceholder siteId={siteId} />
         )}
       </Animated.View>
     </Container>

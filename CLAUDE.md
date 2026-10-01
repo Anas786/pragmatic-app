@@ -837,7 +837,46 @@ respect:
   pan/zoom replayed as a Skia Group matrix from the viewport's shared values;
   node cards live in `DiagramNodeLayer` inside the old transformed
   Animated.View. The dot grid is ONE SkPath. Manual device pass recommended
-  after touching SLD transform code (inline + fullscreen rotated mode).
+  after touching SLD transform code (inline + fullscreen, pinch + pan,
+  +/- at min/max while locked).
+- **SLD phone layout (Oct 2026, user: "boxes are small, not readable")** —
+  the backend canvas (desktop-wide, Lucky ≈ 1810×850 units) fitted a phone
+  at ≈ 0.2 → 2–3pt text. Now `selectSldGraph → buildSldGrouping →
+  buildSldPhoneLayout` (`src/utils/sldPhoneLayout.ts`, structure-only,
+  cached per graph ref; live ticks never re-layout) re-arranges the SAME
+  nodes/edges for a portrait phone at ≈ 1 unit per pt:
+  - Hub = logo node, else most incoming edges → degree → graph order. BFS
+    spanning tree; each hub neighbour is a branch (one column, its subtree
+    stacked outward). Branch order solar, wind, genset, WHR, grid, battery,
+    others. 2 per row; ceil(n/2) rounded to whole rows go ABOVE the hub
+    (Lucky Grouped 4/2 = the approved preview, Units 10/9); a lone row is
+    centred. Hub-adjacent rows join with a └┬┘ bus; farther rows enter a
+    trunk at the hub's centre-x (gaps = 2× `SLD_EDGE_STUB`, routes never
+    cross a card). Nested side lanes step out via client-only
+    `SLDEdge.routeStub`; non-tree edges get the clearest of 16 handle pairs
+    (`clearestHandles`); disconnected components go below. Nodes carry a
+    client-only `size` (honoured by `nodeRect`); `resolveNodeRects` is a
+    no-op on this layout. Curved routing uses `controlReach` (half the
+    distance the other end lies ahead), so curves stay clear too.
+  - Cards: `SLD_PHONE_CARD` (148 wide, 14/18 heading ≤ 2 lines, 16/20
+    values, 12/16 labels+units) / `SLD_PHONE_HUB` (196×80 capsule) — the
+    single source for styles AND layout heights (`sldPhoneCardHeight`).
+    AppText `fixedSize="exact"` (size as given, no OS scaling — the canvas
+    is already scaled). **Never `adjustsFontSizeToFit` in SLD cards**: on
+    iOS Fabric it ignored `minimumFontScale` in the scaled canvas and drew
+    some values at ~4pt. `sldValueDisplay` picks 16/14/12 from the text
+    (Poppins widths measured from the TTFs, 2% margin) and, when even 12
+    can't fit, switches to the compact form with the unit rescaled
+    ("1,186,687.53 MW" → "1.19 TW") — a value is never truncated.
+  - Inline: `computeSldFit` fills the WIDTH (cap `SLD_MAX_FIT_SCALE` = 1),
+    centres a diagram that fits, centres a taller one on the hub (`focus`),
+    clamped so no empty band shows; zoom-out floor 0.9 × overview, max
+    max(3 × fit, 2). Panel height = content × scale + pill strip, clamped to
+    [320, 0.85 × window] (`sldInlineHeight`; skeleton / not-yet-loaded use
+    `SLD_INLINE_DEFAULT_HEIGHT`). Opens locked (page scroll wins).
+  - Zoom (+/- and pinch) pivots on the VIEWPORT centre; pan/pinch end
+    settles the translate into the fit area (`sldClampTranslate`, a
+    worklet).
 - **SLD grouping** (Grouped / Units toggle, `src/utils/sldGroup.ts`):
   - Grouped (default) collapses leaf source units into ONE box per energy
     type — "Solar · 9" with totalled values. Pure transform: downstream
@@ -894,14 +933,12 @@ respect:
     itself to a ≥44pt target. The fit (`computeSldFit`) keeps a strip free
     for it only when needed, so the pill never covers a card at open/re-fit
     (after the user pans it may, by design).
-  - **Fullscreen safe area**: the route rotates content 90° in JS
-    (`SLD_FULLSCREEN_ROTATION_DEG`), so device insets are mapped through the
-    rotation (`rotateInsets`: device top → content left, right → top, bottom
-    → right, left → bottom) and the rotated container is sized from
-    `useSafeAreaFrame()`. Fit, re-fit, button column and pill all respect the
-    mapped insets (nothing under the Dynamic Island / status / nav bar).
-    The rotation constant and SLDViewport's pan remap (`tx += dy; ty -= dx`)
-    must change together. Pure helpers live in `sldViewportFit.ts`.
+  - **Fullscreen = PORTRAIT, no rotation of any kind** (the phone layout is
+    portrait-shaped; the old 90° JS rotation, `rotateInsets`,
+    `SLD_FULLSCREEN_ROTATION_DEG` and the pan remap are gone). Device
+    safe-area insets are used directly; fit-width, centred on the hub,
+    opens UNLOCKED (no page scroll to protect). OS rotation stays banned.
+    Pure helpers live in `sldViewportFit.ts`.
   - Tests: `__tests__/sldGroup.test.ts` (incl. route-clearance mutation check,
     WHR cases), `__tests__/sldViewportFit.test.ts` (inset mapping, fit,
     44pt touch target).

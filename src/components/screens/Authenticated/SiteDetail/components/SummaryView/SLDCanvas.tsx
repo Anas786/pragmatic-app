@@ -21,22 +21,31 @@ import {
   buildOrthogonalEdgeGeometry,
   edgeColor,
   edgeColorForScheme,
-  formatSldValue,
   handlePoint,
   isEdgeAnimated,
   isLogoNode,
   resolveNodeRects,
   SLDBounds,
+  SLD_PHONE_CARD,
+  SLD_PHONE_HUB,
+  sldValueDisplay,
 } from 'src/utils';
 import { SLDNode, SLDValueResolver, SLDGraph } from 'src/types';
 
 /* ─────────── canvas constants (graph-space units) ─────────── */
 
-const DOT_SPACING = 72;
-const DOT_RADIUS = 2;
+// The phone layout renders at ≈ 1pt per graph unit, so the dot grid is
+// spaced for that (the old backend canvas fitted at ≈ 0.2).
+const DOT_SPACING = 28;
+const DOT_RADIUS = 1.25;
 const DOT_OPACITY = 0.12;
-const ICON_SIZE = 34;
-const LOGO_ICON_SIZE = 38;
+
+/* Card geometry + type — single source shared with the layout's height
+ * maths (src/utils/sldPhoneLayout.ts). Sizes are graph units and the text
+ * uses `fixedSize="exact"`: the whole canvas is scaled to the screen, so the
+ * fonts must not be width-scaled a second time. */
+const C = SLD_PHONE_CARD;
+const H = SLD_PHONE_HUB;
 
 /* Flow-animation tuning — mirrors the web SLD:
  *   - dashes: `stroke-dasharray: 7,6`, offset drifts ~ -40px / 1.1s ≈ 36 px/s
@@ -53,7 +62,7 @@ const PARTICLE_BASE_PERIOD = 4.8; // s
 /* ─────────── static styles ─────────── */
 
 const styles = StyleSheet.create({
-  // Rounded to hug the card's 16px corners — the card no longer clips its
+  // Rounded to hug the card's corners — the card no longer clips its
   // children (overflow:'hidden' would kill the iOS shadow).
   accentBar: {
     position: 'absolute',
@@ -61,22 +70,25 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 3,
-    borderTopLeftRadius: 15,
-    borderTopRightRadius: 15,
+    borderTopLeftRadius: C.radius - C.border,
+    borderTopRightRadius: C.radius - C.border,
   },
   accentWash: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 15,
+    borderRadius: C.radius - C.border,
   },
+  // A fixed band two heading lines tall: the layout reserves exactly this,
+  // and a one-line heading sits centred next to the icon.
   cardHeaderRow: {
+    height: C.headingLines * C.headingLine,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: C.headerGap,
   },
   iconWell: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+    width: C.iconWell,
+    height: C.iconWell,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -85,35 +97,51 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: StyleSheet.hairlineWidth,
-    marginTop: 9,
-    marginBottom: 7,
+    marginTop: C.dividerTop,
+    marginBottom: C.dividerBottom,
   },
   metricsCol: {
-    gap: 5,
+    gap: C.rowGap,
   },
   metricRow: {
+    height: C.rowLine,
     flexDirection: 'row',
     alignItems: 'baseline',
-    gap: 8,
+    gap: 6,
   },
   metricLabel: {
-    flexShrink: 0,
+    flexShrink: 1,
+    maxWidth: '50%',
   },
   metricValueWrap: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'flex-end',
-    gap: 4,
+    gap: 3,
   },
   metricValue: {
     flexShrink: 1,
     textAlign: 'right',
   },
-  logoInner: {
+  hubIconWell: {
+    width: H.iconWell,
+    height: H.iconWell,
+    borderRadius: H.iconWell / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
+  },
+  hubText: {
+    flex: 1,
+  },
+  hubValueRow: {
+    height: H.valueLine,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+  },
+  hubValue: {
+    flexShrink: 1,
   },
 });
 
@@ -124,22 +152,28 @@ const createCanvasStyles = (scheme: Scheme) =>
     sourceCard: {
       position: 'absolute',
       backgroundColor: scheme.surface,
-      borderWidth: 1,
+      borderWidth: C.border,
       borderColor: scheme.border,
-      borderRadius: 16,
-      paddingHorizontal: 12,
-      paddingTop: 11,
-      paddingBottom: 12,
+      borderRadius: C.radius,
+      paddingHorizontal: C.padX,
+      paddingTop: C.padTop,
+      paddingBottom: C.padBottom,
       shadowColor: '#000000',
-      shadowOffset: { width: 0, height: 3 },
-      shadowOpacity: scheme.isDark ? 0.3 : 0.12,
-      shadowRadius: 8,
-      elevation: 4,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: scheme.isDark ? 0.3 : 0.1,
+      shadowRadius: 6,
+      elevation: 3,
     },
+    // The hub: a capsule with the plant's icon, name and first key.
     logoNode: {
       position: 'absolute',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: H.gap,
+      paddingHorizontal: H.padX,
+      paddingVertical: H.padY,
       backgroundColor: scheme.surface,
-      borderWidth: 3,
+      borderWidth: H.border,
       borderColor: scheme.brand,
       shadowColor: '#000000',
       shadowOffset: { width: 0, height: 3 },
@@ -183,12 +217,7 @@ const sampleEdgePoints = (skPath: SkPath): number[] => {
 // Thinner + fainter than flow edges so live power routes read at a glance.
 const IdleEdge: FC<{ edge: SkEdge }> = ({ edge }) => (
   <Group opacity={0.45}>
-    <SkiaPath
-      path={edge.skPath}
-      style="stroke"
-      strokeWidth={1.5}
-      color={edge.color}
-    />
+    <SkiaPath path={edge.skPath} style="stroke" strokeWidth={1.5} color={edge.color} />
     {edge.skArrow ? <SkiaPath path={edge.skArrow} color={edge.color} /> : null}
   </Group>
 );
@@ -216,18 +245,11 @@ const FlowEdge: FC<{
 
   return (
     <Group>
-      <SkiaPath
-        path={skPath}
-        style="stroke"
-        strokeWidth={2.5}
-        strokeCap="round"
-        color={color}>
+      <SkiaPath path={skPath} style="stroke" strokeWidth={2.5} strokeCap="round" color={color}>
         <DashPathEffect intervals={DASH_INTERVALS} phase={dashPhase} />
       </SkiaPath>
       {skArrow ? <SkiaPath path={skArrow} color={color} /> : null}
-      {n > 1 ? (
-        <SkiaCircle cx={cx} cy={cy} r={PARTICLE_RADIUS} color={color} />
-      ) : null}
+      {n > 1 ? <SkiaCircle cx={cx} cy={cy} r={PARTICLE_RADIUS} color={color} /> : null}
     </Group>
   );
 };
@@ -244,19 +266,15 @@ const SourceNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
   const scheme = useScheme();
   const themed = useThemedStyles(createCanvasStyles);
   const icon = resolveLottieIcon(node.data.icon.name);
-  const accent = edgeColorForScheme(
-    node.data.icon.color || scheme.brand,
-    scheme.isDark,
-  );
+  const accent = edgeColorForScheme(node.data.icon.color || scheme.brand, scheme.isDark);
 
   // On a light surface an accent wash + accent border read as a washed-out
   // tint (esp. for bright yellows on white), so light theme keeps a clean
   // white card with a neutral border and lets the colour live in the top bar
   // + icon well. Dark theme keeps the richer accent wash + border.
-  // minHeight (not height): the graph geometry was tuned for the system
-  // font, and Poppins' taller line boxes clipped the last metric row mid
-  // glyph. Letting the card grow a few px downward beats truncated values;
-  // edge handle points still anchor to the designed rect.
+  // minHeight = the layout's reserved height (`sldPhoneCardHeight`, every
+  // line box below is fixed), so the card fills its slot exactly; a
+  // sub-point overrun grows it downward instead of clipping a row.
   const cardStyle = useMemo(
     () =>
       StyleSheet.flatten([
@@ -281,72 +299,75 @@ const SourceNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
           style={[styles.accentWash, { backgroundColor: accent + '0D' }]}
         />
       ) : null}
-      <View
-        pointerEvents="none"
-        style={[styles.accentBar, { backgroundColor: accent }]}
-      />
+      <View pointerEvents="none" style={[styles.accentBar, { backgroundColor: accent }]} />
 
       <View style={styles.cardHeaderRow}>
         <View
-          style={[
-            styles.iconWell,
-            { backgroundColor: accent + (scheme.isDark ? '24' : '2E') },
-          ]}>
-          {icon ? <GifImage source={icon.path} size={ICON_SIZE} /> : null}
+          style={[styles.iconWell, { backgroundColor: accent + (scheme.isDark ? '24' : '2E') }]}>
+          {icon ? <GifImage source={icon.path} size={C.icon} /> : null}
         </View>
+        {/* Up to two lines: unit names ("PV-SG-CI-01", "Captive Plant")
+            must stay distinguishable, so they wrap before they ellipsize. */}
         <AppText
-          fixedSize
-          fontSize={15}
-          lineHeight={20}
+          fixedSize="exact"
+          fontSize={C.headingSize}
+          lineHeight={C.headingLine}
           bold
           color={scheme.textPrimary}
-          numberOfLines={1}
+          numberOfLines={C.headingLines}
           style={styles.headerTitle}>
           {node.data.heading}
         </AppText>
       </View>
 
-      <View style={[styles.divider, { backgroundColor: scheme.hairline }]} />
+      {node.data.keys.length > 0 ? (
+        <View style={[styles.divider, { backgroundColor: scheme.hairline }]} />
+      ) : null}
 
       <View style={styles.metricsCol}>
-        {node.data.keys.map((k, i) => (
-          <View key={i} style={styles.metricRow}>
-            <AppText
-              fixedSize
-              fontSize={11}
-              lineHeight={14}
-              semi_bold
-              color={scheme.textTertiary}
-              numberOfLines={1}
-              style={styles.metricLabel}>
-              {k.label}
-            </AppText>
-            <View style={styles.metricValueWrap}>
+        {node.data.keys.map((k, i) => {
+          const v = sldValueDisplay(resolve(k.param), k.unit, k.label);
+          return (
+            <View key={i} style={styles.metricRow}>
               <AppText
-                fixedSize
-                fontSize={14}
-                lineHeight={18}
-                bold
-                color={scheme.textPrimary}
+                fixedSize="exact"
+                fontSize={C.labelSize}
+                lineHeight={C.labelLine}
+                semi_bold
+                color={scheme.textTertiary}
                 numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.7}
-                style={styles.metricValue}>
-                {formatSldValue(resolve(k.param), k.unit, k.label)}
+                style={styles.metricLabel}>
+                {k.label}
               </AppText>
-              {k.unit ? (
+              <View style={styles.metricValueWrap}>
+                {/* Size + text from sldValueDisplay: a fixed size picked
+                  from the text (never adjustsFontSizeToFit, which drew
+                  ~4pt values in the scaled canvas on iOS Fabric) and a
+                  compact form instead of ever truncating digits. */}
                 <AppText
-                  fixedSize
-                  fontSize={10}
-                  lineHeight={13}
-                  medium
-                  color={scheme.textSecondary}>
-                  {k.unit}
+                  fixedSize="exact"
+                  fontSize={v.size}
+                  lineHeight={C.rowLine}
+                  bold
+                  color={scheme.textPrimary}
+                  numberOfLines={1}
+                  style={styles.metricValue}>
+                  {v.text}
                 </AppText>
-              ) : null}
+                {v.unit ? (
+                  <AppText
+                    fixedSize="exact"
+                    fontSize={C.unitSize}
+                    lineHeight={C.labelLine}
+                    medium
+                    color={scheme.textSecondary}>
+                    {v.unit}
+                  </AppText>
+                ) : null}
+              </View>
             </View>
-          </View>
-        ))}
+          );
+        })}
       </View>
     </View>
   );
@@ -360,10 +381,10 @@ const LogoNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
   const themed = useThemedStyles(createCanvasStyles);
   const icon = resolveLottieIcon(node.data.icon.name);
   const primary = node.data.keys[0];
-  const accent = edgeColorForScheme(
-    node.data.icon.color || scheme.brand,
-    scheme.isDark,
-  );
+  const hubValue = primary
+    ? sldValueDisplay(resolve(primary.param), primary.unit, primary.label, 'hub')
+    : null;
+  const accent = edgeColorForScheme(node.data.icon.color || scheme.brand, scheme.isDark);
 
   const logoStyle = useMemo(
     () =>
@@ -374,7 +395,7 @@ const LogoNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
           top: rect.y,
           width: rect.w,
           height: rect.h,
-          borderRadius: rect.w / 2,
+          borderRadius: rect.h / 2,
           borderColor: accent,
         },
       ]),
@@ -383,27 +404,52 @@ const LogoNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
 
   return (
     <View style={logoStyle}>
-      <View style={styles.logoInner}>
-        {icon ? <GifImage source={icon.path} size={LOGO_ICON_SIZE} /> : null}
+      <View
+        style={[styles.hubIconWell, { backgroundColor: accent + (scheme.isDark ? '24' : '2E') }]}>
+        {icon ? <GifImage source={icon.path} size={H.icon} /> : null}
+      </View>
+      <View style={styles.hubText}>
         <AppText
-          fixedSize
-          fontSize={13}
-          lineHeight={17}
+          fixedSize="exact"
+          fontSize={H.headingSize}
+          lineHeight={H.headingLine}
           bold
           color={scheme.textPrimary}
-          numberOfLines={1}>
+          numberOfLines={H.headingLines}>
           {node.data.heading}
         </AppText>
         {primary ? (
-          <AppText
-            fixedSize
-            fontSize={11}
-            lineHeight={14}
-            color={scheme.textSecondary}
-            numberOfLines={1}>
-            {formatSldValue(resolve(primary.param), primary.unit, primary.label)}
-            {primary.unit ? ` ${primary.unit}` : ''}
-          </AppText>
+          <View style={styles.hubValueRow}>
+            <AppText
+              fixedSize="exact"
+              fontSize={H.labelSize}
+              lineHeight={H.labelLine}
+              semi_bold
+              color={scheme.textTertiary}
+              numberOfLines={1}>
+              {primary.label}
+            </AppText>
+            <AppText
+              fixedSize="exact"
+              fontSize={hubValue?.size}
+              lineHeight={H.valueLine}
+              bold
+              color={scheme.textPrimary}
+              numberOfLines={1}
+              style={styles.hubValue}>
+              {hubValue?.text}
+            </AppText>
+            {hubValue?.unit ? (
+              <AppText
+                fixedSize="exact"
+                fontSize={H.labelSize}
+                lineHeight={H.labelLine}
+                medium
+                color={scheme.textSecondary}>
+                {hubValue.unit}
+              </AppText>
+            ) : null}
+          </View>
         ) : null}
       </View>
     </View>
@@ -459,10 +505,7 @@ const DiagramSkiaLayerBase: FC<DiagramSkiaLayerProps> = ({
 }) => {
   const { width, height } = bounds;
 
-  const nodeById = useMemo(
-    () => new Map(graph.nodes.map(n => [n.id, n])),
-    [graph.nodes],
-  );
+  const nodeById = useMemo(() => new Map(graph.nodes.map(n => [n.id, n])), [graph.nodes]);
 
   // De-overlapped rects — MUST be the same map the card layer uses (it
   // computes the identical deterministic result), or arrows detach.
@@ -479,9 +522,16 @@ const DiagramSkiaLayerBase: FC<DiagramSkiaLayerProps> = ({
           if (!s || !t || !sr || !tr) return null;
           const from = handlePoint(sr, edge.sourceHandle);
           const to = handlePoint(tr, edge.targetHandle);
+          // `routeStub`: the phone layout's nested side lanes (else default).
           const geo = orthogonal
-            ? buildOrthogonalEdgeGeometry(from, edge.sourceHandle, to, edge.targetHandle)
-            : buildEdgeGeometry(from, edge.sourceHandle, to, edge.targetHandle);
+            ? buildOrthogonalEdgeGeometry(
+                from,
+                edge.sourceHandle,
+                to,
+                edge.targetHandle,
+                edge.routeStub,
+              )
+            : buildEdgeGeometry(from, edge.sourceHandle, to, edge.targetHandle, edge.routeStub);
           return {
             id: edge.id,
             color: edgeColorForScheme(edgeColor(edge), isDark),
@@ -569,8 +619,7 @@ const DiagramSkiaLayerBase: FC<DiagramSkiaLayerProps> = ({
   // Clip in canvas space (OUTSIDE the pan/zoom matrix) so edges/dots can
   // never draw past the viewport's rounded frame.
   const clipShape = useMemo(
-    () =>
-      frame ? skRRect(skRect(0, 0, frame.w, frame.h), clipRadius, clipRadius) : null,
+    () => (frame ? skRRect(skRect(0, 0, frame.w, frame.h), clipRadius, clipRadius) : null),
     [frame, clipRadius],
   );
 
@@ -582,12 +631,7 @@ const DiagramSkiaLayerBase: FC<DiagramSkiaLayerProps> = ({
             <SkiaPath path={dotGrid} color={dotColor} opacity={DOT_OPACITY} />
             {skEdges.map(e =>
               e.animated ? (
-                <FlowEdge
-                  key={e.id}
-                  edge={e}
-                  dashPhase={dashPhase}
-                  clock={clock}
-                />
+                <FlowEdge key={e.id} edge={e} dashPhase={dashPhase} clock={clock} />
               ) : (
                 <IdleEdge key={e.id} edge={e} />
               ),
@@ -607,11 +651,7 @@ DiagramSkiaLayer.displayName = 'DiagramSkiaLayer';
  * `SLDViewport` inside the pan/zoom `Animated.View` (bounds-sized frame), so
  * card layout, text and touch behaviour are untouched by the Skia-layer split.
  */
-const DiagramNodeLayerBase: FC<DiagramLayerBaseProps> = ({
-  graph,
-  bounds,
-  resolve,
-}) => {
+const DiagramNodeLayerBase: FC<DiagramLayerBaseProps> = ({ graph, bounds, resolve }) => {
   // Same deterministic de-overlap pass as the Skia edge layer — the two maps
   // are identical by construction, keeping arrows anchored to their cards.
   const nodeRects = useMemo(() => resolveNodeRects(graph, bounds), [graph, bounds]);

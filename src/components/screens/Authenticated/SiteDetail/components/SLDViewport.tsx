@@ -10,9 +10,11 @@
  * lockstep on the UI thread.
  *
  * Deliberately framework-agnostic about *where* it lives: it takes the
- * viewport `width`/`height`, a `fullscreen` flag and the safe-area insets in
- * its own frame, and owns everything else (shared values, gestures, the
- * flowing-dash loop, fit math, controls).
+ * viewport `width`/`height`, a `fullscreen` flag, the safe-area insets and
+ * the hub to centre, and owns everything else (shared values, gestures, the
+ * flowing-dash loop, fit math, controls). Both hosts are portrait and
+ * unrotated: the phone layout is a tall diagram, so the old 90°-rotated
+ * landscape fullscreen (and its pan remap) is gone.
  *
  * Overlays: the zoom / routing / fullscreen / lock column (bottom-left)
  * auto-fades after a short idle and ignores taps while hidden; the
@@ -44,16 +46,27 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Scheme, useScheme, useThemedStyles } from 'src/theme';
-import { normalizeWidth, SLDBounds } from 'src/utils';
+import { normalizeWidth, SLDBounds, SLDPoint } from 'src/utils';
 import { SLDGraph, SLDValueResolver } from 'src/types';
 import type { SldViewMode } from 'src/hooks';
 import ControlButtons, { SLD_MODE_TOGGLE_BOX, SldModeToggle } from './ControlButtons';
 import { DiagramNodeLayer, DiagramSkiaLayer } from './SummaryView/SLDCanvas';
-import { computeSldFit, SldInsets } from './sldViewportFit';
+import {
+  computeSldFit,
+  sldClampTranslate,
+  SldInsets,
+  sldZoomLimits,
+  sldZoomTo,
+  SLD_MAX_FIT_SCALE,
+  SLD_VIEWPORT_BORDER,
+  SLD_ZOOM_STEP,
+} from './sldViewportFit';
 
-const ZOOM_STEP = 1.25;
 /** Idle time before the floating controls fade out. */
 const HIDE_CONTROLS_DELAY_MS = 2600;
+/** Duration of the zoom-button steps and of the settle back into view. */
+const ZOOM_ANIM_MS = 200;
+const SETTLE_MS = 220;
 /** Corner radius of the inline viewport — shared by the border, the node
  *  clipping wrapper, and the Skia clip so all three stay in register. */
 const VIEWPORT_RADIUS = normalizeWidth(16);
@@ -76,23 +89,21 @@ interface SLDViewportProps {
   width: number;
   /** Viewport height in points. */
   height: number;
-  /** Full-screen styling (fills, no border) + opens fit-to-screen. */
+  /** Full-screen styling (fills, no border) + re-fits when its size settles. */
   fullscreen?: boolean;
   /**
-   * The viewport is hosted inside a parent rotated 90° (landscape via
-   * transform, not OS rotation). Pan deltas are reported in screen space, so
-   * they're remapped into the rotated frame to track the finger.
+   * Point to centre (FRAME coordinates — the layout's hub) when the diagram
+   * is taller than the viewport. Defaults to the frame's centre.
    */
-  rotated?: boolean;
+  focus?: SLDPoint;
   /** Inline → expand handler (navigates to the full-screen route). */
   onFullscreen?: () => void;
   /** Full-screen → collapse/close handler. */
   onClose?: () => void;
   /**
    * Safe-area insets in THIS viewport's frame (the full-screen route passes
-   * the device insets mapped through its rotation — `rotateInsets`). The
-   * initial fit, the controls and the mode pill all stay inside them.
-   * Omitted inline (the inline viewport sits inside the scrolled page).
+   * the device insets). The initial fit, the controls and the mode pill all
+   * stay inside them. Omitted inline (the viewport sits inside the page).
    */
   safeInsets?: SldInsets;
   /**
@@ -122,7 +133,7 @@ const SLDViewport: FC<SLDViewportProps> = ({
   width,
   height,
   fullscreen = false,
-  rotated = false,
+  focus,
   onFullscreen,
   onClose,
   safeInsets,
@@ -142,43 +153,74 @@ const SLDViewport: FC<SLDViewportProps> = ({
   const insetLeft = safeInsets?.left ?? 0;
   const showModeToggle = groupMode !== undefined && onGroupModeChange !== undefined;
 
-  // Fit math. Both inline and full-screen open fitted to the WHOLE diagram,
-  // centred — a complete, tidy first view (no half-cut cards at the edges);
-  // users pinch in for card-level detail. Zooming into the plant node by
-  // default read as broken to customers. The fit area is the safe area (so
-  // nothing opens under a notch / Dynamic Island / nav bar), and the diagram
-  // is kept clear of the persistent mode pill — re-fitted with a strip
-  // reserved for it only when the plain fit would reach under it.
-  const { minScale, maxScale, initialScale, focusTx, focusTy } =
-    useMemo(() => {
-      const fit = computeSldFit({
-        viewWidth: width,
-        viewHeight: height,
-        contentWidth: bounds.width,
-        contentHeight: bounds.height,
-        insets: { top: insetTop, right: insetRight, bottom: insetBottom, left: insetLeft },
-        overlay: showModeToggle ? SLD_MODE_TOGGLE_BOX : undefined,
-      });
-      const min = fit.scale * 0.9;
-      const max = Math.max(fit.scale * 8, 1.3);
-      return {
-        minScale: min,
-        maxScale: max,
-        initialScale: clamp(fit.scale, min, max),
-        focusTx: fit.translateX,
-        focusTy: fit.translateY,
-      };
-    }, [
-      bounds.width,
-      bounds.height,
-      width,
-      height,
-      insetTop,
-      insetRight,
-      insetBottom,
-      insetLeft,
-      showModeToggle,
-    ]);
+  // Fit math. Both hosts open with the diagram's WIDTH filling the safe area
+  // (capped at 1 graph unit per point — the phone layout is designed for
+  // that size, so cards read without zooming). A diagram that fits is
+  // centred; a taller one opens centred on the hub and is panned for the
+  // rest. The fit area is the content box (inside the inline border) minus
+  // the safe-area insets, and the diagram is kept clear of the persistent
+  // mode pill — a top strip is reserved for it when the plain fit would
+  // reach under it. The zoom-out floor is the whole-diagram overview.
+  //
+  // Zoom (buttons AND pinch) pivots on the VIEWPORT centre — the translation
+  // scales with the zoom — and whenever the view comes to rest (a button
+  // step, the last pan / pinch letting go) the translation is clamped to the
+  // fit area (`sldClampTranslate`): a diagram smaller than the area stays
+  // inside it, a larger one covers it. The hub-focused fit starts off the
+  // frame centre, so a frame-centre pivot would push the diagram out of the
+  // panel — and the inline panel opens locked, where +/- are the only zoom.
+  const border = fullscreen ? 0 : SLD_VIEWPORT_BORDER;
+  const viewW = width - 2 * border;
+  const viewH = height - 2 * border;
+  const contentW = bounds.width;
+  const contentH = bounds.height;
+  const focusY = focus?.y;
+  const {
+    minScale,
+    maxScale,
+    initialScale,
+    focusTx,
+    focusTy,
+    areaTop,
+    areaRight,
+    areaBottom,
+    areaLeft,
+  } = useMemo(() => {
+    const fit = computeSldFit({
+      viewWidth: viewW,
+      viewHeight: viewH,
+      contentWidth: contentW,
+      contentHeight: contentH,
+      insets: { top: insetTop, right: insetRight, bottom: insetBottom, left: insetLeft },
+      overlay: showModeToggle ? SLD_MODE_TOGGLE_BOX : undefined,
+      maxScale: SLD_MAX_FIT_SCALE,
+      focusY,
+    });
+    const { min, max } = sldZoomLimits(fit);
+    return {
+      minScale: min,
+      maxScale: max,
+      initialScale: clamp(fit.scale, min, max),
+      focusTx: fit.translateX,
+      focusTy: fit.translateY,
+      // Plain numbers (not an object) so the gesture worklets capture them.
+      areaTop: fit.insets.top,
+      areaRight: fit.insets.right,
+      areaBottom: fit.insets.bottom,
+      areaLeft: fit.insets.left,
+    };
+  }, [
+    contentW,
+    contentH,
+    viewW,
+    viewH,
+    insetTop,
+    insetRight,
+    insetBottom,
+    insetLeft,
+    showModeToggle,
+    focusY,
+  ]);
 
   // Lock (`isLocked`) + routing (`orthogonal`) come from the host (see
   // props) — hosts default both to true: the diagram opens as a tidy, fixed
@@ -195,6 +237,14 @@ const SLDViewport: FC<SLDViewportProps> = ({
   const savedTX = useSharedValue(focusTx);
   const savedTY = useSharedValue(focusTy);
   const savedScale = useSharedValue(initialScale);
+  // The live pan drag (0 when no pan is active) — the pinch adds it to the
+  // zoom-scaled translation, the pan adds the live zoom ratio to it.
+  const panX = useSharedValue(0);
+  const panY = useSharedValue(0);
+  // True while a pan / pinch is ACTIVE (onStart → onEnd): the last one to
+  // end settles the view into the fit area.
+  const panning = useSharedValue(false);
+  const pinching = useSharedValue(false);
   const controlsOpacity = useSharedValue(1);
   const pinchActive = useSharedValue(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -242,8 +292,9 @@ const SLDViewport: FC<SLDViewportProps> = ({
   // Re-fit when the full-screen fit changes after mount — the viewport size
   // or the safe-area insets settling (e.g. Android dropping the status-bar
   // inset once the route hides it). On mount it animates to the values the
-  // shared values already hold, i.e. a no-op. Inline never re-fits (VW/VH
-  // are constant, no insets). Safe here: main surface, not a Modal.
+  // shared values already hold, i.e. a no-op. Inline never re-fits: its size
+  // only changes with the Grouped/Units mode, which remounts this viewport,
+  // and it has no insets. Safe here: main surface, not a Modal.
   useEffect(() => {
     if (!fullscreen) return;
     translateX.value = withTiming(focusTx, { duration: 250 });
@@ -341,6 +392,27 @@ const SLDViewport: FC<SLDViewportProps> = ({
   }, [showControls, cancelHideTimer]);
 
   const gesture = useMemo(() => {
+    // Pan + pinch run simultaneously and BOTH write the translation with
+    // one formula, so they never fight:
+    //   translate = saved · (scale / savedScale) + live pan drag
+    // i.e. the pinch zooms about the viewport centre and the pan adds its
+    // drag on top. Each folds its part into `saved*` in onEnd (onEnd only
+    // follows an ACTIVE gesture, so a plain tap never touches them).
+    //
+    // Once the last of them ends, rest the view inside the fit area — at
+    // the saved (resting) scale. Worklet: only shared values, captured
+    // numbers and worklet helpers (`sldClampTranslate`, `withTiming`).
+    const settle = () => {
+      'worklet';
+      const s = savedScale.value;
+      const tx = sldClampTranslate(savedTX.value, s, viewW, contentW, areaLeft, areaRight);
+      const ty = sldClampTranslate(savedTY.value, s, viewH, contentH, areaTop, areaBottom);
+      savedTX.value = tx;
+      savedTY.value = ty;
+      translateX.value = withTiming(tx, { duration: SETTLE_MS });
+      translateY.value = withTiming(ty, { duration: SETTLE_MS });
+    };
+
     const tap = Gesture.Tap()
       .maxDuration(250)
       .onEnd(() => runOnJS(showControls)());
@@ -351,20 +423,24 @@ const SLDViewport: FC<SLDViewportProps> = ({
         runOnJS(onGestureBegin)();
         runOnJS(revealControls)();
       })
+      .onStart(() => {
+        panning.value = true;
+      })
       .onUpdate(e => {
-        if (rotated) {
-          // Parent is rotated 90° clockwise → remap screen-space deltas into
-          // the rotated frame so content tracks the finger.
-          translateX.value = savedTX.value + e.translationY;
-          translateY.value = savedTY.value - e.translationX;
-        } else {
-          translateX.value = savedTX.value + e.translationX;
-          translateY.value = savedTY.value + e.translationY;
-        }
+        const ratio = scale.value / savedScale.value;
+        panX.value = e.translationX;
+        panY.value = e.translationY;
+        translateX.value = savedTX.value * ratio + e.translationX;
+        translateY.value = savedTY.value * ratio + e.translationY;
       })
       .onEnd(() => {
-        savedTX.value = translateX.value;
-        savedTY.value = translateY.value;
+        const ratio = scale.value / savedScale.value;
+        savedTX.value = translateX.value / ratio;
+        savedTY.value = translateY.value / ratio;
+        panX.value = 0;
+        panY.value = 0;
+        panning.value = false;
+        if (!pinching.value) settle();
       })
       .onFinalize(() => runOnJS(onGestureFinalize)());
 
@@ -374,14 +450,28 @@ const SLDViewport: FC<SLDViewportProps> = ({
         pinchActive.value = true;
         runOnJS(onGestureBegin)();
       })
+      .onStart(() => {
+        pinching.value = true;
+      })
       .onUpdate(e => {
-        scale.value = clamp(savedScale.value * e.scale, minScale, maxScale);
+        const s = clamp(savedScale.value * e.scale, minScale, maxScale);
+        const ratio = s / savedScale.value;
+        scale.value = s;
+        translateX.value = savedTX.value * ratio + panX.value;
+        translateY.value = savedTY.value * ratio + panY.value;
+      })
+      .onEnd(() => {
+        const ratio = scale.value / savedScale.value;
+        savedTX.value = savedTX.value * ratio;
+        savedTY.value = savedTY.value * ratio;
+        savedScale.value = scale.value;
+        pinching.value = false;
+        if (!panning.value) settle();
       })
       // onFinalize (not onEnd) so cancelled/failed gestures also release the
       // mirror guard. Syncs the zoom state to JS exactly once per pinch.
       .onFinalize(() => {
         pinchActive.value = false;
-        savedScale.value = scale.value;
         runOnJS(setCurrentZoom)(scale.value);
         runOnJS(onGestureFinalize)();
       });
@@ -389,7 +479,6 @@ const SLDViewport: FC<SLDViewportProps> = ({
     return Gesture.Simultaneous(pinch, pan, tap);
   }, [
     isLocked,
-    rotated,
     showControls,
     revealControls,
     onGestureBegin,
@@ -400,9 +489,21 @@ const SLDViewport: FC<SLDViewportProps> = ({
     savedTY,
     scale,
     savedScale,
+    panX,
+    panY,
+    panning,
+    pinching,
     pinchActive,
     minScale,
     maxScale,
+    viewW,
+    viewH,
+    contentW,
+    contentH,
+    areaTop,
+    areaRight,
+    areaBottom,
+    areaLeft,
   ]);
 
   // Pan/zoom transform for the RN node-card layer. The Skia layer replays
@@ -420,17 +521,57 @@ const SLDViewport: FC<SLDViewportProps> = ({
     opacity: controlsOpacity.value,
   }));
 
-  const handleZoomIn = useCallback(() => {
-    const ns = clamp(savedScale.value * ZOOM_STEP, minScale, maxScale);
-    savedScale.value = ns;
-    scale.value = withTiming(ns, { duration: 200 });
-  }, [scale, savedScale, minScale, maxScale]);
+  // +/- buttons (JS thread): zoom about the viewport centre, clamped to the
+  // fit area (`sldZoomTo`). Scale and translation share one duration and
+  // timing curve, so (unclamped) every frame of the step stays
+  // centre-pivoted: both move by the same fraction of their change.
+  const zoomBy = useCallback(
+    (factor: number) => {
+      const from = {
+        scale: savedScale.value,
+        translateX: savedTX.value,
+        translateY: savedTY.value,
+      };
+      const next = sldZoomTo(
+        {
+          viewWidth: viewW,
+          viewHeight: viewH,
+          contentWidth: contentW,
+          contentHeight: contentH,
+          insets: { top: areaTop, right: areaRight, bottom: areaBottom, left: areaLeft },
+        },
+        from,
+        clamp(from.scale * factor, minScale, maxScale),
+      );
+      savedScale.value = next.scale;
+      savedTX.value = next.translateX;
+      savedTY.value = next.translateY;
+      scale.value = withTiming(next.scale, { duration: ZOOM_ANIM_MS });
+      translateX.value = withTiming(next.translateX, { duration: ZOOM_ANIM_MS });
+      translateY.value = withTiming(next.translateY, { duration: ZOOM_ANIM_MS });
+    },
+    [
+      scale,
+      savedScale,
+      translateX,
+      translateY,
+      savedTX,
+      savedTY,
+      minScale,
+      maxScale,
+      viewW,
+      viewH,
+      contentW,
+      contentH,
+      areaTop,
+      areaRight,
+      areaBottom,
+      areaLeft,
+    ],
+  );
 
-  const handleZoomOut = useCallback(() => {
-    const ns = clamp(savedScale.value / ZOOM_STEP, minScale, maxScale);
-    savedScale.value = ns;
-    scale.value = withTiming(ns, { duration: 200 });
-  }, [scale, savedScale, minScale, maxScale]);
+  const handleZoomIn = useCallback(() => zoomBy(SLD_ZOOM_STEP), [zoomBy]);
+  const handleZoomOut = useCallback(() => zoomBy(1 / SLD_ZOOM_STEP), [zoomBy]);
 
   const handleToggleRouting = useCallback(
     () => onOrthogonalChange(!orthogonal),
@@ -555,7 +696,7 @@ const createStyles = (scheme: Scheme) =>
       // lines have something to read against — white-on-white was invisible.
       // Dark mode keeps the raised surface, which already has good contrast.
       backgroundColor: scheme.isDark ? scheme.surfaceRaised : scheme.surfaceMuted,
-      borderWidth: 1,
+      borderWidth: SLD_VIEWPORT_BORDER,
       borderColor: scheme.border,
       borderRadius: VIEWPORT_RADIUS,
     },

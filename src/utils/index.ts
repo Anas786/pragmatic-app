@@ -14,6 +14,7 @@ export * from "./dates";
 export * from "./parsers";
 export * from "./aggregations";
 export * from "./sldGroup";
+export * from "./sldPhoneLayout";
 export * from "./units";
 export * from "./freshness";
 export * from "./a11y";
