@@ -2,9 +2,7 @@ import React, { FC, memo, ReactNode, useMemo } from 'react';
 import { StyleSheet, View, ViewStyle } from 'react-native';
 import { radius as radiusTokens, space } from 'src/theme';
 import { FONT_SIZE_SM, FONT_SIZE_XXS } from 'src/utils/theme';
-import { resolveCardColor, shortSourceLabel } from 'src/utils/sources';
-import { formatQuantity } from 'src/utils/units';
-import { ISiteCard } from 'src/types';
+import type { FormattedQuantity } from 'src/utils/units';
 import AppText from '../AppText';
 import Dot from '../Dot';
 
@@ -34,13 +32,21 @@ ChipValueRow.displayName = 'ChipValueRow';
 
 interface ChipLabelProps {
   color: string;
+  /** Upper-case the label — only for app vocabulary ('GRID'); backend
+   *  names keep their own case. Default false. */
+  uppercase?: boolean;
   children: ReactNode;
 }
 
-/** Backend-derived label: original case, no tracking (never uppercased —
- *  see the heading-pattern rule), 1 line. */
-export const ChipLabel: FC<ChipLabelProps> = ({ color, children }) => (
-  <AppText fontSize={FONT_SIZE_XXS} color={color} medium numberOfLines={1}>
+/** Small tracked chip label: 1 line for app vocabulary ('GRID'); a
+ *  backend name ('Grid Export Today') may wrap to 2 so it stays readable. */
+export const ChipLabel: FC<ChipLabelProps> = ({ color, uppercase = false, children }) => (
+  <AppText
+    fontSize={FONT_SIZE_XXS}
+    color={color}
+    medium
+    numberOfLines={uppercase ? 1 : 2}
+    style={uppercase ? styles.chipLabelUpper : styles.chipLabel}>
     {children}
   </AppText>
 );
@@ -99,7 +105,18 @@ export const ProgressBar: FC<ProgressBarProps> = memo(
 ProgressBar.displayName = 'ProgressBar';
 
 interface MetricChipProps {
-  card: ISiteCard;
+  /** Visible label, as the caller decided it (never re-derived here). */
+  label: string;
+  /** Upper-case `label` ('GRID') — pass true only for app vocabulary. */
+  uppercaseLabel?: boolean;
+  /** Dot / share-bar fill (an energy-palette or card accent colour). */
+  color: string;
+  /** The value, already formatted (`formatQuantity` compact) — rendered
+   *  verbatim; a missing value is a muted '—' with no unit. */
+  quantity: FormattedQuantity;
+  /** Optional muted line under the value ('Today'), on its own line so a
+   *  narrow chip never cuts it off with the label's ellipsis. */
+  caption?: string;
   /** Source's share of total (0-100). Omit or pass 0 to hide the bar+label. */
   percent?: number;
   /** Required only when `percent > 0`. */
@@ -111,14 +128,17 @@ interface MetricChipProps {
 }
 
 /**
- * Compact metric tile: source dot + label, the value via `formatQuantity`
- * (compact: '15.6 MWh', never 'K' next to a unit; '—' with no unit when
- * the backend sends 'NA'), and an optional share bar. Colour lives on the
- * dot and bar only — every text uses an ink role.
+ * Compact metric tile: dot + small tracked label, a bold value with its
+ * unit, and an optional share bar. Colour lives on the dot and bar only —
+ * every text uses an ink role.
  */
 const MetricChip: FC<MetricChipProps> = memo(
   ({
-    card,
+    label,
+    uppercaseLabel = false,
+    color,
+    quantity,
+    caption,
     percent,
     surfaceColor,
     trackColor,
@@ -126,34 +146,45 @@ const MetricChip: FC<MetricChipProps> = memo(
     textSecondary,
     textTertiary,
   }) => {
-    const sourceColor = resolveCardColor(card);
-    const label = shortSourceLabel(card.name);
-    const q = formatQuantity(card.value, card.unit, { mode: 'compact' });
     const hasPercent = (percent ?? 0) > 0 && trackColor !== undefined;
     return (
       <Chip surfaceColor={surfaceColor}>
         <ChipHeader>
-          <Dot color={sourceColor} size={8} />
-          <ChipLabel color={textSecondary}>{label}</ChipLabel>
+          <Dot color={color} size={8} />
+          <ChipLabel color={textTertiary} uppercase={uppercaseLabel}>
+            {label}
+          </ChipLabel>
         </ChipHeader>
         <ChipValueRow>
           <AppText
             fontSize={FONT_SIZE_SM}
             bold
-            color={q.isMissing ? textTertiary : textPrimary}
-            numberOfLines={1}>
-            {q.text}
+            color={quantity.isMissing ? textTertiary : textPrimary}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}>
+            {quantity.text}
           </AppText>
-          {q.unit ? (
+          {quantity.unit ? (
             <AppText fontSize={FONT_SIZE_XXS} color={textSecondary}>
-              {q.unit}
+              {quantity.unit}
             </AppText>
           ) : null}
         </ChipValueRow>
+        {caption ? (
+          <AppText
+            fontSize={FONT_SIZE_XXS}
+            color={textTertiary}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}>
+            {caption}
+          </AppText>
+        ) : null}
         {hasPercent && percent !== undefined && trackColor ? (
           <>
             <ProgressBar
-              color={sourceColor}
+              color={color}
               trackColor={trackColor}
               percent={percent}
             />
@@ -186,6 +217,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  chipLabel: {
+    flexShrink: 1,
+    letterSpacing: 0.6,
+  },
+  chipLabelUpper: {
+    flexShrink: 1,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
   },
   chipValueRow: {
     flexDirection: 'row',

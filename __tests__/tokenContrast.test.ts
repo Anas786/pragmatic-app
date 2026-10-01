@@ -18,16 +18,18 @@ import {
   touch,
   type as typeRamp,
 } from '../src/theme/tokens';
+import { heroTint } from '../src/components/screens/Authenticated/Dashboard/siteCardModel';
 
 type RGB = [number, number, number];
 
 const parseColor = (c: string): { rgb: RGB; a: number } => {
-  const hex = /^#([0-9a-f]{6})$/i.exec(c);
+  // #RRGGBB, or #RRGGBBAA (an alpha-suffixed accent, e.g. the hero tint).
+  const hex = /^#([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(c);
   if (hex) {
     const h = hex[1];
     return {
       rgb: [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)) as RGB,
-      a: 1,
+      a: hex[2] ? parseInt(hex[2], 16) / 255 : 1,
     };
   }
   const rgba = /^rgba?\(([^)]+)\)$/i.exec(c);
@@ -76,7 +78,7 @@ const SCHEMES: [string, ColorScheme][] = [
   ['dark', darkScheme],
 ];
 
-describe.each(SCHEMES)('%s scheme', (_name, s) => {
+describe.each(SCHEMES)('%s scheme', (name, s) => {
   const surfaces = {
     bg: s.bg,
     surface: s.surface,
@@ -144,6 +146,19 @@ describe.each(SCHEMES)('%s scheme', (_name, s) => {
       expect(contrast(s.heroOnGradient, stop)).toBeGreaterThanOrEqual(AA);
       expect(contrast(s.heroDangerOnGradientMuted, stop)).toBeGreaterThanOrEqual(AA);
     }
+  });
+
+  it('energyInk overlines are AA on every stop of the Dashboard hero tint (over surface)', () => {
+    // The SiteCard hero overline is normal-size text in energyInk on its
+    // own source's tint, composited over the card surface.
+    const failing = (Object.keys(energyPalette) as (keyof typeof energyPalette)[])
+      .flatMap(source =>
+        heroTint(energyPalette[source], name === 'dark').colors.map(
+          stop => [source, stop, contrastOnTint(s.energyInk[source], stop, s.surface)] as const,
+        ),
+      )
+      .filter(([, , ratio]) => ratio < AA);
+    expect(failing).toEqual([]);
   });
 
   it('borderStrong meets the 3:1 non-text minimum on surface', () => {

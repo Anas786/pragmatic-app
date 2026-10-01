@@ -3,10 +3,16 @@
  * the card's layout, its screen-reader label and the unit tests all read
  * the same decisions.
  *
+ * Layout (the restored pre-v3 design): ONE hero metric in a source-tinted
+ * tile — the card's largest value — and the rest as satellite chips (3
+ * visible, a toggle for more when there are more than 3).
+ *
  * Web-portal parity (orchestrator rule O5): every number on the card is a
  * backend site-list `cards[]` value shown as-is (formatting only). The card
  * never sums, derives or re-labels a value:
  *   - no fleet/site total and no share-% text,
+ *   - the hero is CHOSEN by size (compared in base units, so 2 MWh beats
+ *     500 kWh) but shows its own value — choosing is not deriving,
  *   - a label is the backend card name, shortened to its source word
  *     ('Solar' for 'Solar Energy Today') only when every other word in the
  *     name is generic (energy / power / period wording) and no other card
@@ -14,15 +20,13 @@
  *     'Solar Irradiance' keep their names (`legendLabel`),
  *   - a period caption ('Today') appears only when the backend NAME says
  *     so (`periodFromName`), never inferred from the unit.
- * The PowerMixBar is a picture of those same values side by side, drawn
- * only when they are directly comparable (same quantity, same period).
  */
 import type { ISite } from 'src/types';
 import {
   numericCardValue,
   PERIOD_LABEL,
-  periodFromCard,
   periodFromName,
+  resolveCardColor,
   shortSourceLabel,
   SOURCE_ORDER,
   sourceTokenFromName,
@@ -33,12 +37,11 @@ import {
   formatQuantity,
   normalizeUnit,
   splitLabelUnit,
-  unitFamily,
   type FormattedQuantity,
 } from 'src/utils/units';
 
-/** Legend items shown before the '+N more' toggle takes the last slot. */
-export const LEGEND_COLLAPSED_LIMIT = 4;
+/** Satellite chips shown before the 'Show all' toggle appears. */
+export const COLLAPSED_SATELLITES = 3;
 /** Metrics read out in the collapsed card's screen-reader label. */
 export const SPOKEN_METRIC_LIMIT = 3;
 
@@ -49,41 +52,38 @@ export interface SiteCardMetric {
   name: string;
   /** Visible label: the source word, or the full backend name. */
   label: string;
-  /** Energy source the NAME resolves to (dot colour); undefined = neutral. */
+  /** True when `label` is the bare source word ('Solar') — app vocabulary,
+   *  so it may be shown upper-cased. Full backend names keep their case. */
+  sourceWord: boolean;
+  /** Energy source the NAME resolves to; undefined = neutral. */
   source: SourceToken | undefined;
+  /** Fill colour for the dot / hero tint: the energy palette for a source,
+   *  else the backend's own 6-digit colour, else a neutral slate. Always
+   *  `#RRGGBB`, so callers may alpha-suffix it. Never used as text ink. */
+  accent: string;
   /** Period the backend NAME states ('Grid Energy Today' → 'today'). */
   period: CardPeriod | undefined;
-  /** Period shown after this item's label — set only when the card can't
-   *  state one shared period for every item (see `sharedPeriod`) and the
-   *  label doesn't already say it. */
+  /** Period to show beside the label — the name's period unless the
+   *  visible label already says it ('Grid Export Today'). */
+  periodCaption: CardPeriod | undefined;
+  /** Period a SATELLITE shows after its label: only when the card has no
+   *  one shared period (see `sharedPeriod`); undefined otherwise. */
   periodSuffix: CardPeriod | undefined;
   /** Compact value + unit ('63.2' 'MWh'); '—' with no unit when missing. */
   quantity: FormattedQuantity;
-  /** Drawn as a PowerMixBar segment. */
-  inMix: boolean;
   /** Screen-reader phrase: 'Solar 63.2 megawatt hours today'. */
   spoken: string;
 }
 
-export interface SiteCardMixSegment {
-  key: string;
-  source: SourceToken;
-  /** Value in the family's base unit (Wh / W) — bar proportions only. */
-  weight: number;
-}
-
 export interface SiteCardModel {
-  /** Ordered: SOURCE_ORDER first, then non-source cards in backend order. */
+  /** Every metric in reading order: the hero first, then the satellites. */
   metrics: SiteCardMetric[];
-  /** Bar segments, or null when the values aren't directly comparable. */
-  mix: SiteCardMixSegment[] | null;
-  /** The one period EVERY metric's name states (shown once), if any. */
+  /** The hero tile's metric (largest value); null when the site has none. */
+  hero: SiteCardMetric | null;
+  /** The chips: SOURCE_ORDER first, then non-source cards in backend order. */
+  satellites: SiteCardMetric[];
+  /** The one period EVERY metric's name states, if any. */
   sharedPeriod: CardPeriod | undefined;
-  /** Site capacity ('30 MW'); only meaningful when `showCapacity`. */
-  capacity: FormattedQuantity;
-  showCapacity: boolean;
-  /** Numeric capacity in kW for navigation params (null when unparsable). */
-  capacityKw: number | null;
   controller: boolean;
 }
 
@@ -99,7 +99,7 @@ const PREFIX_FACTOR: Record<string, number> = {
 const SCALABLE_UNIT = /^([kMGT]?)(VArh|VAh|VAr|VA|Wh|W)$/;
 
 /** Multiplier from `unit` to its family's base unit (kWh → 1000), or null
- *  for units that can't be put on one scale with others. */
+ *  for units that have no prefix scale (%, V, W/m²…). */
 const baseFactor = (unit: string | null | undefined): number | null => {
   const m = SCALABLE_UNIT.exec(normalizeUnit(unit));
   return m ? PREFIX_FACTOR[m[1]] : null;
@@ -186,9 +186,9 @@ const isPlainSourceName = (name: string, source: SourceToken): boolean => {
 };
 
 /**
- * Legend label before the per-card dedupe: the source word for a plain
- * source name, otherwise the backend name (a trailing recognised '(kWh)'
- * dropped — the value already shows its unit).
+ * Label before the per-card dedupe: the source word for a plain source
+ * name, otherwise the backend name (a trailing recognised '(kWh)' dropped —
+ * the value already shows its unit).
  */
 export const legendLabel = (name: string, source: SourceToken | undefined): string => {
   const base = splitLabelUnit(name).label;
@@ -205,6 +205,7 @@ interface Draft {
   unit: string;
   value: number | null;
   source: SourceToken | undefined;
+  accent: string;
   period: CardPeriod | undefined;
   quantity: FormattedQuantity;
 }
@@ -215,27 +216,23 @@ const orderIndex = (source: SourceToken | undefined): number =>
 const allEqual = <T,>(xs: T[]): boolean => xs.every(x => x === xs[0]);
 
 /**
- * Which drafts form the mix bar: the source cards that carry a value,
- * when they all measure the same quantity (all energy or all power, on a
- * known W/Wh scale) over the same period. Mixed units or periods → no
- * bar (null). Zero and negative values (e.g. grid export) stay in the
- * legend but get no segment; with nothing positive there is no bar.
+ * Index (into `ordered`) of the hero: the largest numeric value, compared
+ * in base units (W / Wh …) so a 2 MWh card beats a 500 kWh one; a unit
+ * with no prefix scale compares as-is. Ties keep the earlier card (source
+ * order). With no numeric value at all, the first card.
  */
-const buildMix = (drafts: Draft[]): Set<number> | null => {
-  const candidates = drafts.filter(d => d.source !== undefined && d.value !== null);
-  if (candidates.length === 0) return null;
-
-  const families = candidates.map(d => unitFamily(d.unit));
-  if (!allEqual(families)) return null;
-  if (families[0] !== 'energy' && families[0] !== 'power') return null;
-  if (candidates.some(d => baseFactor(d.unit) === null)) return null;
-
-  const periods = candidates.map(d => periodFromCard(d.name, d.unit));
-  if (!allEqual(periods)) return null;
-
-  const positive = candidates.filter(d => (d.value as number) > 0);
-  if (positive.length === 0) return null;
-  return new Set(positive.map(d => d.index));
+const pickHero = (ordered: Draft[]): number => {
+  let best = 0;
+  let bestSize = -Infinity;
+  ordered.forEach((d, i) => {
+    if (d.value === null) return;
+    const size = d.value * (baseFactor(d.unit) ?? 1);
+    if (size > bestSize) {
+      best = i;
+      bestSize = size;
+    }
+  });
+  return best;
 };
 
 const periodWord = (period: CardPeriod | undefined): string =>
@@ -259,6 +256,7 @@ export const buildSiteCardModel = (site: ISite): SiteCardModel => {
       unit,
       value: numericCardValue(card?.value),
       source: name ? sourceTokenFromName(name) : undefined,
+      accent: resolveCardColor({ name, color: card?.color }),
       period: name ? periodFromName(name) : undefined,
       quantity: formatQuantity(card?.value, unit, { mode: 'compact' }),
     };
@@ -278,91 +276,105 @@ export const buildSiteCardModel = (site: ISite): SiteCardModel => {
   const sharedPeriod =
     ordered.length > 0 && periods[0] !== undefined && allEqual(periods) ? periods[0] : undefined;
 
-  const mixSet = buildMix(drafts);
-
   const metrics: SiteCardMetric[] = ordered.map((d, i) => {
     const short = shortLabels[i];
-    const label =
+    const deduped =
       (labelCount.get(short.toLowerCase()) ?? 0) > 1 ? splitLabelUnit(d.name).label : short;
-    const visibleLabel = label || 'Unnamed metric';
+    const label = deduped || 'Unnamed metric';
     // A full backend name already states its period ('Grid Export Today') —
     // don't repeat it as 'Grid Export Today · Today' / '… kilowatt hours today'.
-    const labelSaysPeriod = d.period !== undefined && periodFromName(visibleLabel) === d.period;
+    const labelSaysPeriod = d.period !== undefined && periodFromName(label) === d.period;
+    const periodCaption = labelSaysPeriod ? undefined : d.period;
     return {
       key: `${d.index}:${d.name}`,
       name: d.name,
-      label: visibleLabel,
+      label,
+      sourceWord: d.source !== undefined && label === shortSourceLabel(label),
       source: d.source,
+      accent: d.accent,
       period: d.period,
-      periodSuffix: sharedPeriod === undefined && !labelSaysPeriod ? d.period : undefined,
+      periodCaption,
+      periodSuffix: sharedPeriod === undefined ? periodCaption : undefined,
       quantity: d.quantity,
-      inMix: mixSet?.has(d.index) ?? false,
-      spoken: spokenMetric(visibleLabel, d.quantity, labelSaysPeriod ? undefined : d.period),
+      spoken: spokenMetric(label, d.quantity, periodCaption),
     };
   });
 
-  const mix: SiteCardMixSegment[] | null = mixSet
-    ? ordered
-        .filter(d => mixSet.has(d.index))
-        .map(d => {
-          const factor = baseFactor(d.unit) as number;
-          const weight = (d.value as number) * factor;
-          return { key: `${d.index}:${d.name}`, source: d.source as SourceToken, weight };
-        })
-    : null;
+  if (metrics.length === 0) {
+    return { metrics, hero: null, satellites: [], sharedPeriod, controller: site.controller === true };
+  }
 
-  const capacity = formatQuantity(site.size, 'kW', { mode: 'compact' });
-  const capacityKw = numericCardValue(site.size);
+  const heroAt = pickHero(ordered);
+  const hero = metrics[heroAt];
+  const satellites = metrics.filter((_, i) => i !== heroAt);
 
   return {
-    metrics,
-    mix,
+    metrics: [hero, ...satellites],
+    hero,
+    satellites,
     sharedPeriod,
-    capacity,
-    showCapacity: capacityKw !== null && capacityKw > 0,
-    capacityKw,
     controller: site.controller === true,
   };
 };
 
+/* ─────────── hero tint ─────────── */
+
+/**
+ * The hero tile's source tint: a 3-stop gradient (strongest top-left) and
+ * its border, as alpha-suffixed `accent` (`#RRGGBB`). The overline's
+ * `energyInk` sits on the strongest stop, so light mode starts at 12.5%
+ * (`20`) instead of the old 18% (`2E`) — at 18% genset and solar ink fell
+ * to 4.3–4.4:1 (< AA). Dark mode keeps the old 18%. Pinned for every
+ * source in both themes by __tests__/tokenContrast.test.ts.
+ */
+export const heroTint = (
+  accent: string,
+  isDark: boolean,
+): { colors: string[]; border: string } => ({
+  colors: [`${accent}${isDark ? '2E' : '20'}`, `${accent}0A`, `${accent}05`],
+  border: `${accent}2E`,
+});
+
 /* ─────────── collapse / expand ─────────── */
 
-/** The legend items on screen: everything when it fits (≤ 4) or the card
- *  is expanded; otherwise the first 3 plus a '+N more' toggle. */
-export const visibleMetrics = (
+/** The satellite chips on screen: all of them when they fit (≤ 3) or the
+ *  card is expanded; otherwise the first 3. */
+export const visibleSatellites = (
   model: SiteCardModel,
   expanded: boolean,
 ): { visible: SiteCardMetric[]; hiddenCount: number } => {
-  const total = model.metrics.length;
-  if (expanded || total <= LEGEND_COLLAPSED_LIMIT) {
-    return { visible: model.metrics, hiddenCount: 0 };
+  const total = model.satellites.length;
+  if (expanded || total <= COLLAPSED_SATELLITES) {
+    return { visible: model.satellites, hiddenCount: 0 };
   }
-  const shown = LEGEND_COLLAPSED_LIMIT - 1;
-  return { visible: model.metrics.slice(0, shown), hiddenCount: total - shown };
+  return {
+    visible: model.satellites.slice(0, COLLAPSED_SATELLITES),
+    hiddenCount: total - COLLAPSED_SATELLITES,
+  };
 };
 
-/** Label of the expand/collapse toggle (visual + custom a11y action), or
- *  null when every metric already fits. */
+/** Visible text of the expand / collapse toggle ('Show all 5' — every
+ *  metric on the card, hero included), or null when nothing is hidden. */
+export const toggleMetricsText = (model: SiteCardModel, expanded: boolean): string | null => {
+  if (model.satellites.length <= COLLAPSED_SATELLITES) return null;
+  return expanded ? 'Show less' : `Show all ${model.metrics.length}`;
+};
+
+/** Screen-reader label of the toggle (the card's custom action), or null
+ *  when nothing is hidden. Contains the visible 'Show all N' text. */
 export const toggleMetricsLabel = (model: SiteCardModel, expanded: boolean): string | null => {
-  if (model.metrics.length <= LEGEND_COLLAPSED_LIMIT) return null;
+  if (model.satellites.length <= COLLAPSED_SATELLITES) return null;
   return expanded ? 'Show fewer metrics' : `Show all ${model.metrics.length} metrics`;
 };
 
-/** Capacity as visible text ('30 MW'), or undefined when not shown. */
-export const capacityText = (model: SiteCardModel): string | undefined =>
-  model.showCapacity
-    ? [model.capacity.text, model.capacity.unit].filter(Boolean).join(' ')
-    : undefined;
-
-const capitalise = (s: string): string => (s ? s[0].toUpperCase() + s.slice(1) : s);
-
 /**
  * The card's single screen-reader label:
- *   'CCI FGF. Live, updated 3 minutes ago. Capacity 2.5 megawatts,
- *    controller installed. Solar 15.6 megawatt hours today, Genset 0
- *    kilowatt hours today, Grid no data, and 2 more'
- * Collapsed cards read the first 3 metrics plus 'and N more'; expanded
- * cards read them all. `statusSpoken` comes from `siteStatus().spoken`.
+ *   'CCI FGF. Live, updated 3 minutes ago. Controller installed. Solar
+ *    15.6 megawatt hours today, Wind 1.25 megawatt hours today, Battery
+ *    300 kilowatt hours today, and 2 more'
+ * Metrics are read hero first. Collapsed cards read the first 3 plus
+ * 'and N more'; expanded cards read them all. `statusSpoken` comes from
+ * `siteStatus().spoken`.
  */
 export const siteCardA11yLabel = (
   siteName: string,
@@ -372,10 +384,7 @@ export const siteCardA11yLabel = (
 ): string => {
   const sentences: string[] = [siteName.trim(), statusSpoken.trim()];
 
-  const facts: string[] = [];
-  if (model.showCapacity) facts.push(`capacity ${model.capacity.spoken}`);
-  if (model.controller) facts.push('controller installed');
-  if (facts.length > 0) sentences.push(capitalise(facts.join(', ')));
+  if (model.controller) sentences.push('Controller installed');
 
   const total = model.metrics.length;
   if (total === 0) {

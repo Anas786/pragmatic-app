@@ -1,8 +1,10 @@
 /**
- * Dashboard SiteCard v3: the pure view-model (order, mix eligibility,
- * missing / negative values, labels, a11y text) plus a render pass over the
- * card itself (freshness wording, no LIVE/pulse, one screen-reader stop,
- * the toggleMetrics custom action).
+ * Dashboard SiteCard (the restored pre-v3 design — avatar ring, hero tile,
+ * satellite chips — with honest data): the pure view-model (hero choice,
+ * order, missing / negative values, labels, periods, a11y text) plus a
+ * render pass over the card itself (freshness wording, no LIVE / pulse /
+ * sparkline, values verbatim, one screen-reader stop, the toggleMetrics
+ * custom action).
  *
  * Web-portal parity (O5): every value must be the backend site-list card's
  * own value — the model never sums or derives a number.
@@ -10,27 +12,39 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import React from 'react';
 import renderer, { act, ReactTestInstance, ReactTestRenderer } from 'react-test-renderer';
-import { AppState, StyleSheet, Text, TextInput } from 'react-native';
+import { AppState, Image, StyleSheet, Text, TextInput } from 'react-native';
+import { Defs, LinearGradient as SvgLinearGradient, Path, Svg } from 'react-native-svg';
+import LinearGradient from 'react-native-linear-gradient';
 import {
   buildSiteCardModel,
-  capacityText,
+  COLLAPSED_SATELLITES,
+  heroTint,
   legendLabel,
-  LEGEND_COLLAPSED_LIMIT,
   siteCardA11yLabel,
   toggleMetricsLabel,
-  visibleMetrics,
+  toggleMetricsText,
+  visibleSatellites,
 } from '../src/components/screens/Authenticated/Dashboard/siteCardModel';
-import { SiteCard } from '../src/components/screens/Authenticated/Dashboard/components/SiteCard';
+import {
+  SITE_CARD_AVATAR,
+  SiteCard,
+} from '../src/components/screens/Authenticated/Dashboard/components/SiteCard';
+import SiteCardSkeleton from '../src/components/screens/Authenticated/Dashboard/components/SiteCardSkeleton';
+import PulseDot from '../src/components/common/PulseDot';
+import Skeleton from '../src/components/common/Skeleton';
 import SearchBar, { SEARCH_HELPER_TEXT } from '../src/components/common/SearchBar';
-import { touch } from '../src/theme/tokens';
+import { useThemeStore } from '../src/hooks/useThemeStore';
+import { DARK_SCHEME, LIGHT_SCHEME } from '../src/theme/useThemedStyles';
+import { energyPalette, touch } from '../src/theme/tokens';
+import { siteStatus } from '../src/utils/freshness';
 import type { ISite, ISiteCard } from '../src/types';
 import type { SourceToken } from '../src/utils/sources';
 
-const card = (name: string, value: number | string, unit = 'kWh'): ISiteCard => ({
+const card = (name: string, value: number | string, unit = 'kWh', color = '#00ff00'): ISiteCard => ({
   name,
   value,
   unit,
-  color: '#00ff00',
+  color,
   icon: 'solar',
 });
 
@@ -48,17 +62,18 @@ const site = (cards: ISiteCard[] | undefined, extra: Partial<ISite> = {}): ISite
 
 /** Shaped like Lucky Cement's site-list row (backend order Grid, Solar,
  *  Genset, Wind — the order the API ships). */
-const LUCKY = site([
+const LUCKY_CARDS = [
   card('Grid Energy Today', 200123.4),
   card('Solar Energy Today', 63210.5),
   card('Genset Energy Today', 105024),
   card('Wind Energy Today', 187400),
-]);
+];
+const LUCKY = site(LUCKY_CARDS);
 
 /* ─────────── view-model ─────────── */
 
 describe('buildSiteCardModel', () => {
-  it('orders sources solar → wind → battery → genset → grid, then others in backend order', () => {
+  it('heroes the largest value; satellites in source order, then others in backend order', () => {
     const m = buildSiteCardModel(
       site([
         card('Total Energy Consumed', 5),
@@ -70,88 +85,65 @@ describe('buildSiteCardModel', () => {
         card('Genset Energy Today', 7),
       ]),
     );
-    expect(m.metrics.map(x => x.label)).toEqual([
+    expect(m.hero?.label).toBe('Genset');
+    expect(m.satellites.map(x => x.label)).toEqual([
       'Solar',
       'Wind',
       // 'Discharge' is meaning — the name is kept, never cut to 'Battery'.
       'Battery Discharge Today',
-      'Genset',
       'Grid',
       'Total Energy Consumed',
       'MOBLE CARD',
     ]);
+    // Reading order = hero first, then the chips.
+    expect(m.metrics).toEqual([m.hero, ...m.satellites]);
   });
 
   it('shows each backend value as-is (compact) — no total, no share', () => {
     const m = buildSiteCardModel(LUCKY);
-    expect(m.metrics.map(x => [x.label, x.quantity.value, x.quantity.text, x.quantity.unit])).toEqual([
+    const row = (x: { label: string; quantity: { value: number | null; text: string; unit: string } }) => [
+      x.label,
+      x.quantity.value,
+      x.quantity.text,
+      x.quantity.unit,
+    ];
+    expect(m.hero && row(m.hero)).toEqual(['Grid', 200123.4, '200', 'MWh']);
+    expect(m.satellites.map(row)).toEqual([
       ['Solar', 63210.5, '63.2', 'MWh'],
       ['Wind', 187400, '187', 'MWh'],
       ['Genset', 105024, '105', 'MWh'],
-      ['Grid', 200123.4, '200', 'MWh'],
     ]);
-    // O5: nothing on the model is a sum or a derived figure.
-    expect(Object.keys(m).sort()).toEqual(
-      ['capacity', 'capacityKw', 'controller', 'metrics', 'mix', 'sharedPeriod', 'showCapacity'].sort(),
-    );
+    // Verbatim: every metric carries exactly its own backend card's value.
+    m.metrics.forEach(x => {
+      const src = LUCKY_CARDS.find(c => c.name === x.name);
+      expect(x.quantity.value).toBe(src?.value);
+    });
+    // O5: nothing on the model is a sum, a share or a derived figure.
+    expect(Object.keys(m).sort()).toEqual(['controller', 'hero', 'metrics', 'satellites', 'sharedPeriod']);
     expect(m.sharedPeriod).toBe('today');
-    expect(m.metrics.every(x => x.periodSuffix === undefined)).toBe(true);
+    expect(m.hero?.periodCaption).toBe('today');
+    expect(m.satellites.every(x => x.periodSuffix === undefined)).toBe(true);
   });
 
-  it('draws the mix bar from the same values, in base units and legend order', () => {
-    const m = buildSiteCardModel(LUCKY);
-    expect(m.mix?.map(s => [s.key, s.source])).toEqual([
-      ['1:Solar Energy Today', 'solar'],
-      ['3:Wind Energy Today', 'wind'],
-      ['2:Genset Energy Today', 'genset'],
-      ['0:Grid Energy Today', 'grid'],
+  it('compares the hero in base units — 2 MWh beats 500 kWh', () => {
+    const m = buildSiteCardModel(
+      site([card('Grid Energy Today', 500, 'kwh'), card('Solar Energy Today', 2, 'MWh')]),
+    );
+    expect([m.hero?.label, m.hero?.quantity.text, m.hero?.quantity.unit]).toEqual(['Solar', '2', 'MWh']);
+    expect(m.satellites.map(x => [x.label, x.quantity.text, x.quantity.unit])).toEqual([
+      ['Grid', '500', 'kWh'],
     ]);
-    const weights = m.mix?.map(s => s.weight) ?? [];
-    [63210.5e3, 187400e3, 105024e3, 200123.4e3].forEach((w, i) => expect(weights[i]).toBeCloseTo(w, 3));
-    expect(m.metrics.every(x => x.inMix)).toBe(true);
   });
 
-  it('puts kWh and MWh on one scale', () => {
-    const m = buildSiteCardModel(
-      site([card('Solar Energy Today', 2, 'MWh'), card('Grid Energy Today', 500, 'kwh')]),
-    );
-    expect(m.mix?.map(s => s.weight)).toEqual([2e6, 500e3]);
+  it('keeps source order on a tie and when nothing is numeric', () => {
+    const tie = buildSiteCardModel(site([card('Grid Energy Today', 10), card('Solar Energy Today', 10)]));
+    expect(tie.hero?.label).toBe('Solar');
+    const none = buildSiteCardModel(site([card('Grid Energy Today', 'NA'), card('Solar Energy Today', 'NA')]));
+    expect(none.hero?.label).toBe('Solar');
+    expect(none.hero?.quantity).toMatchObject({ text: '—', unit: '', isMissing: true });
   });
 
-  it('drops the bar when periods are mixed', () => {
-    const m = buildSiteCardModel(
-      site([card('Solar Energy Today', 10), card('Grid Energy This Month', 20)]),
-    );
-    expect(m.mix).toBeNull();
-    expect(m.sharedPeriod).toBeUndefined();
-    // …and each item then states its own period.
-    expect(m.metrics.map(x => x.periodSuffix)).toEqual(['today', 'month']);
-  });
-
-  it('drops the bar when units are mixed (energy vs power)', () => {
-    const m = buildSiteCardModel(
-      site([card('Solar Energy Today', 10, 'kWh'), card('Grid Power Today', 20, 'kW')]),
-    );
-    expect(m.mix).toBeNull();
-    expect(m.sharedPeriod).toBe('today');
-  });
-
-  it('drops the bar for non-W units', () => {
-    const m = buildSiteCardModel(site([card('Solar Today', 10, '%'), card('Grid Today', 20, '%')]));
-    expect(m.mix).toBeNull();
-  });
-
-  it('allows an all-power realtime mix (period inferred from the unit) without a caption', () => {
-    const m = buildSiteCardModel(
-      site([card('Wind Generation - RealTime', 14463.03, 'kW'), card('Solar - RealTime', 18942.4, 'kW')]),
-    );
-    expect(m.mix?.map(s => s.source)).toEqual(['solar', 'wind']);
-    // 'RealTime' isn't a period the name parser states → no caption (O5).
-    expect(m.sharedPeriod).toBeUndefined();
-    expect(m.metrics.map(x => x.periodSuffix)).toEqual([undefined, undefined]);
-  });
-
-  it('keeps negatives and zero in the legend but out of the bar', () => {
+  it('keeps negatives and zero as they are', () => {
     const m = buildSiteCardModel(
       site([
         card('Solar Energy Today', 40),
@@ -159,49 +151,74 @@ describe('buildSiteCardModel', () => {
         card('Genset Energy Today', 0),
       ]),
     );
-    expect(m.metrics.map(x => [x.label, x.quantity.text, x.inMix])).toEqual([
-      ['Solar', '40', true],
-      ['Genset', '0', false],
-      ['Grid', '-15', false],
+    expect([m.hero?.label, m.hero?.quantity.text]).toEqual(['Solar', '40']);
+    expect(m.satellites.map(x => [x.label, x.quantity.text])).toEqual([
+      ['Genset', '0'],
+      ['Grid', '-15'],
     ]);
-    expect(m.mix?.map(s => s.source)).toEqual(['solar']);
   });
 
-  it("renders 'NA' as a missing value: '—', no unit, 'no data', no segment", () => {
+  it("renders 'NA' as a missing value: '—', no unit, 'no data'", () => {
     const m = buildSiteCardModel(
       site([card('Solar Energy Today', 12), card('Grid Energy Today', 'NA')]),
     );
-    const grid = m.metrics[1];
+    const [grid] = m.satellites;
     expect(grid.quantity).toMatchObject({ text: '—', unit: '', isMissing: true });
     expect(grid.spoken).toBe('Grid no data');
-    expect(grid.inMix).toBe(false);
-    expect(m.mix?.map(s => s.source)).toEqual(['solar']);
   });
 
-  it('has no bar when nothing is positive', () => {
-    const m = buildSiteCardModel(site([card('Solar Energy Today', 0), card('Grid Energy Today', 'NA')]));
-    expect(m.mix).toBeNull();
+  it('never infers a period from a power unit (no “Now” caption)', () => {
+    const m = buildSiteCardModel(
+      site([card('Wind Generation - RealTime', 14463.03, 'kW'), card('Solar - RealTime', 18942.4, 'kW')]),
+    );
+    expect(m.hero?.label).toBe('Solar');
+    expect(m.hero?.periodCaption).toBeUndefined();
+    expect(m.sharedPeriod).toBeUndefined();
+    expect(m.satellites.map(x => [x.label, x.periodSuffix])).toEqual([['Wind', undefined]]);
   });
 
-  it('keeps non-source cards neutral, full-named and out of the bar', () => {
+  it('gives each satellite its own period when periods are mixed', () => {
+    const m = buildSiteCardModel(
+      site([card('Solar Energy Today', 10), card('Grid Energy This Month', 20)]),
+    );
+    expect(m.sharedPeriod).toBeUndefined();
+    expect([m.hero?.label, m.hero?.periodCaption]).toEqual(['Grid', 'month']);
+    expect(m.satellites.map(x => [x.label, x.periodSuffix])).toEqual([['Solar', 'today']]);
+  });
+
+  it('keeps non-source cards neutral-labelled; accents come from the palette, else the backend', () => {
     const m = buildSiteCardModel(
       site([card('Solar Energy Today', 10), card('Total Energy Consumed', 1188.33, 'mWh')]),
     );
-    const other = m.metrics[1];
-    expect(other).toMatchObject({ label: 'Total Energy Consumed', source: undefined, inMix: false });
+    const other = m.hero;
+    expect(other).toMatchObject({
+      label: 'Total Energy Consumed',
+      source: undefined,
+      sourceWord: false,
+      accent: '#00ff00',
+      periodCaption: undefined,
+    });
     // 'mWh' is the backend's casing typo for MWh — normalised, never milli.
-    expect([other.quantity.text, other.quantity.unit]).toEqual(['1.19', 'GWh']);
-    // Not every name states 'today' → no shared caption; solar carries its own.
+    expect([other?.quantity.text, other?.quantity.unit]).toEqual(['1.19', 'GWh']);
+    const [solar] = m.satellites;
+    expect(solar).toMatchObject({ label: 'Solar', sourceWord: true, accent: energyPalette.solar });
+    // Not every name states 'today' → no shared period; solar carries its own.
     expect(m.sharedPeriod).toBeUndefined();
-    expect(m.metrics[0].periodSuffix).toBe('today');
-    expect(other.periodSuffix).toBeUndefined();
+    expect(solar.periodSuffix).toBe('today');
+    // A malformed backend colour falls back to a neutral 6-digit hex.
+    const neutral = buildSiteCardModel(site([card('Total Energy Consumed', 1, 'kWh', 'red')]));
+    expect(neutral.hero?.accent).toMatch(/^#[0-9A-F]{6}$/i);
+    expect(neutral.hero?.accent).not.toBe('red');
   });
 
   it('falls back to full names when two cards shorten to the same source word', () => {
     const m = buildSiteCardModel(
       site([card('Solar Energy Today', 10), card('PV Energy Today (kWh)', 4)]),
     );
-    expect(m.metrics.map(x => x.label)).toEqual(['Solar Energy Today', 'PV Energy Today']);
+    expect(m.metrics.map(x => [x.label, x.sourceWord])).toEqual([
+      ['Solar Energy Today', false],
+      ['PV Energy Today', false],
+    ]);
   });
 
   it('keeps Import / Export in the label', () => {
@@ -213,24 +230,21 @@ describe('buildSiteCardModel', () => {
 
   it("keeps a lone qualified name: 'Grid Export Today' never reads as 'Grid'", () => {
     const m = buildSiteCardModel(site([card('Grid Export Today', 4)]));
-    const [grid] = m.metrics;
-    expect(grid.label).toBe('Grid Export Today');
-    expect(grid.source).toBe('grid');
-    // The name already says 'Today' — not repeated in speech.
-    expect(grid.spoken).toBe('Grid Export Today 4 kilowatt hours');
+    const grid = m.hero;
+    expect(grid).toMatchObject({ label: 'Grid Export Today', source: 'grid', sourceWord: false });
+    // The name already says 'Today' — no caption, not repeated in speech.
+    expect(grid?.periodCaption).toBeUndefined();
+    expect(grid?.spoken).toBe('Grid Export Today 4 kilowatt hours');
   });
 
   it("keeps 'Solar Irradiance' (W/m²) — not 'Solar'", () => {
     const m = buildSiteCardModel(
       site([card('Solar Irradiance', 862, 'W/m2'), card('Wind Energy Today', 147786)]),
     );
-    expect(m.metrics.map(x => [x.label, x.quantity.text, x.quantity.unit])).toEqual([
-      ['Solar Irradiance', '862', 'W/m²'],
-      ['Wind', '148', 'MWh'],
+    expect([m.hero?.label, m.hero?.quantity.text, m.hero?.quantity.unit]).toEqual(['Wind', '148', 'MWh']);
+    expect(m.satellites.map(x => [x.label, x.quantity.text, x.quantity.unit, x.periodSuffix])).toEqual([
+      ['Solar Irradiance', '862', 'W/m²', undefined],
     ]);
-    // Mixed periods: the short label carries its period; the full name
-    // (no period stated) gets none.
-    expect(m.metrics.map(x => x.periodSuffix)).toEqual([undefined, 'today']);
   });
 
   it("doesn't repeat a period the full label already states", () => {
@@ -238,27 +252,14 @@ describe('buildSiteCardModel', () => {
       site([card('Grid Export Today', 4), card('Solar Energy This Month', 9)]),
     );
     expect(m.sharedPeriod).toBeUndefined();
-    expect(m.metrics.map(x => [x.label, x.periodSuffix])).toEqual([
-      ['Solar', 'month'],
-      ['Grid Export Today', undefined],
-    ]);
+    expect([m.hero?.label, m.hero?.periodCaption]).toEqual(['Solar', 'month']);
+    expect(m.satellites.map(x => [x.label, x.periodSuffix])).toEqual([['Grid Export Today', undefined]]);
   });
 
-  it('formats capacity compactly and hides missing / zero capacity', () => {
-    const m = buildSiteCardModel(LUCKY);
-    expect(capacityText(m)).toBe('30 MW');
-    expect(m.capacityKw).toBe(30000);
-    expect(capacityText(buildSiteCardModel(site([], { size: '2500' })))).toBe('2.50 MW');
-    expect(capacityText(buildSiteCardModel(site([], { size: 0 })))).toBeUndefined();
-    const na = buildSiteCardModel(site([], { size: 'NA' }));
-    expect(capacityText(na)).toBeUndefined();
-    expect(na.capacityKw).toBeNull();
-  });
-
-  it('tolerates a missing cards array', () => {
+  it('carries the controller flag and tolerates a missing cards array', () => {
+    expect(buildSiteCardModel(site([], { controller: true })).controller).toBe(true);
     const m = buildSiteCardModel(site(undefined));
-    expect(m.metrics).toEqual([]);
-    expect(m.mix).toBeNull();
+    expect(m).toEqual({ metrics: [], hero: null, satellites: [], sharedPeriod: undefined, controller: false });
   });
 });
 
@@ -268,6 +269,7 @@ describe('legendLabel', () => {
     ['PV Total Power', 'solar', 'Solar'],
     ['Wind Generation - RealTime', 'wind', 'Wind'],
     ['Solar - Real-Time', 'solar', 'Solar'],
+    ['Solar Power - Live', 'solar', 'Solar'],
     ['Genset Energy This Month', 'genset', 'Genset'],
     ['DG Energy Today', 'genset', 'Genset'],
     ['Battery Energy Today', 'battery', 'Battery'],
@@ -303,29 +305,33 @@ const FIVE_CARDS = [
 const FIVE = buildSiteCardModel(site(FIVE_CARDS));
 
 describe('collapse / expand', () => {
-  it('shows everything up to the limit, else 3 + "+N more"', () => {
-    expect(LEGEND_COLLAPSED_LIMIT).toBe(4);
-    expect(visibleMetrics(buildSiteCardModel(LUCKY), false)).toMatchObject({ hiddenCount: 0 });
-    expect(visibleMetrics(buildSiteCardModel(LUCKY), false).visible).toHaveLength(4);
-    const collapsed = visibleMetrics(FIVE, false);
-    expect(collapsed.visible.map(m => m.label)).toEqual(['Solar', 'Wind', 'Battery']);
-    expect(collapsed.hiddenCount).toBe(2);
-    expect(visibleMetrics(FIVE, true)).toMatchObject({ hiddenCount: 0 });
-    expect(visibleMetrics(FIVE, true).visible).toHaveLength(5);
+  it('shows up to 3 satellites, the rest behind the toggle', () => {
+    expect(COLLAPSED_SATELLITES).toBe(3);
+    const lucky = buildSiteCardModel(LUCKY);
+    expect(visibleSatellites(lucky, false)).toEqual({ visible: lucky.satellites, hiddenCount: 0 });
+    expect(FIVE.hero?.label).toBe('Solar');
+    const collapsed = visibleSatellites(FIVE, false);
+    expect(collapsed.visible.map(m => m.label)).toEqual(['Wind', 'Battery', 'Genset']);
+    expect(collapsed.hiddenCount).toBe(1);
+    expect(visibleSatellites(FIVE, true)).toEqual({ visible: FIVE.satellites, hiddenCount: 0 });
   });
 
-  it('labels the toggle only when something is hidden', () => {
-    expect(toggleMetricsLabel(buildSiteCardModel(LUCKY), false)).toBeNull();
+  it('shows the toggle only when something is hidden; its label contains its text', () => {
+    const lucky = buildSiteCardModel(LUCKY);
+    expect(toggleMetricsText(lucky, false)).toBeNull();
+    expect(toggleMetricsLabel(lucky, false)).toBeNull();
+    expect(toggleMetricsText(FIVE, false)).toBe('Show all 5');
     expect(toggleMetricsLabel(FIVE, false)).toBe('Show all 5 metrics');
+    expect(toggleMetricsText(FIVE, true)).toBe('Show less');
     expect(toggleMetricsLabel(FIVE, true)).toBe('Show fewer metrics');
   });
 });
 
 describe('siteCardA11yLabel', () => {
-  it('reads name, status, facts and 3 metrics + "and N more"', () => {
+  it('reads name, status, controller and 3 metrics (hero first) + "and N more"', () => {
     const m = buildSiteCardModel({ ...site(FIVE_CARDS), controller: true, size: 2500 });
     expect(siteCardA11yLabel('CCI FGF', 'Live, updated 3 minutes ago', m, false)).toBe(
-      'CCI FGF. Live, updated 3 minutes ago. Capacity 2.50 megawatts, controller installed. ' +
+      'CCI FGF. Live, updated 3 minutes ago. Controller installed. ' +
         'Solar 15.6 megawatt hours today, Wind 1.25 megawatt hours today, ' +
         'Battery 300 kilowatt hours today, and 2 more',
     );
@@ -337,8 +343,8 @@ describe('siteCardA11yLabel', () => {
     expect(label).not.toContain('more');
   });
 
-  it('says when a site has no summary metrics', () => {
-    const m = buildSiteCardModel(site([], { size: 'NA' }));
+  it('says when a site has no summary metrics — and never mentions capacity', () => {
+    const m = buildSiteCardModel(site([]));
     expect(siteCardA11yLabel('Al Nasr', 'No data for 4 hours', m, false)).toBe(
       'Al Nasr. No data for 4 hours. No summary metrics',
     );
@@ -359,13 +365,15 @@ const render = (el: React.ReactElement) => {
 };
 
 /** Flattened text of every outermost <Text> (nested spans joined). */
-const texts = (root: ReactTestInstance): string[] => {
-  const out: string[] = [];
+const texts = (root: ReactTestInstance): string[] => textNodes(root).map(t => t.text);
+
+const textNodes = (root: ReactTestInstance): { text: string; style: Record<string, unknown> }[] => {
+  const out: { text: string; style: Record<string, unknown> }[] = [];
   const flatten = (n: ReactTestInstance | string): string =>
     typeof n === 'string' ? n : n.children.map(flatten).join('');
   const walk = (n: ReactTestInstance) => {
     if (n.type === Text) {
-      out.push(flatten(n));
+      out.push({ text: flatten(n), style: (StyleSheet.flatten(n.props.style) ?? {}) as Record<string, unknown> });
       return;
     }
     n.children.forEach(c => typeof c !== 'string' && walk(c));
@@ -374,11 +382,35 @@ const texts = (root: ReactTestInstance): string[] => {
   return out;
 };
 
+const textOf = (n: ReactTestInstance | string): string =>
+  typeof n === 'string' ? n : n.children.map(textOf).join('');
+
+/** The one outermost <Text> whose content is exactly `text`. */
+const textInstance = (root: ReactTestInstance, text: string): ReactTestInstance => {
+  const found = root.findAll(n => n.type === Text && textOf(n) === text);
+  expect(found).toHaveLength(1);
+  return found[0];
+};
+
+/** What a <Text> actually shows, after a textTransform. */
+const shown = (t: { text: string; style: Record<string, unknown> }) =>
+  t.style.textTransform === 'uppercase' ? t.text.toUpperCase() : t.text;
+
 /** The card's tappable: the accessible host view carrying the hint. */
 const cardPressable = (root: ReactTestInstance) =>
   root.findAll(
     n => typeof n.type === 'string' && n.props.accessibilityHint === 'Opens site details',
   )[0];
+
+/** The avatar's status ring (52pt, 2pt border). */
+const avatarRing = (root: ReactTestInstance) =>
+  root.findAll(n => {
+    if (typeof n.type !== 'string') return false;
+    const s = StyleSheet.flatten(n.props.style) ?? {};
+    return s.width === SITE_CARD_AVATAR && s.borderWidth === 2;
+  })[0];
+
+const activeScheme = () => (useThemeStore.getState().isDark ? DARK_SCHEME : LIGHT_SCHEME);
 
 const renderCard = (s: ISite) => render(React.createElement(SiteCard, { site: s, index: 99, onPress: jest.fn() }));
 
@@ -393,33 +425,84 @@ describe('<SiteCard />', () => {
     jest.useRealTimers();
   });
 
-  it('shows status from the freshness model — never LIVE', () => {
-    const t = renderCard({ ...LUCKY, dataLastUpdate: String(NOW - 4 * 60 * MIN) });
-    const all = texts(t.root);
-    expect(all).toContain('No data for 4 h · 30 MW');
-    expect(all.join('|')).not.toMatch(/LIVE/);
-    expect(all).toContain('Today');
-    expect(all).toEqual(expect.arrayContaining(['Solar', '63.2 MWh', 'Grid', '200 MWh']));
+  it('renders the old layout — hero tile, then chips — with backend values verbatim', () => {
+    const t = renderCard({ ...LUCKY, dataLastUpdate: String(NOW - 3 * MIN) });
+    const nodes = textNodes(t.root);
+    const all = nodes.map(shown);
+    // header: avatar initials (no logo_ext), name, status
+    expect(all.slice(0, 3)).toEqual(['LC', 'Lucky Cement Nooriabad', 'Live · 3 min ago']);
+    // hero: static dot + 'GRID · TODAY', the value, its unit
+    expect(all.slice(3, 6)).toEqual(['GRID · TODAY', '200', 'MWh']);
+    // chips, in source order
+    expect(all.slice(6)).toEqual(['SOLAR', '63.2', 'MWh', 'WIND', '187', 'MWh', 'GENSET', '105', 'MWh']);
+    // nothing derived: no total (≈556 MWh), no share %, no capacity
+    expect(all.join('|')).not.toMatch(/556|%|30 MW/);
   });
 
-  it("reads 'Offline · last data …' for an offline site", () => {
-    const t = renderCard({ ...LUCKY, state: 'OFFLINE', dataLastUpdate: String(NOW - 41 * MIN) });
-    expect(texts(t.root)).toContain('Offline · last data 41 min ago · 30 MW');
+  it('never says LIVE in the hero overline, and nothing pulses', () => {
+    const t = renderCard({
+      ...site([card('Solar Power - Live', 18942.4, 'kW'), card('Grid Power - Live', 120, 'kW')]),
+      dataLastUpdate: String(NOW - 20_000),
+    });
+    const upper = textNodes(t.root).filter(n => n.style.textTransform === 'uppercase');
+    expect(upper.map(shown)).toEqual(['SOLAR', 'GRID']);
+    upper.forEach(n => expect(shown(n)).not.toMatch(/LIVE/));
+    expect(texts(t.root).join('|')).not.toMatch(/LIVE/);
+    expect(t.root.findAllByType(PulseDot)).toHaveLength(0);
   });
 
-  it("reads 'Last update unknown' for a future timestamp", () => {
-    const t = renderCard({ ...LUCKY, dataLastUpdate: String(NOW + 60 * MIN) });
-    expect(texts(t.root)).toContain('Last update unknown · 30 MW');
+  it('draws no sparkline — no SVG at all on a card without a toggle', () => {
+    const t = renderCard({ ...LUCKY, dataLastUpdate: String(NOW - 3 * MIN) });
+    expect(t.root.findAllByType(Svg)).toHaveLength(0);
+    expect(t.root.findAllByType(Path)).toHaveLength(0);
   });
 
-  it('advances the age on the shared tick without a refetch', () => {
+  it('only the toggle chevron is SVG when the toggle shows (no curve, no gradient defs)', () => {
+    const t = renderCard({ ...site(FIVE_CARDS), dataLastUpdate: String(NOW - 3 * MIN) });
+    const paths = t.root.findAllByType(Path);
+    expect(paths.map(p => p.props.d)).toEqual(['M6 9L12 15L18 9']);
+    expect(t.root.findAllByType(Defs)).toHaveLength(0);
+    expect(t.root.findAllByType(SvgLinearGradient)).toHaveLength(0);
+  });
+
+  it.each([
+    ['Live · just now', 'Online', NOW - 20_000],
+    ['Delayed · 39 min ago', 'Online', NOW - 39 * MIN],
+    ['No data for 4 h', 'Online', NOW - 4 * 60 * MIN],
+    ['Offline · last data 28 Sep', 'OFFLINE', NOW - 3 * 24 * 60 * MIN],
+    ['Last update unknown', 'Online', NOW + 60 * MIN],
+  ])("status row comes from the freshness model: '%s'", (expected, state, last) => {
+    const t = renderCard({ ...LUCKY, state, dataLastUpdate: String(last) });
+    const status = texts(t.root)[2];
+    expect(status).toBe(expected);
+    expect(status).toBe(siteStatus(state, String(last), NOW).label);
+    expect(texts(t.root)).not.toContain('Online');
+  });
+
+  it('rings the avatar in brand only while the site is live', () => {
+    const scheme = activeScheme();
+    const live = renderCard({ ...LUCKY, dataLastUpdate: String(NOW - 3 * MIN) });
+    expect(StyleSheet.flatten(avatarRing(live.root).props.style).borderColor).toBe(scheme.brand);
+    act(() => live.unmount());
+    tree = undefined;
+    const delayed = renderCard({ ...LUCKY, dataLastUpdate: String(NOW - 45 * MIN) });
+    expect(StyleSheet.flatten(avatarRing(delayed.root).props.style).borderColor).toBe(scheme.hairline);
+  });
+
+  it('advances the age (and drops the ring) on the shared tick without a refetch', () => {
+    const scheme = activeScheme();
     const t = renderCard({ ...LUCKY, dataLastUpdate: String(NOW - 20_000) });
-    expect(texts(t.root)).toContain('Live · just now · 30 MW');
+    expect(texts(t.root)).toContain('Live · just now');
     act(() => {
       jest.advanceTimersByTime(90_000);
     });
-    expect(texts(t.root)).toContain('Live · 1 min ago · 30 MW');
+    expect(texts(t.root)).toContain('Live · 1 min ago');
     expect(cardPressable(t.root).props.accessibilityLabel).toContain('Live, updated 1 minute ago');
+    act(() => {
+      jest.advanceTimersByTime(30 * MIN);
+    });
+    expect(texts(t.root)[2]).toMatch(/^Delayed · 3\d min ago$/);
+    expect(StyleSheet.flatten(avatarRing(t.root).props.style).borderColor).toBe(scheme.hairline);
   });
 
   it('is one screen-reader stop with a composed label and hint', () => {
@@ -427,30 +510,155 @@ describe('<SiteCard />', () => {
     const p = cardPressable(t.root);
     expect(p.props.accessible).toBe(true);
     expect(p.props.accessibilityLabel).toBe(
-      'Lucky Cement Nooriabad. Live, updated 3 minutes ago. Capacity 30 megawatts. ' +
-        'Solar 63.2 megawatt hours today, Wind 187 megawatt hours today, ' +
-        'Genset 105 megawatt hours today, and 1 more',
+      'Lucky Cement Nooriabad. Live, updated 3 minutes ago. ' +
+        'Grid 200 megawatt hours today, Solar 63.2 megawatt hours today, ' +
+        'Wind 187 megawatt hours today, and 1 more',
     );
     expect(p.props.accessibilityActions).toBeUndefined();
   });
 
-  it('exposes "+N more" as the toggleMetrics custom action', () => {
+  it('exposes the toggle as the toggleMetrics custom action, with a ≥ touch.min target', () => {
     const t = renderCard({ ...site(FIVE_CARDS), dataLastUpdate: String(NOW - 3 * MIN) });
-    expect(texts(t.root)).toContain('+2 more');
+    expect(texts(t.root)).toContain('Show all 5');
+    expect(texts(t.root)).not.toContain('GRID');
     let p = cardPressable(t.root);
     expect(p.props.accessibilityActions).toEqual([
       { name: 'toggleMetrics', label: 'Show all 5 metrics' },
     ]);
+
+    const toggle = t.root.findAll(
+      n => typeof n.type === 'string' && n.props.accessibilityLabel === 'Show all 5 metrics',
+    )[0];
+    const box = StyleSheet.flatten((toggle.children[0] as ReactTestInstance).props.style);
+    const slop = toggle.props.hitSlop as { top: number; bottom: number };
+    expect(box.minHeight + slop.top + slop.bottom).toBeGreaterThanOrEqual(touch.min);
+
     act(() => p.props.onAccessibilityAction({ nativeEvent: { actionName: 'toggleMetrics' } }));
     p = cardPressable(t.root);
     expect(p.props.accessibilityActions).toEqual([{ name: 'toggleMetrics', label: 'Show fewer metrics' }]);
     expect(texts(t.root)).toContain('Show less');
-    expect(texts(t.root)).toEqual(expect.arrayContaining(['Genset', 'Grid', '—']));
+    // Grid ('NA') appears once expanded: a muted '—' with no unit.
+    const all = texts(t.root);
+    expect(all.slice(all.indexOf('Grid'), all.indexOf('Grid') + 2)).toEqual(['Grid', '—']);
+    expect(p.props.accessibilityLabel).toContain('Grid no data');
   });
 
-  it("shows 'No summary metrics' and no bar for a site without cards", () => {
+  it("shows a missing hero value as '—' with no unit", () => {
+    const t = renderCard({ ...site([card('Solar Energy Today', 'NA')]), dataLastUpdate: String(NOW - 3 * MIN) });
+    const all = textNodes(t.root).map(shown);
+    expect(all.slice(3)).toEqual(['SOLAR · TODAY', '—']);
+  });
+
+  it('gives a chip its period on its own line — never appended to the 1-line label', () => {
+    const t = renderCard({
+      ...site([
+        card('Solar Energy Today', 10),
+        card('Grid Energy This Month', 20),
+        card('Wind Energy Today', 5),
+      ]),
+      dataLastUpdate: String(NOW - 3 * MIN),
+    });
+    expect(textNodes(t.root).map(shown).slice(3)).toEqual([
+      'GRID · THIS MONTH',
+      '20',
+      'kWh',
+      'SOLAR',
+      '10',
+      'kWh',
+      'Today',
+      'WIND',
+      '5',
+      'kWh',
+      'Today',
+    ]);
+    const label = textInstance(t.root, 'Solar');
+    expect(label.props.numberOfLines).toBe(1);
+    // The caption shrinks to fit rather than being cut off.
+    const captions = t.root.findAll(n => n.type === Text && textOf(n) === 'Today');
+    expect(captions).toHaveLength(2);
+    captions.forEach(c => {
+      expect(c.props.numberOfLines).toBe(1);
+      expect(c.props.adjustsFontSizeToFit).toBe(true);
+    });
+  });
+
+  it('lets a backend-name chip label wrap to 2 lines; a source word stays on 1', () => {
+    const t = renderCard({
+      ...site([card('Solar Energy Today', 10), card('Grid Export Today', 4)]),
+      dataLastUpdate: String(NOW - 3 * MIN),
+    });
+    expect(textInstance(t.root, 'Grid Export Today').props.numberOfLines).toBe(2);
+    act(() => t.unmount());
+    tree = undefined;
+    const word = renderCard({
+      ...site([card('Solar Energy Today', 1), card('Grid Energy Today', 4)]),
+      dataLastUpdate: String(NOW - 3 * MIN),
+    });
+    expect(textInstance(word.root, 'Solar').props.numberOfLines).toBe(1);
+  });
+
+  it('tints the hero lighter in light mode (energyInk stays AA) and keeps 18% in dark', () => {
+    expect(heroTint(energyPalette.genset, false)).toEqual({
+      colors: [`${energyPalette.genset}20`, `${energyPalette.genset}0A`, `${energyPalette.genset}05`],
+      border: `${energyPalette.genset}2E`,
+    });
+    expect(heroTint(energyPalette.genset, true).colors[0]).toBe(`${energyPalette.genset}2E`);
+    const t = renderCard({ ...LUCKY, dataLastUpdate: String(NOW - 3 * MIN) });
+    const gradient = t.root.findByType(LinearGradient);
+    expect(gradient.props.colors).toEqual(
+      heroTint(energyPalette.grid, useThemeStore.getState().isDark).colors,
+    );
+  });
+
+  it("labels a controller site 'Controller' (not 'PRO')", () => {
+    const t = renderCard({ ...LUCKY, controller: true, dataLastUpdate: String(NOW - 3 * MIN) });
+    expect(texts(t.root)).toContain('Controller');
+    expect(texts(t.root)).not.toContain('PRO');
+    expect(cardPressable(t.root).props.accessibilityLabel).toContain('Controller installed');
+  });
+
+  it('shows the site logo in the avatar, initials after a load error, and retries on fresh data', () => {
+    const withLogo = { ...LUCKY, logo_ext: '1/72/.png', dataLastUpdate: String(NOW - 3 * MIN) };
+    const t = renderCard(withLogo);
+    const image = () => t.root.findAllByType(Image);
+    expect(image()).toHaveLength(1);
+    expect(image()[0].props.source.uri).toMatch(/\/public\/1\/72\/site-1\/logo\.png$/);
+    expect(texts(t.root)).not.toContain('LC');
+    act(() => image()[0].props.onError());
+    expect(image()).toHaveLength(0);
+    expect(texts(t.root)[0]).toBe('LC');
+    // A refreshed site object (new payload) gets a fresh attempt.
+    act(() => t.update(React.createElement(SiteCard, { site: { ...withLogo }, index: 99, onPress: jest.fn() })));
+    expect(image()).toHaveLength(1);
+  });
+
+  it("shows 'No summary metrics' for a site without cards", () => {
     const t = renderCard({ ...site([]), dataLastUpdate: String(NOW - 3 * MIN) });
-    expect(texts(t.root)).toContain('No summary metrics');
+    expect(texts(t.root)).toEqual(['LC', 'Lucky Cement Nooriabad', 'Live · 3 min ago', 'No summary metrics']);
+  });
+});
+
+/* ─────────── SiteCardSkeleton ─────────── */
+
+describe('<SiteCardSkeleton />', () => {
+  afterEach(() => {
+    if (tree) act(() => tree?.unmount());
+    tree = undefined;
+  });
+
+  it('splits the chip row by flex, so it never overflows a narrow card', () => {
+    const t = render(React.createElement(SiteCardSkeleton));
+    const blocks = t.root.findAllByType(Skeleton);
+    // avatar, 2 text lines, the hero, then the 3 chip placeholders
+    expect(blocks).toHaveLength(7);
+    const chips = blocks.slice(4);
+    chips.forEach(chip => {
+      expect(chip.props.width).toBe('100%');
+      const slot = chip.parent as ReactTestInstance;
+      // A third of the row each, not a fixed 32% (3 × 32% + 2 gaps
+      // overflowed every phone narrower than 400pt).
+      expect(StyleSheet.flatten(slot.props.style)).toMatchObject({ flex: 1 });
+    });
   });
 });
 
