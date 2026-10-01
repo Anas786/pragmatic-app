@@ -21,13 +21,17 @@ import {
   countLiveCategories,
   defaultLiveCategory,
   extractLiveParams,
+  LIVE_CATEGORIES,
+  LIVE_CATEGORY_ICON,
   LIVE_SORT_ORDER,
   LiveParameter,
   LiveSortKey,
+  liveSourceFromName,
   newestUpdateAt,
   nextLiveSort,
   resolveLiveParamName,
 } from '../src/utils/liveParams';
+import { energyPalette } from '../src/theme/tokens';
 
 const MIN = 60_000;
 const HOUR = 3_600_000;
@@ -503,6 +507,28 @@ describe('extractLiveParams — names, categories', () => {
     expect(classifyLiveCategory('Wind speed')).toBe('other');
   });
 
+  it('tile colour = the energy source the NAME names (SLD tag rules), else none', () => {
+    expect(p.p5010.source).toBe('genset'); // 'DG 11 to 16 active power'
+    expect(p.p1000009.source).toBeNull(); // 'WHR kW' — WHR has no palette colour
+    expect(p.explve0.source).toBeNull(); // raw code
+    expect(liveSourceFromName('PV Energy Day')).toBe('solar');
+    expect(liveSourceFromName('WTG-01 Active Power')).toBe('wind');
+    expect(liveSourceFromName('Wind 1 reactive power')).toBe('wind');
+    expect(liveSourceFromName('Grid Import Total')).toBe('grid');
+    expect(liveSourceFromName('BESS SOC')).toBe('battery');
+    expect(liveSourceFromName('Bus3 Export Energy')).toBeNull();
+    expect(liveSourceFromName('Captive Plant Energy')).toBeNull();
+    // Short tags match whole tokens only: 'Generation' is not 'gen'.
+    expect(liveSourceFromName('Total Generation')).toBeNull();
+  });
+
+  it('every category has a MaterialIcons glyph that exists in the bundled font map', () => {
+    const glyphs = require('react-native-vector-icons/glyphmaps/MaterialIcons.json') as Record<string, number>;
+    for (const c of LIVE_CATEGORIES) {
+      expect(glyphs[LIVE_CATEGORY_ICON[c.key]]).toBeDefined();
+    }
+  });
+
   it('returns [] for malformed payloads', () => {
     expect(extractLiveParams(null, { fetchNow: NOW })).toEqual([]);
     expect(extractLiveParams({ live: { data: {} } }, { fetchNow: NOW })).toEqual([]);
@@ -580,6 +606,7 @@ const row = (code: string, name: string, numeric: number | null, updateAt: numbe
   stale: updateAt !== null && NOW - updateAt > 15 * MIN,
   category: classifyLiveCategory(name),
   categoryLabel: '',
+  source: null,
   displayValue: numeric === null ? '—' : String(numeric),
   displayUnit: '',
   isMissing: numeric === null,
@@ -879,6 +906,26 @@ describe('LiveParameterView (rendered, Lucky Cement excerpt)', () => {
     expect(t.some(s => /\b\d{1,2}:\d{2}\s?(am|pm)\b/i.test(s))).toBe(false);
   });
 
+  it('tiles carry their category icon; only a named source tints the tile', () => {
+    mockState.live = live({});
+    const root = render();
+    // Energy tiles → the energy glyph on each, and on the selected pill.
+    expect(root.findAll(n => n.props.name === 'electric-meter' && typeof n.type !== 'string').length)
+      .toBeGreaterThanOrEqual(3);
+    const sweeps = root
+      .findAll(n => n.props.pointerEvents === 'none' && Array.isArray(n.props.colors))
+      .map(n => (n.props.colors as string[])[0]);
+    // 'PV Energy Day' → a solar-lime sweep. 'Energy Consumed' names no
+    // source → no sweep at all (§22.2: non-source tiles stay neutral)...
+    expect(new Set(sweeps)).toEqual(new Set([`${energyPalette.solar}24`]));
+    // ...but its icon well still carries the brand tint.
+    const wells = root
+      .findAll(n => typeof n.type === 'string' && n.props.style?.width === 34)
+      .map(n => StyleSheet.flatten(n.props.style).backgroundColor as string);
+    expect(wells).toContain(`${energyPalette.solar}24`);
+    expect(wells.some(c => /^#(10B981|34D399)24$/i.test(c))).toBe(true);
+  });
+
   it('the status line uses the header’s site-level sync stamp, not the newest parameter', () => {
     // Lucky Cement on 2026-10-01: last sync 40 min ago (web: 'WARNING · 41
     // MINUTES'), while single parameters updated a minute ago.
@@ -1039,7 +1086,7 @@ describe('LiveParameterView (rendered, Lucky Cement excerpt)', () => {
     expect(tiles(root)).toHaveLength(45);
   });
 
-  it('load error with no data: friendly copy + Retry', () => {
+  it('load error with no data: friendly copy + Retry', async () => {
     mockState.live = undefined;
     mockState.isError = true;
     mockState.error = { isAxiosError: true, response: { status: 500 } };
@@ -1048,13 +1095,15 @@ describe('LiveParameterView (rendered, Lucky Cement excerpt)', () => {
     expect(t).toContain("Our servers aren't responding");
     expect(t.some(s => /500/.test(s))).toBe(false);
     expect(root.findAllByType(TextInput)).toHaveLength(0); // nothing to search
-    act(() => {
+    // Async act: outside SiteDetail the press runs a user refresh whose
+    // settle ticks the shared clock after the press returns.
+    await act(async () => {
       byLabel(root, 'Retry').props.onPress();
     });
     expect(mockState.refetch).toHaveBeenCalledTimes(1);
   });
 
-  it('refresh failed over cached data: ONE strip in the shell’s words, the grid stays', () => {
+  it('refresh failed over cached data: ONE strip in the shell’s words, the grid stays', async () => {
     // The shell hides its own strip on Live while errored
     // (TABS_WITH_OWN_REFRESH_STATUS) — this is the only notice there.
     mockState.live = live({});
@@ -1063,7 +1112,7 @@ describe('LiveParameterView (rendered, Lucky Cement excerpt)', () => {
     const root = render();
     expect(texts(root)).toContain('Offline · showing the last data received');
     expect(tiles(root)).toHaveLength(2);
-    act(() => {
+    await act(async () => {
       byLabel(root, 'Retry').props.onPress();
     });
     expect(mockState.refetch).toHaveBeenCalledTimes(1);

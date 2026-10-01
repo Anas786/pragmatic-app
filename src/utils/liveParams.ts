@@ -23,6 +23,7 @@ import { toEpochMs } from './dates';
 import { formatDateTimeShort, formatRelativeTime } from './format';
 import { dataFreshness, FRESH_LIVE_MS } from './freshness';
 import { tryNumber } from './parsers';
+import { energyTypeFromName } from './sldGroup';
 import {
   formatQuantity,
   isRateUnit,
@@ -287,8 +288,10 @@ export interface LiveCategoryDef {
 }
 
 /**
- * Measurement categories, in pill order. Monochrome by design: the
- * energy-source palette means energy SOURCE only, never measurement type.
+ * Measurement categories, in pill order. A category is shown by its ICON
+ * ({@link LIVE_CATEGORY_ICON}), never by a colour: the energy-source
+ * palette means energy SOURCE only, so tile colour comes from the
+ * parameter's source ({@link liveSourceFromName}).
  * Energy is tested BEFORE power: registers like "Active Energy Import
  * (kWh)" / "Reactive Energy" must land in Energy.
  */
@@ -314,6 +317,34 @@ export const LIVE_CATEGORY_LABEL: Record<LiveCategoryKey, string> = LIVE_CATEGOR
   (acc, c) => ({ ...acc, [c.key]: c.label }),
   {} as Record<LiveCategoryKey, string>,
 );
+
+/** MaterialIcons glyph per category — tile icon + category pill. */
+export const LIVE_CATEGORY_ICON: Record<LiveCategoryKey, string> = {
+  energy: 'electric-meter',
+  power: 'bolt',
+  voltage: 'electrical-services',
+  current: 'cable',
+  temperature: 'device-thermostat',
+  frequency: 'graphic-eq',
+  other: 'sensors',
+};
+
+/** Energy sources a tile can be tinted with (the `energyPalette` keys). */
+export type LiveSource = 'solar' | 'wind' | 'grid' | 'genset' | 'battery';
+
+/**
+ * The energy source a parameter belongs to, from its NAME — the same tag
+ * rules as the SLD grouping (whole-token PV / WTG / WT / DG / GEN / BESS …,
+ * substrings solar / wind / diesel / grid / utility …): 'DG 1 energy
+ * power' → genset, 'PV Energy Day' → solar, 'Grid Import Total' → grid.
+ * Null when the name names no source ('Bus3 Export Energy', 'Captive
+ * Plant PF') and for WHR, which has no palette colour — those tiles take
+ * the brand accent.
+ */
+export const liveSourceFromName = (name: string): LiveSource | null => {
+  const type = energyTypeFromName(name);
+  return type === null || type === 'whr' ? null : type;
+};
 
 export const classifyLiveCategory = (name: string): LiveCategoryKey => {
   for (const c of LIVE_CATEGORIES) {
@@ -342,6 +373,8 @@ export interface LiveParameter {
   stale: boolean;
   category: LiveCategoryKey;
   categoryLabel: string;
+  /** Energy source named by the parameter (tile tint), or null. */
+  source: LiveSource | null;
   /** '1,498.70' / '0', a verbatim text reading, or '—' when missing. */
   displayValue: string;
   /** Canonical unit ('kWh'); '' when unknown or the value is missing. */
@@ -518,6 +551,7 @@ export const extractLiveParams = (
       stale,
       category,
       categoryLabel: LIVE_CATEGORY_LABEL[category],
+      source: liveSourceFromName(rawName),
       displayValue,
       displayUnit,
       isMissing,

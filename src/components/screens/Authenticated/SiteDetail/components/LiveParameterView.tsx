@@ -1,5 +1,17 @@
 /**
- * LiveParameterView — v6 (honest ages, units, flat tiles, global search).
+ * LiveParameterView — v7 (v6's honest ages / units / global search, with
+ * colour + icon tiles back).
+ *
+ * Tile look: an icon well per measurement category (LIVE_CATEGORY_ICON —
+ * meter for energy, bolt for power, …). When the parameter's name names an
+ * ENERGY SOURCE ('DG 1 …' → genset orange, 'PV …' → solar lime, 'WTG …' →
+ * wind cyan, 'Grid …' → grid blue — `liveSourceFromName`, the SLD
+ * grouping's tag rules) the well and a soft diagonal sweep take that
+ * source colour. Any other parameter (load, bus, WHR, …) keeps a neutral
+ * flat tile with a brand-tinted icon well — a full brand sweep read as
+ * solar / "OK" (CLAUDE.md §22.2: non-source tiles stay neutral). A missing
+ * reading is neutral throughout. Colours come from one per-theme table,
+ * so tiles allocate nothing per render.
  *
  * Crash / perf lessons that still hold (see CLAUDE.md §11, §19):
  *   - No per-tile `Animated.View` / `entering`. At 100+ tiles concurrent
@@ -8,7 +20,8 @@
  *     wrappers below animate in.
  *   - No `layout=` / `LinearTransition` anywhere.
  *   - No `Surface elevation` on tiles (per-tile shadow rasterisation has
- *     OOM'd the app) — a flat surface + 1px border instead.
+ *     OOM'd the app) — depth is a tinted LinearGradient sweep + 1px border
+ *     (as in v5, which ran 140+ tiles fine).
  *   - No `adjustsFontSizeToFit` (synchronous text measure per render). A
  *     long value steps down one size, decided once per fetch.
  *   - `ParamTile` is `React.memo`'d with props that are identity-stable per
@@ -45,11 +58,12 @@
  *  │ Energy · 27 of 162                        [⟳]  │
  *  │ ● Live · 3 min ago                             │
  *  │ [🔍 Search parameters                     ✕]   │
- *  │ (Energy 27)(Power 64)(Voltage 3)… [≡ Sort: Name]│
+ *  │ (▤ Energy 27)(⚡ Power 64)…     [≡ Sort: Name]  │
  *  │ ┌──────────────┐ ┌──────────────┐              │
- *  │ │ PV Energy Day│ │ Energy       │              │
- *  │ │              │ │ Consumed     │              │
- *  │ │ 144,141.90kWh│ │ 1,188,328,1… │              │
+ *  │ │[▤]           │ │[▤]           │  ← tint by   │
+ *  │ │ PV Energy Day│ │ DG 1 energy  │    source    │
+ *  │ │              │ │ power        │              │
+ *  │ │ 144,141.90kWh│ │ 63,683,837.9…│              │
  *  │ │ Just now     │ │ ◷ 2 h ago    │              │
  *  │ └──────────────┘ └──────────────┘              │
  *  └────────────────────────────────────────────────┘
@@ -65,6 +79,7 @@ import React, {
   useState,
 } from 'react';
 import { ActivityIndicator, StyleSheet, View, ViewStyle } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -73,6 +88,7 @@ import {
   AppTextInput,
   EmptyStateCard,
   IconButton,
+  IconWell,
   Pill,
   PillGroup,
   PressableScale,
@@ -81,6 +97,7 @@ import {
 } from 'src/components/common';
 import {
   duration,
+  energyPalette,
   radius as radiusTokens,
   Scheme,
   space,
@@ -104,6 +121,7 @@ import {
   buildSiteParamNames,
   extractLiveParams,
   LIVE_CATEGORIES,
+  LIVE_CATEGORY_ICON,
   LIVE_CATEGORY_LABEL,
   LIVE_SORT_LABEL,
   LIVE_SORT_SPOKEN,
@@ -111,6 +129,7 @@ import {
   LiveParameter,
   LiveSearchScope,
   LiveSortKey,
+  LiveSource,
   nextLiveSort,
 } from 'src/utils/liveParams';
 import {
@@ -121,6 +140,7 @@ import {
   useSiteData,
 } from 'src/hooks';
 import { headerLastUpdate } from 'src/components/screens/Authenticated/SiteDetail/siteDetailModel';
+import { useSiteRefresh } from '../siteRefresh';
 import { DashboardStackParamList } from 'src/types';
 import { Close, Magnify, RefreshIcon } from 'src/assets/icons';
 
@@ -165,6 +185,53 @@ const stagger = (i: number) =>
 
 /* ─────────────── tiles ─────────────── */
 
+/** Icon-well size and its glyph. */
+const TILE_WELL = 34;
+const TILE_GLYPH = 18;
+
+/* Gradient direction constants — one object each, not one per tile. */
+const GRADIENT_TL = { x: 0, y: 0 } as const;
+const GRADIENT_BR = { x: 1, y: 1 } as const;
+
+interface TileAccent {
+  /** Diagonal sweep: the accent at ~14% → transparent; null = flat tile. */
+  sweep: [string, string] | null;
+  /** Icon-well fill colour (IconWell applies its own alpha). */
+  well: string;
+  /** Glyph ink — legible on the tinted well in both themes. */
+  ink: string;
+}
+
+type AccentKey = LiveSource | 'brand';
+
+/**
+ * One accent table per theme (`useScheme()` returns two stable
+ * singletons), built on first use: memoised tiles get identity-stable
+ * colour arrays and allocate nothing per render.
+ */
+const accentTables = new WeakMap<Scheme, Record<AccentKey, TileAccent>>();
+const tileAccents = (scheme: Scheme): Record<AccentKey, TileAccent> => {
+  let table = accentTables.get(scheme);
+  if (!table) {
+    const make = (fill: string, ink: string, sweep = true): TileAccent => ({
+      sweep: sweep ? [`${fill}24`, `${fill}00`] : null,
+      well: fill,
+      ink,
+    });
+    table = {
+      solar: make(energyPalette.solar, scheme.energyInk.solar),
+      wind: make(energyPalette.wind, scheme.energyInk.wind),
+      grid: make(energyPalette.grid, scheme.energyInk.grid),
+      genset: make(energyPalette.genset, scheme.energyInk.genset),
+      battery: make(energyPalette.battery, scheme.energyInk.battery),
+      // No source: neutral tile, only the icon well carries the brand.
+      brand: make(scheme.brand, scheme.brandText, false),
+    };
+    accentTables.set(scheme, table);
+  }
+  return table;
+};
+
 interface ParamTileProps {
   param: LiveParameter;
   /** Cross-category search results show which category a tile is in. */
@@ -176,9 +243,13 @@ interface ParamTileProps {
  * One accessible element. Props are identity-stable per fetch (`param`
  * objects survive filter / sort / search re-shuffles; `themed` is a
  * cached StyleSheet), so keystrokes and pill taps skip mounted tiles.
+ * Colour is decoration only — the name already says the source and the
+ * a11y label carries everything spoken.
  */
 const ParamTile: FC<ParamTileProps> = memo(({ param, showCategory, themed }) => {
   const scheme = useScheme();
+  // A missing reading stays flat and neutral — no colour for no data.
+  const accent = param.isMissing ? null : tileAccents(scheme)[param.source ?? 'brand'];
   let valueColor = scheme.textPrimary;
   if (param.isMissing) valueColor = scheme.textTertiary;
   else if (param.implausible) valueColor = scheme.statusInk.warning;
@@ -191,14 +262,36 @@ const ParamTile: FC<ParamTileProps> = memo(({ param, showCategory, themed }) => 
       accessibilityLabel={
         showCategory ? `${param.a11yLabel}, ${param.categoryLabel}` : param.a11yLabel
       }>
+      {accent?.sweep ? (
+        <LinearGradient
+          colors={accent.sweep}
+          start={GRADIENT_TL}
+          end={GRADIENT_BR}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+      ) : null}
       <View style={styles.tileTop}>
-        {showCategory ? (
-          <View style={themed.categoryTag}>
-            <AppText variant="micro" tone="secondary" numberOfLines={1}>
-              {param.categoryLabel}
-            </AppText>
-          </View>
-        ) : null}
+        <View style={styles.tileHead}>
+          <IconWell
+            color={accent ? accent.well : scheme.surfaceMuted}
+            alpha={accent ? '24' : ''}
+            size={TILE_WELL}
+            radius={radiusTokens.md}>
+            <Icon
+              name={LIVE_CATEGORY_ICON[param.category]}
+              size={TILE_GLYPH}
+              color={accent ? accent.ink : scheme.textTertiary}
+            />
+          </IconWell>
+          {showCategory ? (
+            <View style={themed.categoryTag}>
+              <AppText variant="micro" tone="secondary" numberOfLines={1}>
+                {param.categoryLabel}
+              </AppText>
+            </View>
+          ) : null}
+        </View>
         <AppText variant="caption" medium tone="secondary" numberOfLines={2}>
           {param.name}
         </AppText>
@@ -219,6 +312,8 @@ const ParamTile: FC<ParamTileProps> = memo(({ param, showCategory, themed }) => 
             </AppText>
           ) : null}
         </View>
+        {/* Full width: a stale reading's date ('30 Sep, 02:05 PM') must
+            never be cut off. */}
         <View style={styles.timeRow}>
           {param.stale ? (
             <Icon name="schedule" size={12} color={scheme.statusInk.warning} />
@@ -237,8 +332,8 @@ ParamTile.displayName = 'ParamTile';
 const SkeletonTile: FC<{ themed: Themed }> = ({ themed }) => (
   <View style={themed.tile}>
     <View style={styles.tileTop}>
+      <Skeleton width={TILE_WELL} height={TILE_WELL} radius="md" />
       <Skeleton width="85%" height={12} radius="sm" />
-      <Skeleton width="55%" height={12} radius="sm" />
     </View>
     <View style={styles.tileBottom}>
       <Skeleton width="65%" height={20} radius="sm" />
@@ -246,6 +341,21 @@ const SkeletonTile: FC<{ themed: Themed }> = ({ themed }) => (
     </View>
   </View>
 );
+
+/** Category pill glyph — the same icon the tiles carry. */
+const CategoryGlyph: FC<{ category: LiveCategoryKey; selected: boolean }> = memo(
+  ({ category, selected }) => {
+    const scheme = useScheme();
+    return (
+      <Icon
+        name={LIVE_CATEGORY_ICON[category]}
+        size={16}
+        color={selected ? scheme.textOnBrand : scheme.textSecondary}
+      />
+    );
+  },
+);
+CategoryGlyph.displayName = 'CategoryGlyph';
 
 /* ─────────────── header status ─────────────── */
 
@@ -438,9 +548,9 @@ const LiveParameterView: FC = () => {
     setQuery('');
     setDebouncedQuery('');
   }, []);
-  const handleRefresh = useCallback(() => {
-    refetch();
-  }, [refetch]);
+  // The SiteDetail-wide refresh (header stamp + this grid share
+  // /data/all; caches bypassed — siteRefresh.ts).
+  const handleRefresh = useSiteRefresh(refetch);
   const cycleSort = useCallback(() => setSortKey(nextLiveSort), []);
   const selectAllMatches = useCallback(() => setSearchScope('all'), []);
   const pickHandlers = useMemo(
@@ -647,16 +757,22 @@ const LiveParameterView: FC = () => {
                       onPress={selectAllMatches}
                     />
                   ) : null}
-                  {grid.categories.map(key => (
-                    <Pill
-                      key={key}
-                      label={LIVE_CATEGORY_LABEL[key]}
-                      count={grid.counts[key]}
-                      selected={grid.searching ? grid.scope === key : grid.activeCategory === key}
-                      disabled={grid.searching && grid.counts[key] === 0}
-                      onPress={grid.searching ? scopeHandlers[key] : pickHandlers[key]}
-                    />
-                  ))}
+                  {grid.categories.map(key => {
+                    const selected = grid.searching
+                      ? grid.scope === key
+                      : grid.activeCategory === key;
+                    return (
+                      <Pill
+                        key={key}
+                        label={LIVE_CATEGORY_LABEL[key]}
+                        count={grid.counts[key]}
+                        selected={selected}
+                        leading={<CategoryGlyph category={key} selected={selected} />}
+                        disabled={grid.searching && grid.counts[key] === 0}
+                        onPress={grid.searching ? scopeHandlers[key] : pickHandlers[key]}
+                      />
+                    );
+                  })}
                 </PillGroup>
                 <SortButton sortKey={sortKey} onPress={cycleSort} themed={themed} />
               </>
@@ -749,7 +865,12 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   tileTop: {
-    gap: space.xs,
+    gap: space.sm,
+  },
+  tileHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
   },
   tileBottom: {
     gap: 2,
@@ -810,17 +931,21 @@ const createStyles = (scheme: Scheme) =>
       // splits the rest evenly. An odd last tile gets a `tileSpacer` twin.
       flexBasis: TILE_BASIS,
       flexGrow: 1,
-      minHeight: 100,
+      minHeight: 128,
       justifyContent: 'space-between',
-      gap: space.sm,
+      gap: space.md,
       padding: space.md,
-      borderRadius: radiusTokens.lg,
+      borderRadius: radiusTokens.xl,
       backgroundColor: scheme.surface,
+      // A true 1px border (the absolutely-positioned sweep overdraws a
+      // hairline), and the clip keeps the sweep inside the corners.
       borderWidth: 1,
       borderColor: scheme.border,
+      overflow: 'hidden',
     },
+    // Sits beside the icon well (search results only).
     categoryTag: {
-      alignSelf: 'flex-start',
+      flexShrink: 1,
       paddingHorizontal: 6,
       paddingVertical: 1,
       borderRadius: radiusTokens.pill,
