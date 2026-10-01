@@ -74,12 +74,10 @@ import {
   resolveYieldMeta,
   sortEntries,
   spokenRatioUnit,
-  uptimeTone,
 } from '../src/components/screens/Authenticated/SiteDetail/components/InverterTable/helpers';
 import { PulseDot } from '../src/components/common';
 import { useReportPeriodStore } from '../src/hooks/useReportPeriodStore';
-import { energyPalette, LIGHT_SCHEME, DARK_SCHEME } from '../src/theme';
-import { prStatusFill, prStatusInk, prStatusSoft, statusFor } from '../src/utils/colors';
+import { prBandPalette } from '../src/theme';
 import { formatEnergy } from '../src/utils/units';
 import type { InverterReportRow } from '../src/networking';
 
@@ -219,32 +217,43 @@ describe('computeFleetStats (TB-1)', () => {
     expect(hero.best).toBeNull();
     expect(hero.worst).toBeNull();
     const pair = buildFleetHero(computeFleetStats(entriesFor([70, 91.25])));
-    expect(pair.best).toMatchObject({ title: 'Inverter 2', prText: '91.3%' });
+    expect(pair.best).toMatchObject({ title: 'Inverter 2', prText: '91.25%' });
+    expect(pair.best?.status.key).toBe('excellent');
     expect(pair.worst).toMatchObject({ title: 'Inverter 1', prText: '70%' });
-    expect(pair.best?.a11yLabel).toBe('Best, Inverter 2, 91.3 percent');
+    expect(pair.worst?.status.key).toBe('good');
+    expect(pair.best?.a11yLabel).toBe('Best, Inverter 2, 91.25 percent');
   });
 
   it('WEB PARITY — 1 Oct 2026: Avg PR 78.1%, Σ 141,106 kWh, as on the web portal', () => {
     const stats = computeFleetStats(mapRowsToEntries(WEB_TODAY));
     const hero = buildFleetHero(stats);
     expect(hero.avgText).toBe('78.1');
+    // Web band rule: 62 ≤ 78.1 < 82 → Good.
+    expect(hero.avgStatus).toMatchObject({ key: 'good', label: 'Good', band: 'good' });
+    expect(hero.avgA11yLabel).toBe(
+      'Average performance ratio, 78.1 percent, good, across 9 inverters',
+    );
     expect(hero.countLabel).toBe('9 inverters');
     expect(hero.total.text).toBe('141');
     expect(hero.total.unit).toBe('MWh');
     expect(hero.totalA11yLabel).toBe('Total production, 141,106 kilowatt hours');
-    expect(hero.best).toMatchObject({ title: 'Inverter 6', prText: '83.5%' });
-    expect(hero.worst).toMatchObject({ title: 'Inverter 2', prText: '71.3%' });
+    // Best / worst are inverter cells: up to 2 decimals, like their rows.
+    expect(hero.best).toMatchObject({ title: 'Inverter 6', prText: '83.55%' });
+    expect(hero.best?.status.key).toBe('excellent');
+    expect(hero.worst).toMatchObject({ title: 'Inverter 2', prText: '71.34%' });
+    expect(hero.worst?.status.key).toBe('good');
     expect(hero.offlineText).toBeNull();
   });
 
   it('WEB PARITY — Lifetime: Avg PR 69.1%, Σ 56,027,791 kWh', () => {
     const hero = buildFleetHero(computeFleetStats(mapRowsToEntries(WEB_LIFETIME)));
     expect(hero.avgText).toBe('69.1');
-    expect(hero.avgStatus.key).toBe('poor');
+    expect(hero.avgStatus.key).toBe('good');
     expect(hero.total.text).toBe('56.0');
     expect(hero.total.unit).toBe('GWh');
     expect(hero.totalA11yLabel).toBe('Total production, 56,027,791 kilowatt hours');
-    expect(hero.worst).toMatchObject({ title: 'Inverter 8', prText: '39%' });
+    expect(hero.worst).toMatchObject({ title: 'Inverter 8', prText: '38.95%' });
+    expect(hero.worst?.status.key).toBe('poor');
   });
 });
 
@@ -285,36 +294,6 @@ describe('sortEntries', () => {
   it('ties fall back to inverter number', () => {
     const tied = entriesFor([80, 80, 80]).reverse();
     expect(titles(sortEntries(tied, 'worst'))).toEqual(['Inverter 1', 'Inverter 2', 'Inverter 3']);
-  });
-});
-
-describe('PR status (semantic, never energy palette)', () => {
-  it('thresholds 90 / 80 / 70; null is a neutral "No data", never Poor', () => {
-    expect(statusFor(90).key).toBe('excellent');
-    expect(statusFor(89.99).key).toBe('good');
-    expect(statusFor(80).key).toBe('good');
-    expect(statusFor(79.9).key).toBe('fair');
-    expect(statusFor(70).key).toBe('fair');
-    expect(statusFor(69.9).key).toBe('poor');
-    expect(statusFor(0).key).toBe('poor');
-    expect(statusFor(null)).toMatchObject({ key: 'none', label: 'No data', role: null });
-    expect(statusFor(Number.NaN).key).toBe('none');
-    expect(statusFor(85).role).toBe('success');
-  });
-
-  it('uses status ink / soft roles and no energyPalette colour in either theme', () => {
-    const palette = new Set(Object.values(energyPalette).map(c => c.toLowerCase()));
-    for (const scheme of [LIGHT_SCHEME, DARK_SCHEME]) {
-      for (const pr of [95, 85, 75, 40, 0, null]) {
-        const s = statusFor(pr);
-        for (const c of [prStatusInk(s, scheme), prStatusSoft(s, scheme), prStatusFill(s, scheme)]) {
-          expect(palette.has(c.toLowerCase())).toBe(false);
-        }
-      }
-      expect(prStatusInk(statusFor(85), scheme)).toBe(scheme.statusInk.success);
-      expect(prStatusInk(statusFor(null), scheme)).toBe(scheme.textSecondary);
-      expect(prStatusSoft(statusFor(null), scheme)).toBe(scheme.surfaceMuted);
-    }
   });
 });
 
@@ -431,13 +410,13 @@ describe('row view-model', () => {
   it('secondary line, PR, uptime and ONE composed label', () => {
     const r = buildInverterRow(inv1, scale, KWP_META);
     expect(r.secondary).toBe('15.5 MWh · 4.96 kWh/kWp');
-    expect(r.prText).toBe('77.2%');
-    expect(r.status.key).toBe('fair');
+    expect(r.prText).toBe('77.24%');
+    expect(r.status.key).toBe('good');
     expect(r.barFraction).toBeCloseTo(0.772, 3);
     expect(r.uptimeText).toBe('Up 100%');
-    expect(r.uptimeTone).toBe('normal');
+    expect(r.uptimeFraction).toBe(1);
     expect(r.a11yLabel).toBe(
-      'Inverter 1, fair, performance ratio 77.2 percent, uptime 100 percent, ' +
+      'Inverter 1, good, performance ratio 77.24 percent, uptime 100 percent, ' +
         '15.5 megawatt hours, Yield 4.96 kilowatt hours per kilowatt peak',
     );
   });
@@ -455,7 +434,8 @@ describe('row view-model', () => {
     expect(r.secondary).toBe('— · Yield —');
     expect(r.prText).toBe('—');
     expect(r.uptimeText).toBe('Up —');
-    expect(r.uptimeTone).toBe('missing');
+    expect(r.uptimeFraction).toBeNull();
+    expect(r.status).toMatchObject({ key: 'none', band: null });
     expect(r.a11yLabel).toBe(
       'Inverter 3, no performance data, uptime no data, production, no data, Yield, no data',
     );
@@ -468,22 +448,30 @@ describe('row view-model', () => {
     expect(buildInverterRow(neg, scale, KWP_META).barFraction).toBe(0);
   });
 
-  it('uptime bands: ≥98 normal, 90–98 warning, <90 danger', () => {
-    expect(uptimeTone(100)).toBe('normal');
-    expect(uptimeTone(98)).toBe('normal');
-    expect(uptimeTone(97.9)).toBe('warning');
-    expect(uptimeTone(90)).toBe('warning');
-    expect(uptimeTone(89.9)).toBe('danger');
-    expect(uptimeTone(null)).toBe('missing');
+  it('uptime like the web: ≥ 99.95 reads 100, else up to 2 decimals', () => {
+    const lifetime = buildInverterRows(mapRowsToEntries(WEB_LIFETIME), KWP_META);
+    expect(lifetime[0].uptimeText).toBe('Up 96.36%');
+    expect(lifetime[0].uptimeFraction).toBeCloseTo(0.9636, 4);
+    expect(lifetime[0].a11yLabel).toContain('uptime 96.36 percent');
+    const [nearly] = mapRowsToEntries(rows(row(1, 80, { up_percent: 99.96 })));
+    const nearlyRow = buildInverterRow(nearly, scale, KWP_META);
+    expect(nearlyRow.uptimeText).toBe('Up 100%');
+    expect(nearlyRow.uptimeFraction).toBe(1);
+    expect(nearlyRow.a11yLabel).toContain('uptime 100 percent');
+    const [zero] = mapRowsToEntries(rows(row(1, 0, { up_percent: 0 })));
+    const zeroRow = buildInverterRow(zero, scale, KWP_META);
+    expect(zeroRow.uptimeText).toBe('Up 0%');
+    expect(zeroRow.uptimeFraction).toBe(0);
   });
 
   it('percent text trims trailing zeros like the web portal', () => {
     expect(formatPercent(81)).toBe('81%');
-    expect(formatPercent(77.2374267578125)).toBe('77.2%');
-    expect(formatPercent(96.3612244829819)).toBe('96.4%');
+    expect(formatPercent(77.2374267578125)).toBe('77.24%');
+    expect(formatPercent(96.3612244829819)).toBe('96.36%');
     expect(formatPercent(100)).toBe('100%');
     expect(formatPercent(0)).toBe('0%');
-    expect(formatPercent(-0.04)).toBe('0%');
+    expect(formatPercent(-0.004)).toBe('0%');
+    expect(formatPercent(-0.04)).toBe('-0.04%');
     expect(formatPercent(null)).toBe('—');
   });
 });
@@ -539,7 +527,7 @@ describe('InverterTableCard', () => {
     expect(t.root.findAllByType(PulseDot)).toHaveLength(0);
     expect(all).toContain('9 inverters');
     expect(all).toContain('78.1');
-    expect(all).toContain('Fair');
+    expect(all).toContain('Good');
     expect(all).toContain('Best');
     expect(all).toContain('Worst');
     expect(all).toContain('Inverter fleet');
@@ -600,8 +588,10 @@ describe('InverterTableCard', () => {
     mockQuery = { data: { data: rows(...twelve) } };
     const t = render();
     const bars = byDisplayName(t, 'AnimatedBar');
-    expect(bars).toHaveLength(12);
-    expect(bars.filter(b => b.props.animate)).toHaveLength(ANIM_LIMIT);
+    // A PR bar + an uptime bar per row; both follow the row's frozen
+    // ANIM_LIMIT decision.
+    expect(bars).toHaveLength(24);
+    expect(bars.filter(b => b.props.animate)).toHaveLength(2 * ANIM_LIMIT);
     // Inside each animated bar, the animated style object carries
     // `transform` (translateX + scaleX) and nothing else.
     const animatedStyles = bars
@@ -613,8 +603,56 @@ describe('InverterTableCard', () => {
       )
       .flatMap(n => (n.props.style as unknown[]).filter(s => s && !Array.isArray(s)))
       .filter((s): s is Record<string, unknown> => 'transform' in (s as object));
-    expect(animatedStyles).toHaveLength(ANIM_LIMIT);
+    expect(animatedStyles).toHaveLength(2 * ANIM_LIMIT);
     for (const s of animatedStyles) expect(Object.keys(s)).toEqual(['transform']);
+  });
+
+  it("bars use the web's band gradients; the uptime bar is always 'excellent'", () => {
+    // PRs 30 / 50 / 70 / 90 → poor / fair / good / excellent; inverter 5 has
+    // no PR (no PR bar) and inverter 6 no uptime (no uptime bar).
+    mockQuery = {
+      data: {
+        data: rows(
+          row(1, 30),
+          row(2, 50),
+          row(3, 70),
+          row(4, 90),
+          row(5, null),
+          row(6, 85, { up_percent: null }),
+        ),
+      },
+    };
+    const t = render();
+    const byTitle = new Map(rowInstances(t).map(r => [r.props.row.title, r]));
+    const gradients = (title: string) =>
+      (byTitle.get(title) as ReactTestInstance)
+        .findAll(
+          (n: ReactTestInstance) =>
+            typeof n.type === 'function' &&
+            ((n.type as { displayName?: string }).displayName ?? n.type.name) === 'AnimatedBar',
+        )
+        .map(b => b.props.colors);
+    expect(gradients('Inverter 1')).toEqual([prBandPalette.poor, prBandPalette.excellent]);
+    expect(gradients('Inverter 2')).toEqual([prBandPalette.fair, prBandPalette.excellent]);
+    expect(gradients('Inverter 3')).toEqual([prBandPalette.good, prBandPalette.excellent]);
+    expect(gradients('Inverter 4')).toEqual([prBandPalette.excellent, prBandPalette.excellent]);
+    expect(gradients('Inverter 5')).toEqual([prBandPalette.excellent]);
+    expect(gradients('Inverter 6')).toEqual([prBandPalette.excellent]);
+    expect(texts(t)).toContain('Up —');
+  });
+
+  it('hero band dots: average status, best and worst', () => {
+    mockQuery = { data: { data: WEB_TODAY } };
+    const t = render();
+    const dots = byDisplayName(t, 'BandDot').map(d => d.props.status.key);
+    // Average 78.1 → good, best 83.55 → excellent, worst 71.34 → good.
+    expect(dots).toEqual(['good', 'excellent', 'good']);
+    const colours = byDisplayName(t, 'Dot').map(d => d.props.color);
+    expect(colours).toEqual([
+      prBandPalette.good[1],
+      prBandPalette.excellent[1],
+      prBandPalette.good[1],
+    ]);
   });
 
   it('loading → skeleton; error with nothing cached → friendly copy + retry', () => {

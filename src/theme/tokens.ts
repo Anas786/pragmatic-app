@@ -78,6 +78,26 @@ export const semantic = {
   info: '#3B82F6',
 };
 
+/**
+ * Inverter performance-ratio bands — the web portal's rule (Tables tab):
+ * < 40 poor · 40–< 62 fair · 62–< 82 good · ≥ 82 excellent.
+ */
+export type PrBand = 'poor' | 'fair' | 'good' | 'excellent';
+
+/**
+ * The web portal's PR bar gradients, verbatim (`err` / `warn` / `lime` /
+ * `ok`, `linear-gradient(90deg, from, to)`). Theme-agnostic — the web uses
+ * the same colours in light and dark. FILLS ONLY (PR / uptime mini bars,
+ * band dots): text beside them uses the scheme's `prBandInk`. The uptime
+ * bar is always `excellent`, like the web.
+ */
+export const prBandPalette: Readonly<Record<PrBand, [string, string]>> = {
+  poor: ['#E2685F', '#F2867D'],
+  fair: ['#DE9B36', '#F2B64A'],
+  good: ['#7FAE39', '#A6D45E'],
+  excellent: ['#27A86A', '#46CF89'],
+};
+
 /* ─────────── 2. Mode-aware semantic tokens ─────────── */
 
 /** Energy-source keys (same set as `energyPalette`). */
@@ -166,6 +186,10 @@ export interface ColorScheme {
   /** Soft status fills (semantic hue at 12% light / 16% dark) — pair with
    *  `statusInk` for status pills. */
   statusSoft: StatusRoles;
+  /** Text ink for a PR value in its band (Tables tab) — the hue of that
+   *  band's `prBandPalette` gradient, AA on bg / surface / surfaceMuted /
+   *  surfaceRaised (enforced by __tests__/tokenContrast.test.ts). */
+  prBandInk: Record<PrBand, string>;
 
   /** Skeleton base + shimmer highlight. */
   skeletonBase: string;
@@ -261,6 +285,15 @@ export const lightScheme: ColorScheme = {
     info: '#1D4ED8',
   },
   statusSoft: statusSoftAt(0.12),
+  // The web gradients are too light for text on white (1.7–3.3:1), so
+  // light mode darkens each hue: red-700, amber-800, lime-800, emerald-700
+  // (≥ 5.0:1 on every light surface).
+  prBandInk: {
+    poor: '#B91C1C',
+    fair: '#92400E',
+    good: '#3F6212',
+    excellent: emerald[700],
+  },
 
   skeletonBase: slate[100],
   skeletonHighlight: slate[200],
@@ -318,6 +351,13 @@ export const darkScheme: ColorScheme = {
     info: '#60A5FA',
   },
   statusSoft: statusSoftAt(0.16),
+  // Each band's bright gradient stop is AA on every dark surface (≥ 5.9:1).
+  prBandInk: {
+    poor: prBandPalette.poor[1],
+    fair: prBandPalette.fair[1],
+    good: prBandPalette.good[1],
+    excellent: prBandPalette.excellent[1],
+  },
 
   skeletonBase: slate[800],
   skeletonHighlight: slate[700],

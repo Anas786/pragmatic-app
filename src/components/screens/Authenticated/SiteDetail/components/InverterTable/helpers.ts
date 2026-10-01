@@ -12,7 +12,7 @@ import {
   splitLabelUnit,
   spokenUnit,
 } from 'src/utils/units';
-import { PrStatus, statusFor } from 'src/utils/colors';
+import { PrStatus, statusFor } from './prBands';
 
 /**
  * Pure view-model for the Tables tab ("Inverter fleet"). Every value is
@@ -26,8 +26,8 @@ import { PrStatus, statusFor } from 'src/utils/colors';
  * the average, can be the worst inverter, and flags the row as offline.
  */
 
-export { statusFor } from 'src/utils/colors';
-export type { PrStatus, StatusKey } from 'src/utils/colors';
+export { statusFor } from './prBands';
+export type { PrStatus, StatusKey } from './prBands';
 
 /** Entrance stagger per row (first `ANIM_LIMIT` rows only). */
 export const STAGGER_MS = 40;
@@ -49,10 +49,12 @@ export const MINI_BAR_W = 56;
  */
 export const MOUNT_CHUNK = 12;
 
-/** Uptime at or above this reads as normal (textSecondary). */
-export const UPTIME_OK_PCT = 98;
-/** Uptime at or above this (and below OK) is a warning; below is danger. */
-export const UPTIME_WARN_PCT = 90;
+/** Uptime at or above this displays as 100 (the web's rule). */
+export const UPTIME_FULL_PCT = 99.95;
+/** Fraction digits of a PR / uptime cell ('61' / '61.46', like the web). */
+export const CELL_DECIMALS = 2;
+/** Fraction digits of the fleet average (the web's 'Avg PR 78.1%'). */
+export const AVG_DECIMALS = 1;
 
 export interface InverterEntry extends InverterEntryData {
   /** Unique React key, stable across period changes and re-sorts. */
@@ -276,23 +278,26 @@ export const resolveYieldMeta = (mapping: ReportMapping | undefined | null): Yie
 /* ─────────────── number formatting ─────────────── */
 
 /**
- * '77.2%' / '100%' / '0%' — `decimals` fraction digits with trailing
- * zeros trimmed (like the web portal's '81 %'); '—' when missing.
+ * The web portal's cell rule: no forced decimals — an integer stays as is,
+ * anything else is rounded to `decimals` with trailing zeros trimmed
+ * (61 → '61', 61.456 → '61.46', 61.5 → '61.5'); '—' when missing.
  */
-export const formatPercentValue = (value: number | null, decimals = 1): string => {
+export const formatPercentValue = (value: number | null, decimals = CELL_DECIMALS): string => {
   if (value === null || !Number.isFinite(value)) return MISSING_TEXT;
   const fixed = value.toFixed(decimals);
   const trimmed = fixed.includes('.') ? fixed.replace(/\.?0+$/, '') : fixed;
   return Number(trimmed) === 0 ? '0' : trimmed;
 };
 
-export const formatPercent = (value: number | null, decimals = 1): string => {
+/** '61.46%' / '100%' / '—' (the app keeps its '%' with no space). */
+export const formatPercent = (value: number | null, decimals = CELL_DECIMALS): string => {
   const text = formatPercentValue(value, decimals);
   return text === MISSING_TEXT ? text : `${text}%`;
 };
 
-const spokenPercent = (value: number | null): string => {
-  const text = formatPercentValue(value);
+/** Spoken twin of `formatPercent` — the same digits the screen shows. */
+const spokenPercent = (value: number | null, decimals = CELL_DECIMALS): string => {
+  const text = formatPercentValue(value, decimals);
   if (text === MISSING_TEXT) return 'no data';
   return `${text.startsWith('-') ? `minus ${text.slice(1)}` : text} percent`;
 };
@@ -359,14 +364,14 @@ export const spokenPeriodLabel = (periodLabel: string): string =>
 
 /* ─────────────── uptime ─────────────── */
 
-export type UptimeTone = 'normal' | 'warning' | 'danger' | 'missing';
-
-/** ≥ 98 normal, 90–98 warning, < 90 danger, null missing. */
-export const uptimeTone = (uptime: number | null): UptimeTone => {
-  if (uptime === null || !Number.isFinite(uptime)) return 'missing';
-  if (uptime >= UPTIME_OK_PCT) return 'normal';
-  if (uptime >= UPTIME_WARN_PCT) return 'warning';
-  return 'danger';
+/**
+ * Uptime as the web displays it: ≥ 99.95 reads as 100 (a sliver of
+ * downtime isn't shown as '99.97%'); null stays null. Display only — the
+ * fleet stats keep the backend value.
+ */
+export const displayUptime = (uptime: number | null): number | null => {
+  if (uptime === null || !Number.isFinite(uptime)) return null;
+  return uptime >= UPTIME_FULL_PCT ? 100 : uptime;
 };
 
 /* ─────────────── row view-model ─────────────── */
@@ -377,14 +382,16 @@ export interface InverterRowModel {
   title: string;
   /** '15.5 MWh · 4.96 kWh/kWp'. */
   secondary: string;
+  /** PR band (web rule 40/62/82) — drives the PR ink and bar gradient. */
   status: PrStatus;
-  /** '77.2%' or '—'. */
+  /** '77.24%' or '—'. */
   prText: string;
   /** PR bar fill, 0–1 (0 when the PR is missing). */
   barFraction: number;
-  /** 'Up 100%' / 'Up —'. */
+  /** 'Up 100%' / 'Up 96.36%' / 'Up —' (≥ 99.95 reads as 100). */
   uptimeText: string;
-  uptimeTone: UptimeTone;
+  /** Uptime bar fill, 0–1; null when the uptime is missing (no bar). */
+  uptimeFraction: number | null;
   /** ONE composed screen-reader label for the whole row. */
   a11yLabel: string;
 }
@@ -397,6 +404,7 @@ export const buildInverterRow = (
   yieldMeta: YieldMeta,
 ): InverterRowModel => {
   const status = statusFor(entry.performanceRatio);
+  const uptime = displayUptime(entry.uptimePercent);
   const production = formatProduction(entry.production, scale);
   const yieldQ = formatQuantity(entry.yield, null, { mode: 'precise', decimals: 2 });
 
@@ -414,11 +422,11 @@ export const buildInverterRow = (
 
   const a11yLabel = [
     entry.title,
-    status.role ? status.label.toLowerCase() : 'no performance data',
+    status.band ? status.label.toLowerCase() : 'no performance data',
     entry.performanceRatio !== null
       ? `performance ratio ${spokenPercent(entry.performanceRatio)}`
       : '',
-    `uptime ${spokenPercent(entry.uptimePercent)}`,
+    `uptime ${spokenPercent(uptime)}`,
     production.isMissing ? 'production, no data' : production.spoken,
     yieldSpoken,
   ]
@@ -433,8 +441,8 @@ export const buildInverterRow = (
     status,
     prText: formatPercent(entry.performanceRatio),
     barFraction: entry.performanceRatio === null ? 0 : clamp01(entry.performanceRatio / 100),
-    uptimeText: `Up ${formatPercent(entry.uptimePercent)}`,
-    uptimeTone: uptimeTone(entry.uptimePercent),
+    uptimeText: `Up ${formatPercent(uptime)}`,
+    uptimeFraction: uptime === null ? null : clamp01(uptime / 100),
     a11yLabel,
   };
 };
@@ -452,15 +460,20 @@ export const buildInverterRows = (
 
 export interface FleetAggregate {
   title: string;
+  /** The inverter's PR as its row shows it ('83.55%'). */
   prText: string;
+  /** Its PR band (hero band dot). */
+  status: PrStatus;
   a11yLabel: string;
 }
 
 export interface FleetHeroModel {
   /** '9 inverters'. */
   countLabel: string;
-  /** '78.1' (the '%' renders separately); null → 'No PR data for this period'. */
+  /** '78.1' (the '%' renders separately; one decimal like the web's
+   *  'Avg PR'); null → 'No PR data for this period'. */
   avgText: string | null;
+  /** Band of the fleet average (web rule 40/62/82). */
   avgStatus: PrStatus;
   avgA11yLabel: string;
   /** Only when ≥ 2 inverters reported a PR (one inverter is both). */
@@ -478,19 +491,23 @@ const aggregate = (kind: string, entry: InverterEntry | null): FleetAggregate | 
   return {
     title: entry.title,
     prText: formatPercent(entry.performanceRatio),
+    status: statusFor(entry.performanceRatio),
     a11yLabel: `${kind}, ${entry.title}, ${spokenPercent(entry.performanceRatio)}`,
   };
 };
 
 export const buildFleetHero = (stats: FleetStats): FleetHeroModel => {
-  const avgStatus = statusFor(stats.avgPr);
+  // Band the average AS SHOWN (1 decimal), so the number and its label never
+  // disagree at an edge: a raw 81.96 reads '82' and must be Excellent, not Good.
+  const shownAvg = stats.avgPr === null ? null : Number(stats.avgPr.toFixed(AVG_DECIMALS));
+  const avgStatus = statusFor(shownAvg);
   const countLabel = inverterCountLabel(stats.count);
   const avgA11yLabel =
-    stats.avgPr === null
+    shownAvg === null
       ? `Average performance ratio, no data for this period, ${countLabel}`
       : [
           'Average performance ratio',
-          spokenPercent(stats.avgPr),
+          spokenPercent(shownAvg, AVG_DECIMALS),
           avgStatus.label.toLowerCase(),
           `across ${inverterCountLabel(stats.prCount)}`,
         ].join(', ');
@@ -499,7 +516,7 @@ export const buildFleetHero = (stats: FleetStats): FleetHeroModel => {
   const total = formatEnergy(stats.totalProduction);
   return {
     countLabel,
-    avgText: stats.avgPr === null ? null : formatPercentValue(stats.avgPr),
+    avgText: shownAvg === null ? null : formatPercentValue(shownAvg, AVG_DECIMALS),
     avgStatus,
     avgA11yLabel,
     best: hasPair ? aggregate('Best', stats.best) : null,

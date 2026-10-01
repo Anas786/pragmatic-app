@@ -4,6 +4,7 @@ import { useRoute, RouteProp } from '@react-navigation/native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import {
   AppText,
+  Dot,
   EmptyStateCard,
   GlassChip,
   HeroGradientCard,
@@ -53,6 +54,7 @@ import {
   spokenPeriodLabel,
 } from './InverterTable/helpers';
 import { InverterRow } from './InverterTable/InverterCard';
+import { prBandDotColor, PrStatus } from './InverterTable/prBands';
 import ReportFilterPill from './PerformanceReport/ReportFilterPill';
 import { useSiteRefresh } from '../siteRefresh';
 
@@ -61,7 +63,11 @@ type SiteDetailRouteProp = RouteProp<DashboardStackParamList, 'SiteDetail'>;
 const EMPTY_ROWS: InverterReportRow[] = [];
 /** Skeleton rows: enough to fill the first screen at the final row height. */
 const SKELETON_ROWS = 6;
-const ROW_SKELETON_H = 64;
+/** A row with its PR + uptime stacks (InverterRow). */
+const ROW_SKELETON_H = 72;
+/** Band dot in the hero (status chip, best / worst); the ring is drawn inside. */
+const BAND_DOT = 10;
+const BAND_DOT_RING = 1.5;
 /** Hero height with its usual content (badge, average, best/worst/total). */
 const HERO_SKELETON_H = 264;
 
@@ -79,8 +85,10 @@ const tabStagger = (i: number) =>
  *
  *   DateFilterHeader ('Inverter fleet' + period pill + refresh)
  *   Period pills (PillGroup 'Date range type'; re-tap opens the picker)
- *   Hero  — FLEET · <period> · 'N inverters' · AVERAGE PR + status
+ *   Hero  — FLEET · <period> · 'N inverters' · AVERAGE PR + band
  *           · ▲ best / ▼ worst / ▼ offline (0% PR or uptime) / total
+ *           (band = the web's PR rule, < 40 / 62 / 82; a dot in the
+ *           band's colour sits beside the average status and best / worst)
  *   Sort  — Worst first (default) · Number · Energy
  *   List  — ONE Surface of compact inverter rows (hairline separators)
  *
@@ -219,6 +227,7 @@ const InverterTableCard: FC = () => {
               </AppText>
               <View style={styles.heroStatusChip}>
                 <GlassChip size="md">
+                  <BandDot status={hero.avgStatus} />
                   <AppText variant="caption" semi_bold tone="onHero" numberOfLines={1}>
                     {hero.avgStatus.label}
                   </AppText>
@@ -311,6 +320,8 @@ const InverterTableCard: FC = () => {
           </View>
           <View style={styles.skeletonSide}>
             <Skeleton width={44} height={14} />
+            <Skeleton width={56} height={4} radius="pill" />
+            <Skeleton width={40} height={12} />
             <Skeleton width={56} height={4} radius="pill" />
           </View>
         </View>
@@ -420,7 +431,24 @@ const InverterTableCard: FC = () => {
 
 /* ─────────────── hero aggregate row ─────────────── */
 
-/** '▲ Best · Inverter 6 ……… 83.5%' — ONE screen-reader element. */
+/**
+ * Decorative band dot (the label / value beside it carries the meaning).
+ * The band fills are bright and sit on the emerald hero, where several are
+ * close to the background (≈1.6–3:1 in light mode); the hero-ink ring
+ * keeps the marker's outline visible (≥ 3:1, tokenContrast.test.ts).
+ */
+const BandDot: FC<{ status: PrStatus }> = ({ status }) => {
+  const scheme = useScheme();
+  const ring = useMemo(
+    () => ({ borderWidth: BAND_DOT_RING, borderColor: scheme.heroOnGradient }),
+    [scheme],
+  );
+  const color = prBandDotColor(status);
+  return color ? <Dot color={color} size={BAND_DOT} style={ring} /> : null;
+};
+BandDot.displayName = 'BandDot';
+
+/** '▲ Best · Inverter 6 ……… ● 83.55%' — ONE screen-reader element. */
 const AggRow: FC<{ glyph: string; label: string; item: FleetAggregate }> = ({
   glyph,
   label,
@@ -438,9 +466,12 @@ const AggRow: FC<{ glyph: string; label: string; item: FleetAggregate }> = ({
         {item.title}
       </AppText>
     </View>
-    <AppText variant="bodySm" semi_bold tone="onHero" numberOfLines={1}>
-      {item.prText}
-    </AppText>
+    <View style={styles.aggPr}>
+      <BandDot status={item.status} />
+      <AppText variant="bodySm" semi_bold tone="onHero" numberOfLines={1}>
+        {item.prText}
+      </AppText>
+    </View>
   </View>
 );
 AggRow.displayName = 'AggRow';
@@ -514,6 +545,12 @@ const styles = StyleSheet.create({
     gap: 4,
     flexShrink: 0,
   },
+  aggPr: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    flexShrink: 0,
+  },
   sortRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -535,7 +572,7 @@ const styles = StyleSheet.create({
   },
   skeletonSide: {
     alignItems: 'flex-end',
-    gap: space.sm,
+    gap: space.xs,
   },
 });
 

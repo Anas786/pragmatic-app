@@ -13,6 +13,7 @@ import {
   ColorScheme,
   darkScheme,
   energyPalette,
+  glass,
   lightScheme,
   semantic,
   touch,
@@ -120,6 +121,17 @@ describe.each(SCHEMES)('%s scheme', (name, s) => {
     }
   });
 
+  it('prBandInk (PR values beside the band bars) is AA on every surface', () => {
+    const failing = Object.entries(s.prBandInk)
+      .flatMap(([band, ink]) =>
+        Object.entries(surfaces).map(
+          ([surfaceName, surface]) => [band, surfaceName, contrast(ink, surface)] as const,
+        ),
+      )
+      .filter(([, , ratio]) => ratio < AA);
+    expect(failing).toEqual([]);
+  });
+
   it('statusInk is AA on its own statusSoft pill fill (over bg and surface)', () => {
     for (const role of ['success', 'warning', 'danger', 'info'] as const) {
       expect(contrastOnTint(s.statusInk[role], s.statusSoft[role], s.bg)).toBeGreaterThanOrEqual(AA);
@@ -139,6 +151,18 @@ describe.each(SCHEMES)('%s scheme', (name, s) => {
       expect(contrast(s.heroOnGradient, stop)).toBeGreaterThanOrEqual(AA);
       expect(contrast(s.heroOnGradientMuted, stop)).toBeGreaterThanOrEqual(AA);
     }
+  });
+
+  it('the hero band-dot ring (heroOnGradient) is ≥ 3:1 on the hero, bare and under a GlassChip', () => {
+    // Inverter fleet hero: band dots sit on the bare gradient (best / worst)
+    // and inside the average-status GlassChip (glass.medium over the hero).
+    const failing = s.heroGradient
+      .flatMap(stop => [
+        ['bare', stop, contrast(s.heroOnGradient, stop)] as const,
+        ['glass', stop, contrastOnTint(s.heroOnGradient, glass.medium, stop)] as const,
+      ])
+      .filter(([, , ratio]) => ratio < NON_TEXT);
+    expect(failing).toEqual([]);
   });
 
   it('hero text is AA on every danger-hero gradient stop', () => {

@@ -3,7 +3,6 @@ import { StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { AppText } from 'src/components/common';
 import {
-  ColorScheme,
   duration,
   radius as radiusTokens,
   Scheme,
@@ -11,7 +10,6 @@ import {
   useScheme,
   useThemedStyles,
 } from 'src/theme';
-import { prStatusFill, prStatusInk } from 'src/utils/colors';
 import AnimatedBar from './AnimatedBar';
 import {
   ANIM_LIMIT,
@@ -19,8 +17,8 @@ import {
   MINI_BAR_W,
   STAGGER_CAP,
   STAGGER_MS,
-  UptimeTone,
 } from './helpers';
+import { prBandGradient, prBandInk, UPTIME_GRADIENT } from './prBands';
 
 interface InverterRowProps {
   row: InverterRowModel;
@@ -30,32 +28,22 @@ interface InverterRowProps {
   first: boolean;
 }
 
-const uptimeInk = (tone: UptimeTone, scheme: ColorScheme): string => {
-  switch (tone) {
-    case 'warning':
-      return scheme.statusInk.warning;
-    case 'danger':
-      return scheme.statusInk.danger;
-    case 'missing':
-      return scheme.textTertiary;
-    case 'normal':
-    default:
-      return scheme.textSecondary;
-  }
-};
-
 /**
  * One inverter in the Tables list — a read-only fact, not a control
- * (~64–72pt, inside ONE Surface with hairline separators):
+ * (~72pt, inside ONE Surface with hairline separators):
  *
- *   [ 1 ]  Inverter 1                        77.2%
- *          15.5 MWh · 4.96 kWh/kWp           ▬▬▬▬▬▬▭   (56pt PR bar)
- *                                            Up 100%
+ *   [ 1 ]  Inverter 1                       77.24%
+ *          15.5 MWh · 4.96 kWh/kWp          ▬▬▬▬▬▬▭   (56pt PR bar)
+ *                                           Up 100%
+ *                                           ▬▬▬▬▬▬▬   (56pt uptime bar)
  *
- * Neutral number badge (energyPalette is energy-source only), PR in its
- * status ink over a semantic-fill mini bar, uptime caption toned by band.
- * A row without a PR shows a neutral 'No data' pill — never 'Poor'.
- * The whole row is ONE screen-reader element with a composed label.
+ * Colours follow the web portal: the PR bar is its band's gradient
+ * (< 40 / 62 / 82, `prBandPalette`) and the PR value its band ink; the
+ * uptime bar is always the 'excellent' gradient and its caption neutral
+ * (the web never grades uptime). Neutral number badge (energyPalette is
+ * energy-source only). A row without a PR shows a neutral 'No data' pill
+ * — never 'Poor'; a missing uptime shows 'Up —' with no bar (an empty
+ * track would read as 0%). The whole row is ONE screen-reader element.
  */
 const InverterRowBase: FC<InverterRowProps> = ({ row, index, first }) => {
   const scheme = useScheme();
@@ -70,7 +58,7 @@ const InverterRowBase: FC<InverterRowProps> = ({ row, index, first }) => {
     () => [styles.row, first ? null : themed.separator],
     [first, themed.separator],
   );
-  const hasPr = row.status.role !== null;
+  const prGradient = prBandGradient(row.status);
 
   const body = (
     <View style={rowStyle} accessible accessibilityLabel={row.a11yLabel}>
@@ -90,24 +78,24 @@ const InverterRowBase: FC<InverterRowProps> = ({ row, index, first }) => {
       </View>
 
       <View style={styles.side}>
-        {hasPr ? (
-          <>
+        {prGradient ? (
+          <View style={styles.metric}>
             <AppText
               variant="body"
               semi_bold
-              color={prStatusInk(row.status, scheme)}
+              color={prBandInk(row.status, scheme)}
               numberOfLines={1}>
               {row.prText}
             </AppText>
             <AnimatedBar
               fraction={row.barFraction}
-              color={prStatusFill(row.status, scheme)}
+              colors={prGradient}
               trackColor={scheme.surfaceMuted}
               width={MINI_BAR_W}
               animate={animated}
               delay={delay}
             />
-          </>
+          </View>
         ) : (
           <View style={themed.noDataPill}>
             <AppText variant="caption" medium tone="secondary" numberOfLines={1}>
@@ -115,9 +103,24 @@ const InverterRowBase: FC<InverterRowProps> = ({ row, index, first }) => {
             </AppText>
           </View>
         )}
-        <AppText variant="caption" color={uptimeInk(row.uptimeTone, scheme)} numberOfLines={1}>
-          {row.uptimeText}
-        </AppText>
+        <View style={styles.metric}>
+          <AppText
+            variant="caption"
+            tone={row.uptimeFraction === null ? 'tertiary' : 'secondary'}
+            numberOfLines={1}>
+            {row.uptimeText}
+          </AppText>
+          {row.uptimeFraction !== null ? (
+            <AnimatedBar
+              fraction={row.uptimeFraction}
+              colors={UPTIME_GRADIENT}
+              trackColor={scheme.surfaceMuted}
+              width={MINI_BAR_W}
+              animate={animated}
+              delay={delay}
+            />
+          ) : null}
+        </View>
       </View>
     </View>
   );
@@ -142,7 +145,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.md,
     minHeight: 64,
-    paddingVertical: space.md,
+    // PR + uptime stacks are 56pt → a 72pt row.
+    paddingVertical: space.sm,
     paddingHorizontal: space.lg,
   },
   main: {
@@ -155,7 +159,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minWidth: MINI_BAR_W,
     flexShrink: 0,
-    gap: space.xs,
+    gap: space.sm,
+  },
+  /** One value + its mini bar (PR, uptime). */
+  metric: {
+    alignItems: 'flex-end',
+    gap: space['2xs'],
   },
 });
 

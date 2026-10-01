@@ -1,5 +1,6 @@
 import React, { FC, memo, useEffect, useMemo, useRef } from 'react';
 import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -13,8 +14,12 @@ import { BAR_ANIM_MS } from './helpers';
 interface AnimatedBarProps {
   /** Fill share, 0–1 (clamped). */
   fraction: number;
-  /** Fill colour (a semantic FILL, never text ink). */
-  color: string;
+  /**
+   * Fill gradient, left → right (a `prBandPalette` FILL, never text ink).
+   * It spans the FILLED width, like the web's `linear-gradient(90deg, …)`
+   * on a `width: n%` bar. Pass a module-level/token array (stable ref).
+   */
+  colors: [string, string];
   trackColor: string;
   /** Fixed track width in pt — the scaleX origin maths depends on it. */
   width: number;
@@ -31,6 +36,20 @@ interface AnimatedBarProps {
 
 const clamp01 = (x: number): number => (Number.isFinite(x) ? Math.min(1, Math.max(0, x)) : 0);
 
+/** Horizontal gradient axis (module-level: stable props for the native view). */
+const GRADIENT_START = { x: 0, y: 0 };
+const GRADIENT_END = { x: 1, y: 0 };
+
+/** The full-width gradient that the (scaled) fill wraps. */
+const GradientFill: FC<{ colors: [string, string] }> = ({ colors }) => (
+  <LinearGradient
+    colors={colors}
+    start={GRADIENT_START}
+    end={GRADIENT_END}
+    style={StyleSheet.absoluteFill}
+  />
+);
+
 /**
  * Left-anchored scaleX: scaling happens about the centre, so shift left
  * by half the lost width. Pure arithmetic on the fixed `width` — no
@@ -43,6 +62,7 @@ const leftAnchorShift = (scale: number, width: number): number => {
 
 interface AnimatedFillProps {
   fraction: number;
+  colors: [string, string];
   width: number;
   delay: number;
   style: StyleProp<ViewStyle>;
@@ -50,6 +70,7 @@ interface AnimatedFillProps {
 
 const AnimatedFill: FC<AnimatedFillProps> = ({
   fraction,
+  colors,
   width,
   delay,
   style,
@@ -79,16 +100,21 @@ const AnimatedFill: FC<AnimatedFillProps> = ({
     [width],
   );
 
-  return <Animated.View style={[style, animatedStyle]} />;
+  return (
+    <Animated.View style={[style, animatedStyle]}>
+      <GradientFill colors={colors} />
+    </Animated.View>
+  );
 };
 
 /**
- * Small horizontal bar (PR per inverter). The fill is a full-width View
- * scaled on X — a GPU transform, not a width (layout) animation.
+ * Small horizontal bar (PR / uptime per inverter). The fill is a
+ * full-width gradient View scaled on X — a GPU transform, not a width
+ * (layout) animation.
  */
 const AnimatedBar: FC<AnimatedBarProps> = ({
   fraction,
-  color,
+  colors,
   trackColor,
   width,
   height = 4,
@@ -101,24 +127,28 @@ const AnimatedBar: FC<AnimatedBarProps> = ({
     () => [styles.track, { width, height, borderRadius: height / 2, backgroundColor: trackColor }],
     [width, height, trackColor],
   );
-  const fillStyle = useMemo(() => [styles.fill, { backgroundColor: color }], [color]);
   const staticFillStyle = useMemo(
     () => [
       styles.fill,
-      {
-        backgroundColor: color,
-        transform: [{ translateX: leftAnchorShift(share, width) }, { scaleX: share }],
-      },
+      { transform: [{ translateX: leftAnchorShift(share, width) }, { scaleX: share }] },
     ],
-    [color, share, width],
+    [share, width],
   );
 
   return (
     <View style={trackStyle}>
       {animate ? (
-        <AnimatedFill fraction={share} width={width} delay={delay} style={fillStyle} />
+        <AnimatedFill
+          fraction={share}
+          colors={colors}
+          width={width}
+          delay={delay}
+          style={styles.fill}
+        />
       ) : (
-        <View style={staticFillStyle} />
+        <View style={staticFillStyle}>
+          <GradientFill colors={colors} />
+        </View>
       )}
     </View>
   );

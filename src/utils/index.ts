@@ -12,7 +12,6 @@ export * from "./sources";
 export * from "./sld";
 export * from "./dates";
 export * from "./parsers";
-export * from "./colors";
 export * from "./aggregations";
 export * from "./sldGroup";
 export * from "./units";
