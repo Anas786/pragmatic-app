@@ -1,15 +1,9 @@
-import React, { FC } from 'react';
+import React, { FC, memo, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { AppText } from 'src/components/common';
 import {
-  AppText,
-  IconWell,
-  OverlineLabel,
-  Surface,
-  TintedPill,
-} from 'src/components/common';
-import {
+  ColorScheme,
   duration,
   radius as radiusTokens,
   Scheme,
@@ -17,202 +11,175 @@ import {
   useScheme,
   useThemedStyles,
 } from 'src/theme';
-import { FONT_SIZE_LG, FONT_SIZE_SM, FONT_SIZE_XS, FONT_SIZE_XXS } from 'src/utils';
+import { prStatusFill, prStatusInk } from 'src/utils/colors';
+import AnimatedBar from './AnimatedBar';
 import {
-  accentForInverter,
   ANIM_LIMIT,
-  GRADIENT_BR,
-  GRADIENT_TL,
-  InverterEntry,
+  InverterRowModel,
+  MINI_BAR_W,
   STAGGER_CAP,
   STAGGER_MS,
-  statusFor,
+  UptimeTone,
 } from './helpers';
-import AnimatedBar from './AnimatedBar';
 
-interface InverterCardProps {
-  entry: InverterEntry;
+interface InverterRowProps {
+  row: InverterRowModel;
+  /** Position at FIRST mount — decides the entrance (frozen afterwards). */
   index: number;
+  /** First row in the list: no hairline above it. */
+  first: boolean;
 }
 
-const InverterCard: FC<InverterCardProps> = ({ entry, index }) => {
+const uptimeInk = (tone: UptimeTone, scheme: ColorScheme): string => {
+  switch (tone) {
+    case 'warning':
+      return scheme.statusInk.warning;
+    case 'danger':
+      return scheme.statusInk.danger;
+    case 'missing':
+      return scheme.textTertiary;
+    case 'normal':
+    default:
+      return scheme.textSecondary;
+  }
+};
+
+/**
+ * One inverter in the Tables list — a read-only fact, not a control
+ * (~64–72pt, inside ONE Surface with hairline separators):
+ *
+ *   [ 1 ]  Inverter 1                        77.2%
+ *          15.5 MWh · 4.96 kWh/kWp           ▬▬▬▬▬▬▭   (56pt PR bar)
+ *                                            Up 100%
+ *
+ * Neutral number badge (energyPalette is energy-source only), PR in its
+ * status ink over a semantic-fill mini bar, uptime caption toned by band.
+ * A row without a PR shows a neutral 'No data' pill — never 'Poor'.
+ * The whole row is ONE screen-reader element with a composed label.
+ */
+const InverterRowBase: FC<InverterRowProps> = ({ row, index, first }) => {
   const scheme = useScheme();
-  const themed = useThemedStyles(createInverterCardStyles);
-  const accent = accentForInverter(entry.num);
-  const status = statusFor(entry.performanceRatio);
+  const themed = useThemedStyles(createThemedStyles);
+
+  // Frozen at first mount (CLAUDE.md §19 entrance cap): re-sorting moves
+  // rows but must never swap their wrapper type or bar hook set.
+  const [animated] = useState(() => index < ANIM_LIMIT);
+  const [delay] = useState(() => Math.min(index, STAGGER_CAP) * STAGGER_MS);
+
+  const rowStyle = useMemo(
+    () => [styles.row, first ? null : themed.separator],
+    [first, themed.separator],
+  );
+  const hasPr = row.status.role !== null;
 
   const body = (
-    <Surface
-      elevation="md"
-      radius="xl"
-      background={scheme.surface}
-      padding={space.lg}
-      style={themed.card}>
-      <LinearGradient
-        colors={[accent + '10', accent + '00']}
-        start={GRADIENT_TL}
-        end={GRADIENT_BR}
-        style={StyleSheet.absoluteFillObject}
-        pointerEvents="none"
-      />
-
-      <View style={styles.cardHeader}>
-        <View style={styles.badgeRow}>
-          <IconWell color={accent} alpha="" size={32} radius={radiusTokens.md}>
-            <AppText fontSize={FONT_SIZE_XS} bold color={scheme.textOnBrand}>
-              {entry.num || '—'}
-            </AppText>
-          </IconWell>
-          <AppText
-            fontSize={FONT_SIZE_SM}
-            semi_bold
-            color={scheme.textPrimary}
-            numberOfLines={1}>
-            {entry.title}
-          </AppText>
-        </View>
-        <TintedPill color={status.color} alpha="1F" row paddingY={4}>
-          <AppText fontSize={FONT_SIZE_XXS} bold color={status.color}>
-            {status.label.toUpperCase()}
-          </AppText>
-        </TintedPill>
+    <View style={rowStyle} accessible accessibilityLabel={row.a11yLabel}>
+      <View style={themed.badge}>
+        <AppText variant="caption" semi_bold numberOfLines={1}>
+          {row.badge}
+        </AppText>
       </View>
 
-      <View style={styles.metricsRow}>
-        <MetricTile>
-          <OverlineLabel color={scheme.textTertiary}>PRODUCTION</OverlineLabel>
-          <View style={styles.metricValueRow}>
+      <View style={styles.main}>
+        <AppText variant="body" semi_bold numberOfLines={1}>
+          {row.title}
+        </AppText>
+        <AppText variant="bodySm" tone="secondary" numberOfLines={2}>
+          {row.secondary}
+        </AppText>
+      </View>
+
+      <View style={styles.side}>
+        {hasPr ? (
+          <>
             <AppText
-              fontSize={FONT_SIZE_LG}
-              bold
-              color={scheme.textPrimary}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.6}>
-              {entry.production}
+              variant="body"
+              semi_bold
+              color={prStatusInk(row.status, scheme)}
+              numberOfLines={1}>
+              {row.prText}
             </AppText>
-            <AppText fontSize={FONT_SIZE_XXS} color={scheme.textSecondary}>
-              kWh
+            <AnimatedBar
+              fraction={row.barFraction}
+              color={prStatusFill(row.status, scheme)}
+              trackColor={scheme.surfaceMuted}
+              width={MINI_BAR_W}
+              animate={animated}
+              delay={delay}
+            />
+          </>
+        ) : (
+          <View style={themed.noDataPill}>
+            <AppText variant="caption" medium tone="secondary" numberOfLines={1}>
+              No data
             </AppText>
           </View>
-        </MetricTile>
-        <MetricTile>
-          <OverlineLabel color={scheme.textTertiary}>YIELD</OverlineLabel>
-          <View style={styles.metricValueRow}>
-            <AppText
-              fontSize={FONT_SIZE_LG}
-              bold
-              color={scheme.textPrimary}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.6}>
-              {entry.yield}
-            </AppText>
-          </View>
-        </MetricTile>
+        )}
+        <AppText variant="caption" color={uptimeInk(row.uptimeTone, scheme)} numberOfLines={1}>
+          {row.uptimeText}
+        </AppText>
       </View>
-
-      <View style={styles.barSection}>
-        <View style={styles.barRow}>
-          <OverlineLabel color={scheme.textTertiary}>PERFORMANCE RATIO</OverlineLabel>
-          <AppText fontSize={FONT_SIZE_XS} bold color={status.color}>
-            {entry.performanceRatio.toFixed(2)}%
-          </AppText>
-        </View>
-        <AnimatedBar
-          percent={entry.performanceRatio}
-          color={status.color}
-          trackColor={scheme.surfaceMuted}
-          delay={index * 40}
-        />
-      </View>
-
-      <View style={styles.barSection}>
-        <View style={styles.barRow}>
-          <OverlineLabel color={scheme.textTertiary}>UPTIME</OverlineLabel>
-          <AppText fontSize={FONT_SIZE_XS} bold color={scheme.brand}>
-            {entry.uptimePercent.toFixed(2)}%
-          </AppText>
-        </View>
-        <AnimatedBar
-          percent={entry.uptimePercent}
-          color={scheme.brand}
-          trackColor={scheme.surfaceMuted}
-          delay={index * 40 + 80}
-        />
-      </View>
-    </Surface>
+    </View>
   );
 
-  if (index < ANIM_LIMIT) {
+  if (animated) {
     return (
-      <Animated.View
-        entering={FadeInDown.duration(duration.base)
-          .delay(Math.min(index, STAGGER_CAP) * STAGGER_MS)
-          .springify()
-          .damping(22)}>
+      <Animated.View entering={FadeInDown.duration(duration.base).delay(delay).springify().damping(22)}>
         {body}
       </Animated.View>
     );
   }
-  return <View>{body}</View>;
+  return body;
 };
+InverterRowBase.displayName = 'InverterRow';
 
-const MetricTile: FC<{ children?: React.ReactNode }> = ({ children }) => {
-  const themed = useThemedStyles(createInverterCardStyles);
-  return <View style={themed.metricTile}>{children}</View>;
-};
-MetricTile.displayName = 'MetricTile';
+/** Memoised: rows only re-render when their (per-fetch) model changes. */
+export const InverterRow = memo(InverterRowBase);
 
 const styles = StyleSheet.create({
-  cardHeader: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: space.sm,
+    gap: space.md,
+    minHeight: 64,
+    paddingVertical: space.md,
+    paddingHorizontal: space.lg,
   },
-  badgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-    flexShrink: 1,
+  main: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
   },
-  metricsRow: {
-    flexDirection: 'row',
-    gap: space.sm,
-  },
-  metricValueRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 4,
-  },
-  barSection: {
-    gap: 6,
-  },
-  barRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  side: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    minWidth: MINI_BAR_W,
+    flexShrink: 0,
+    gap: space.xs,
   },
 });
 
-const createInverterCardStyles = (scheme: Scheme) =>
+const createThemedStyles = (scheme: Scheme) =>
   StyleSheet.create({
-    card: {
-      overflow: 'hidden',
-      gap: space.md,
-      borderWidth: 1,
-      borderColor: scheme.border,
+    separator: {
+      borderTopWidth: 1,
+      borderTopColor: scheme.hairline,
     },
-    metricTile: {
-      flex: 1,
-      padding: space.md,
-      borderRadius: radiusTokens.md,
-      borderWidth: 1,
-      gap: 4,
+    badge: {
+      minWidth: 28,
+      minHeight: 28,
+      paddingHorizontal: space.xs,
+      borderRadius: radiusTokens.sm,
+      alignItems: 'center',
+      justifyContent: 'center',
       backgroundColor: scheme.surfaceMuted,
-      borderColor: scheme.border,
+    },
+    noDataPill: {
+      paddingHorizontal: space.sm,
+      paddingVertical: 2,
+      borderRadius: radiusTokens.pill,
+      backgroundColor: scheme.surfaceMuted,
     },
   });
 
-export default InverterCard;
+export default InverterRow;

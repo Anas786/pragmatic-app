@@ -23,6 +23,14 @@ export const inverterReportQueryKey = (
  *
  * `enabled` short-circuits when no siteId is supplied so deep-links
  * don't fire a request before the route params arrive.
+ *
+ * Keep-previous-data, per site: a period change keeps the previous
+ * period's rows on screen (`isPlaceholderData: true`) until the new key
+ * resolves, so the hero and the inverter rows stay mounted (no skeleton
+ * flash, no entrance replay); the Tables card dims them and marks the
+ * hero 'Updating…'. Placeholder data is never written to the cache, and
+ * it is only carried over from a query for the SAME site — another
+ * site's inverters must never stand in, even for a moment.
  */
 export const useInverterReport = (
   siteId: string | undefined | null,
@@ -32,6 +40,8 @@ export const useInverterReport = (
     queryKey: inverterReportQueryKey(siteId ?? '', filter),
     queryFn: () => getInverterReport(siteId as string, filter),
     enabled: !!siteId,
+    placeholderData: (previousData, previousQuery) =>
+      previousQuery?.queryKey[1] === (siteId ?? '') ? previousData : undefined,
     staleTime: 1000 * 60 * 5, // reports tolerate a 5-min cache
     gcTime: 1000 * 60 * 30,
     retry: (failureCount, error: any) => {

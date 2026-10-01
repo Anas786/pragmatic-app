@@ -1,31 +1,56 @@
 /**
- * Color derivation helpers for data-driven UI elements (inverter cards,
- * status badges) that cycle through or map to the energy palette.
+ * Performance-ratio status for the inverter fleet (Tables tab).
+ *
+ * Status is SEMANTIC, never an energy-source colour (energyPalette means
+ * energy source only): Excellent ≥ 90 and Good ≥ 80 → success, Fair ≥ 70
+ * → warning, Poor < 70 → danger. A missing PR (null / non-numeric) is a
+ * neutral 'No data' — never 'Poor', which would accuse an inverter the
+ * backend simply didn't report on. A real 0 is Poor.
+ *
+ * Fills (bars, dots) come from `semantic.*`; text and pills use the
+ * scheme's `statusInk` / `statusSoft` roles so they stay AA in both themes.
  */
 
-import { energyPalette, semantic } from 'src/theme';
+import { ColorScheme, semantic } from 'src/theme';
 
-export type StatusKey = 'excellent' | 'good' | 'fair' | 'poor';
+export type StatusKey = 'excellent' | 'good' | 'fair' | 'poor' | 'none';
 
-const ACCENT_CYCLE: string[] = [
-  energyPalette.solar,
-  energyPalette.wind,
-  energyPalette.grid,
-  energyPalette.genset,
-  energyPalette.battery,
-];
+/** Semantic role behind a PR status; null = neutral (no data). */
+export type PrStatusRole = 'success' | 'warning' | 'danger' | null;
 
-/** Cycles through the five energy-palette colours by 1-based inverter number. */
-export const accentForInverter = (num: number): string =>
-  ACCENT_CYCLE[(num - 1 + ACCENT_CYCLE.length) % ACCENT_CYCLE.length];
+export interface PrStatus {
+  key: StatusKey;
+  /** 'Excellent' / 'Good' / 'Fair' / 'Poor' / 'No data'. */
+  label: string;
+  role: PrStatusRole;
+}
 
-/** Maps a performance-ratio value to a labelled status badge.
- *  Thresholds: ≥90 Excellent, ≥80 Good, ≥70 Fair, <70 Poor. */
-export const statusFor = (
-  pr: number,
-): { key: StatusKey; label: string; color: string } => {
-  if (pr >= 90) return { key: 'excellent', label: 'Excellent', color: semantic.success };
-  if (pr >= 80) return { key: 'good', label: 'Good', color: energyPalette.solar };
-  if (pr >= 70) return { key: 'fair', label: 'Fair', color: semantic.warning };
-  return { key: 'poor', label: 'Poor', color: semantic.danger };
+/** Lower bounds (inclusive, percent) of each PR status band. */
+export const PR_STATUS_THRESHOLDS = { excellent: 90, good: 80, fair: 70 } as const;
+
+const NO_DATA: PrStatus = Object.freeze({ key: 'none', label: 'No data', role: null });
+const EXCELLENT: PrStatus = Object.freeze({ key: 'excellent', label: 'Excellent', role: 'success' });
+const GOOD: PrStatus = Object.freeze({ key: 'good', label: 'Good', role: 'success' });
+const FAIR: PrStatus = Object.freeze({ key: 'fair', label: 'Fair', role: 'warning' });
+const POOR: PrStatus = Object.freeze({ key: 'poor', label: 'Poor', role: 'danger' });
+
+/** Maps a performance ratio (percent) to its status band. */
+export const statusFor = (pr: number | null | undefined): PrStatus => {
+  if (typeof pr !== 'number' || !Number.isFinite(pr)) return NO_DATA;
+  if (pr >= PR_STATUS_THRESHOLDS.excellent) return EXCELLENT;
+  if (pr >= PR_STATUS_THRESHOLDS.good) return GOOD;
+  if (pr >= PR_STATUS_THRESHOLDS.fair) return FAIR;
+  return POOR;
 };
+
+/** Text / icon ink for a status (status pills, PR values). */
+export const prStatusInk = (status: PrStatus, scheme: ColorScheme): string =>
+  status.role ? scheme.statusInk[status.role] : scheme.textSecondary;
+
+/** Soft pill fill for a status — pair with `prStatusInk`. */
+export const prStatusSoft = (status: PrStatus, scheme: ColorScheme): string =>
+  status.role ? scheme.statusSoft[status.role] : scheme.surfaceMuted;
+
+/** Solid FILL for a status (bars, dots) — never used as text. */
+export const prStatusFill = (status: PrStatus, scheme: ColorScheme): string =>
+  status.role ? semantic[status.role] : scheme.textTertiary;
