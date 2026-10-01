@@ -1,8 +1,8 @@
-import React, { FC, useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, { FC, memo } from 'react';
+import { RouteProp, useRoute } from '@react-navigation/native';
 import { ErrorBoundary } from 'src/components/common';
-import { normalizeHeight } from 'src/utils';
-import TabSelector, { TabOption } from './TabSelector';
+import { DashboardStackParamList } from 'src/types';
+import { TabOption } from './TabSelector';
 import SummaryView from './SummaryView';
 import CardsView from './CardsView';
 import LiveParameterView from './LiveParameterView';
@@ -11,81 +11,64 @@ import TrendView from './TrendView';
 import ReportsView from './ReportsView';
 import TablesView from './TablesView';
 
-const ViewsContent: FC = () => {
-  // `pendingTab` drives the chip strip and updates synchronously on
-  // tap so the blob morph + press-scale render on the very next
-  // frame. `renderedTab` drives the body and is deferred by one rAF
-  // so the heavy subtree mount can't share a commit with the chip
-  // update (otherwise the morph appears to lag).
-  //
-  // Intentionally NOT using a keep-mounted / display:none strategy
-  // here. Hidden tabs keep their PulseDot worklets, GIF playback and
-  // useQuery polling alive on the UI/JS threads — after walking
-  // through 4–5 tabs the accumulated continuous work pinned the CPU
-  // and the device heated up. Render only the active tab; first-
-  // visit cost is mitigated by the `useInteractionReady` defer
-  // inside each heavy view + the chip-morph rAF split below.
-  const [pendingTab, setPendingTab] = useState<TabOption>('Summary');
-  const [renderedTab, setRenderedTab] = useState<TabOption>('Summary');
-  const rafRef = useRef<number | null>(null);
+type SiteDetailRouteProp = RouteProp<DashboardStackParamList, 'SiteDetail'>;
 
-  const handleSelect = useCallback((tab: TabOption) => {
-    setPendingTab(tab);
-    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(() => {
-      rafRef.current = null;
-      setRenderedTab(tab);
-    });
-  }, []);
+interface ViewsContentProps {
+  /** The tab whose body is mounted (SiteDetail's `renderedTab`). */
+  tab: TabOption;
+}
 
-  useEffect(
-    () => () => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-    },
-    [],
-  );
-
-  const renderTabContent = () => {
-    switch (renderedTab) {
-      case 'Summary':
-        return <SummaryView />;
-      case 'Cards':
-        return <CardsView />;
-      case 'Live':
-        // Wrapped so a render-time crash here (which has been seen on
-        // sites with unusually large or oddly-shaped live payloads)
-        // surfaces a debuggable message instead of taking the JS
-        // thread down with it.
-        return (
-          <ErrorBoundary label="Live Parameters">
-            <LiveParameterView />
-          </ErrorBoundary>
-        );
-      case 'Alarms':
-        return <AlarmsView />;
-      case 'Trend':
-        return <TrendView />;
-      case 'Reports':
-        return <ReportsView />;
-      case 'Tables':
-        return <TablesView />;
-      default:
-        return null;
-    }
-  };
-
-  return (
-    <View style={styles.container}>
-      <TabSelector selected={pendingTab} onSelect={handleSelect} />
-      {renderTabContent()}
-    </View>
-  );
+const renderTab = (tab: TabOption) => {
+  switch (tab) {
+    case 'Summary':
+      return <SummaryView />;
+    case 'Cards':
+      return <CardsView />;
+    case 'Live':
+      return <LiveParameterView />;
+    case 'Alarms':
+      return <AlarmsView />;
+    case 'Trend':
+      return <TrendView />;
+    case 'Reports':
+      return <ReportsView />;
+    case 'Tables':
+      return <TablesView />;
+    default:
+      return null;
+  }
 };
 
-const styles = StyleSheet.create({
-  container: {
-    gap: normalizeHeight(16),
-  },
-});
+/**
+ * Body of the active SiteDetail tab — and only the active one. The tab
+ * strip and the pending/rendered split live in SiteDetail (the strip is
+ * pinned outside the body ScrollView).
+ *
+ * Intentionally NOT a keep-mounted / display:none strategy. Hidden tabs
+ * keep their PulseDot worklets, GIF playback and useQuery polling alive
+ * on the UI/JS threads — after walking through 4–5 tabs the accumulated
+ * continuous work pinned the CPU and the device heated up. First-visit
+ * cost is mitigated by the `useInteractionReady` defer inside each heavy
+ * view + SiteDetail's chip-morph rAF split.
+ *
+ * Every tab sits behind its own ErrorBoundary: a render crash in one tab
+ * (an oddly-shaped payload) shows the 'This section couldn't be
+ * displayed' card in that tab only. `resetKey` = site + tab, so switching
+ * tab (or site) gives the next body a fresh attempt.
+ *
+ * Memoised on `tab`: SiteDetail state (scroll hairline, refresh spinner,
+ * query flags) never re-renders the heavy tab body — each view subscribes
+ * to the data it needs itself.
+ */
+const ViewsContent: FC<ViewsContentProps> = ({ tab }) => {
+  const route = useRoute<SiteDetailRouteProp>();
+  const siteId = route.params?.siteId ?? '';
+  return (
+    <ErrorBoundary label={tab} resetKey={`${siteId}:${tab}`}>
+      {renderTab(tab)}
+    </ErrorBoundary>
+  );
+};
+ViewsContent.displayName = 'ViewsContent';
 
-export default ViewsContent;
+export default memo(ViewsContent);

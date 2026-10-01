@@ -1,11 +1,14 @@
 /**
- * TabSelector — v4 (liquid-morph chips).
+ * TabSelector — v5 (pinned, segmented track, liquid-morph blob).
+ *
+ * Rendered by SiteDetail in a FIXED slot between the header and the body
+ * ScrollView, so the strip stays on screen however far a tab scrolls.
  *
  * The original v2 "liquid-morph" used Reanimated `LinearTransition` on
  * every TabPill which tripped a ShadowTree::commit SIGABRT under the
  * new architecture (see v3 comment history). This version reproduces
  * the visual effect with a single absolutely-positioned Animated.View
- * — a brand-coloured "blob" sitting behind the static chips that
+ * — a flat brand-coloured "blob" sitting behind the static chips that
  * morphs its `translateX` + `width` to track the active chip.
  *
  * The "liquid" feel comes from a two-step sequence on every change:
@@ -15,19 +18,37 @@
  *      (spring — settles with a soft bounce).
  *
  * The chips themselves never re-layout — Reanimated only ever animates
- * one isolated view's transform + width, so there is no tree-cloning
- * and no commit-hook racing across siblings.
+ * one isolated view's transform + width (style keys only), so there is
+ * no tree-cloning and no commit-hook racing across siblings.
+ *
+ * v5: the blob is a flat fill (its old shadow was clipped by the strip
+ * into a hard rectangular halo); the chips sit in a surfaceMuted pill
+ * track so the strip reads as one control; bg-coloured edge fades mark
+ * the side(s) with hidden tabs (booleans from scroll/size events — no
+ * animated styles); every chip is a ≥ touch.min tab with a selected
+ * state inside a tab bar / tab list.
  */
 
 import React, {
   FC,
-  ReactNode,
   memo,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
+  useState,
 } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import {
+  AccessibilityRole,
+  LayoutChangeEvent,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -36,15 +57,18 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { AppText, PressableScale } from 'src/components/common';
+import type { PressableRole } from 'src/components/common';
 import {
   radius as radiusTokens,
   Scheme,
   space,
   spring as springTokens,
+  touch,
   useScheme,
   useThemedStyles,
 } from 'src/theme';
-import { FONT_SIZE_XS, ICON_SIZE_SM, WIDTH } from 'src/utils';
+import { ICON_SIZE_SM, WIDTH } from 'src/utils';
+import { haptics } from 'src/utils/haptics';
 import { IconProps } from 'src/types';
 import {
   BoltIcon,
@@ -54,6 +78,7 @@ import {
   SummaryTabIcon,
   TrendTabIcon,
 } from 'src/assets/icons';
+import { tabCenterScrollX, tabStripFades } from '../siteDetailModel';
 
 export type TabOption =
   | 'Summary'
@@ -86,77 +111,29 @@ const tabs: TabConfig[] = [
   { name: 'Tables', Icon: GridIcon },
 ];
 
-const PILL_HEIGHT = 40;
+/** Number of visible tabs (the skeleton draws the same count). */
+export const TAB_COUNT = tabs.length;
+/** Chip height — a real ≥ touch.min target (44pt iOS / 48dp Android);
+ *  the track clips, so hitSlop would not help here. */
+export const TAB_PILL_HEIGHT = touch.min;
+/** Track padding around the chips. */
+export const TAB_TRACK_INSET = space.xs;
+/** Page gutter before / after the track inside the horizontal scroll. */
+export const TAB_STRIP_GUTTER = space.lg;
+/** Total strip height (track + its inset) — the fixed slot's content. */
+export const TAB_STRIP_HEIGHT = TAB_PILL_HEIGHT + TAB_TRACK_INSET * 2;
+
 const STRETCH_DURATION = 180;
+const FADE_WIDTH = 20;
 
-/* ─────────────── styled wrappers ─────────────── */
-
-const TabRow: FC<{
-  scrollRef: React.RefObject<ScrollView>;
-  children: ReactNode;
-}> = ({ scrollRef, children }) => {
-  const themed = useThemedStyles(createStyles);
-  return (
-    <ScrollView
-      ref={scrollRef}
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={themed.container}>
-      {children}
-    </ScrollView>
-  );
-};
-TabRow.displayName = 'TabRow';
-
-const MorphBlob: FC<{
-  animatedStyle: ReturnType<typeof useAnimatedStyle>;
-}> = ({ animatedStyle }) => {
-  const themed = useThemedStyles(createStyles);
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[themed.blob, animatedStyle]}
-    />
-  );
-};
-MorphBlob.displayName = 'MorphBlob';
-
-const PillShell: FC<{
-  name: TabOption;
-  onLayout: (name: TabOption, x: number, width: number) => void;
-  children: ReactNode;
-}> = ({ name, onLayout, children }) => {
-  const themed = useThemedStyles(createStyles);
-  return (
-    <View
-      onLayout={e =>
-        onLayout(name, e.nativeEvent.layout.x, e.nativeEvent.layout.width)
-      }
-      style={themed.tab}>
-      {children}
-    </View>
-  );
-};
-PillShell.displayName = 'PillShell';
-
-const PillBody: FC<{
-  onPress: () => void;
-  label: string;
-  children: ReactNode;
-}> = ({ onPress, label, children }) => {
-  const themed = useThemedStyles(createStyles);
-  return (
-    <PressableScale
-      onPress={onPress}
-      haptic="select"
-      scaleTo={0.94}
-      accessibilityLabel={label}
-      style={themed.tabInner}>
-      {children}
-    </PressableScale>
-  );
-};
-PillBody.displayName = 'PillBody';
+/**
+ * VoiceOver only announces 'Tab, 1 of 6' for elements inside a container
+ * with the TabBar trait, which RN maps from 'tabbar' (Fabric maps
+ * 'tablist' to no trait on iOS). Inside a tab bar a button reads as a
+ * tab, so iOS chips keep the button role; Android uses tablist / tab.
+ */
+const STRIP_ROLE: AccessibilityRole = Platform.OS === 'ios' ? 'tabbar' : 'tablist';
+const CHIP_ROLE: PressableRole = Platform.OS === 'ios' ? 'button' : 'tab';
 
 /* ─────────────── tab pill ─────────────── */
 
@@ -166,53 +143,121 @@ interface TabPillProps {
   onPress: (name: TabOption) => void;
   onLayout: (name: TabOption, x: number, width: number) => void;
   scheme: Scheme;
+  themed: ReturnType<typeof createStyles>;
 }
 
-const TabPill: FC<TabPillProps> = ({
+const TabPillBase: FC<TabPillProps> = ({
   config,
   isActive,
   onPress,
   onLayout,
   scheme,
+  themed,
 }) => {
   const { Icon, name } = config;
   const tint = isActive ? scheme.textOnBrand : scheme.textSecondary;
+
+  const handleLayout = useCallback(
+    (e: LayoutChangeEvent) =>
+      onLayout(name, e.nativeEvent.layout.x, e.nativeEvent.layout.width),
+    [name, onLayout],
+  );
+  // 'select' haptic only on a selection CHANGE — never on re-tapping the
+  // active tab (which just scrolls the body back to the top).
+  const handlePress = useCallback(() => {
+    if (!isActive) haptics.select();
+    onPress(name);
+  }, [isActive, name, onPress]);
+
   return (
-    <PillShell name={name} onLayout={onLayout}>
-      <PillBody onPress={() => onPress(name)} label={`${name} tab`}>
+    <View onLayout={handleLayout}>
+      <PressableScale
+        onPress={handlePress}
+        scaleTo={0.94}
+        role={CHIP_ROLE}
+        selected={isActive}
+        accessibilityLabel={name}
+        style={themed.tabInner}>
         <Icon size={ICON_SIZE_SM} color={tint} />
-        <AppText fontSize={FONT_SIZE_XS} semi_bold color={tint}>
+        <AppText variant="bodySm" semi_bold color={tint} numberOfLines={1}>
           {name}
         </AppText>
-      </PillBody>
-    </PillShell>
+      </PressableScale>
+    </View>
   );
 };
+const TabPill = memo(TabPillBase);
 TabPill.displayName = 'TabPill';
 
 /* ─────────────── tab selector ─────────────── */
 
 const TabSelector: FC<TabSelectorProps> = ({ selected, onSelect }) => {
   const scheme = useScheme();
+  const themed = useThemedStyles(createStyles);
   const scrollRef = useRef<ScrollView>(null);
   const tabLayoutsRef = useRef<Record<string, { x: number; width: number }>>(
     {},
   );
   const initialized = useRef(false);
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
 
   const blobX = useSharedValue(0);
   const blobWidth = useSharedValue(0);
 
+  // Strip geometry for the edge fades + auto-centring. Refs hold the raw
+  // numbers; state only flips when a fade's visibility actually changes.
+  const viewportWRef = useRef(WIDTH);
+  const contentWRef = useRef(0);
+  const scrollXRef = useRef(0);
+  const [fades, setFades] = useState({ left: false, right: false });
+
+  const syncFades = useCallback(() => {
+    const next = tabStripFades(
+      scrollXRef.current,
+      viewportWRef.current,
+      contentWRef.current,
+    );
+    setFades(prev =>
+      prev.left === next.left && prev.right === next.right ? prev : next,
+    );
+  }, []);
+
+  const handleScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      scrollXRef.current = e.nativeEvent.contentOffset.x;
+      syncFades();
+    },
+    [syncFades],
+  );
+  const handleViewportLayout = useCallback(
+    (e: LayoutChangeEvent) => {
+      viewportWRef.current = e.nativeEvent.layout.width;
+      syncFades();
+    },
+    [syncFades],
+  );
+  const handleContentSize = useCallback(
+    (w: number) => {
+      contentWRef.current = w;
+      syncFades();
+    },
+    [syncFades],
+  );
+
+  // Stable: reads the selection through a ref so chips' onLayout props
+  // never change. The selected chip snaps the blob on (re)layout — first
+  // mount, or an OS text-size change that resizes the chips.
   const handleLayout = useCallback(
     (name: TabOption, x: number, width: number) => {
       tabLayoutsRef.current[name] = { x, width };
-      if (!initialized.current && name === selected) {
+      if (name === selectedRef.current) {
         blobX.value = x;
         blobWidth.value = width;
         initialized.current = true;
       }
     },
-    [selected, blobX, blobWidth],
+    [blobX, blobWidth],
   );
 
   useEffect(() => {
@@ -249,72 +294,131 @@ const TabSelector: FC<TabSelectorProps> = ({ selected, onSelect }) => {
     }
 
     if (!scrollRef.current) return;
-    const targetX = Math.max(0, layout.x - WIDTH / 2 + layout.width / 2);
+    const targetX = tabCenterScrollX(
+      layout.x,
+      layout.width,
+      viewportWRef.current,
+      TAB_STRIP_GUTTER,
+    );
     const handle = requestAnimationFrame(() => {
       scrollRef.current?.scrollTo({ x: targetX, animated: true });
     });
     return () => cancelAnimationFrame(handle);
   }, [selected, blobX, blobWidth]);
 
+  // Style keys only (transform + width) — never non-style props.
   const blobStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: blobX.value }],
     width: blobWidth.value,
   }));
 
+  const leftFade = useMemo(() => [scheme.bg, `${scheme.bg}00`], [scheme.bg]);
+  const rightFade = useMemo(() => [`${scheme.bg}00`, scheme.bg], [scheme.bg]);
+
   return (
-    <TabRow scrollRef={scrollRef}>
-      <MorphBlob animatedStyle={blobStyle} />
-      {tabs.map(tab => (
-        <TabPill
-          key={tab.name}
-          config={tab}
-          isActive={selected === tab.name}
-          onPress={onSelect}
-          onLayout={handleLayout}
-          scheme={scheme}
-        />
-      ))}
-    </TabRow>
+    <View style={styles.root}>
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        accessibilityRole={STRIP_ROLE}
+        accessibilityLabel="Site sections"
+        onLayout={handleViewportLayout}
+        onContentSizeChange={handleContentSize}
+        onScroll={handleScroll}
+        scrollEventThrottle={32}
+        contentContainerStyle={styles.content}>
+        <View style={themed.track}>
+          <Animated.View
+            pointerEvents="none"
+            style={[themed.blob, blobStyle]}
+          />
+          {tabs.map(tab => (
+            <TabPill
+              key={tab.name}
+              config={tab}
+              isActive={selected === tab.name}
+              onPress={onSelect}
+              onLayout={handleLayout}
+              scheme={scheme}
+              themed={themed}
+            />
+          ))}
+        </View>
+      </ScrollView>
+      <LinearGradient
+        pointerEvents="none"
+        colors={leftFade}
+        start={FADE_START}
+        end={FADE_END}
+        style={[styles.fade, styles.fadeLeft, fades.left ? null : styles.hidden]}
+      />
+      <LinearGradient
+        pointerEvents="none"
+        colors={rightFade}
+        start={FADE_START}
+        end={FADE_END}
+        style={[styles.fade, styles.fadeRight, fades.right ? null : styles.hidden]}
+      />
+    </View>
   );
 };
 TabSelector.displayName = 'TabSelector';
 
+const FADE_START = { x: 0, y: 0.5 };
+const FADE_END = { x: 1, y: 0.5 };
+
+const styles = StyleSheet.create({
+  root: {
+    height: TAB_STRIP_HEIGHT,
+  },
+  content: {
+    paddingHorizontal: TAB_STRIP_GUTTER,
+    alignItems: 'center',
+  },
+  fade: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: FADE_WIDTH,
+  },
+  fadeLeft: { left: 0 },
+  fadeRight: { right: 0 },
+  hidden: { opacity: 0 },
+});
+
 const createStyles = (scheme: Scheme) =>
   StyleSheet.create({
-    container: {
+    track: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: space.sm,
-      paddingVertical: space.xs,
-      paddingHorizontal: space.xs,
-    },
-    tab: {
+      gap: space.xs,
+      padding: TAB_TRACK_INSET,
       borderRadius: radiusTokens.pill,
+      // Clips the blob's spring overshoot to the track's rounded ends.
       overflow: 'hidden',
-      backgroundColor: 'transparent',
+      backgroundColor: scheme.surfaceMuted,
     },
     tabInner: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: space.sm,
-      paddingHorizontal: space.md,
-      height: PILL_HEIGHT,
+      paddingHorizontal: space.md + 2,
+      minHeight: TAB_PILL_HEIGHT,
+      borderRadius: radiusTokens.pill,
     },
+    // Flat brand fill: no shadow / elevation (a shadow here was clipped
+    // into a rectangular halo by the scroll view).
     blob: {
       position: 'absolute',
       left: 0,
-      top: space.xs,
-      height: PILL_HEIGHT,
+      top: TAB_TRACK_INSET,
+      height: TAB_PILL_HEIGHT,
       borderRadius: radiusTokens.pill,
       backgroundColor: scheme.brand,
-      shadowColor: scheme.brand,
-      shadowOpacity: 0.35,
-      shadowRadius: 12,
-      shadowOffset: { width: 0, height: 4 },
-      elevation: 4,
     },
   });
 
 // Memoized — props are a string + a useCallback'd handler (see
-// ViewsContent), so parent re-renders skip the whole chip strip.
+// SiteDetail), so parent re-renders skip the whole chip strip.
 export default memo(TabSelector);
