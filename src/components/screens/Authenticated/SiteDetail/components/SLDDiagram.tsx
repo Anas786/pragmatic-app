@@ -1,4 +1,4 @@
-import React, { FC, useCallback, useMemo } from 'react';
+import React, { FC, useCallback, useState } from 'react';
 import { Dimensions, StyleSheet, View } from 'react-native';
 import {
   useIsFocused,
@@ -9,25 +9,16 @@ import {
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AppText } from 'src/components/common';
 import { Scheme, useScheme, useThemedStyles } from 'src/theme';
-import {
-  FONT_SIZE_XS,
-  getGraphBounds,
-  makeLiveResolver,
-  normalizeHeight,
-  normalizeWidth,
-  selectSldGraph,
-} from 'src/utils';
-import { useSiteConfig, useSiteData } from 'src/hooks';
-import { DashboardStackParamList, SLDGraph } from 'src/types';
+import { FONT_SIZE_XS, normalizeHeight, normalizeWidth } from 'src/utils';
+import { DashboardStackParamList } from 'src/types';
 import SLDViewport from './SLDViewport';
+import { useSldModel } from './useSldModel';
 
 /* ─────────── viewport dimensions (inline) ─────────── */
 
 const { width: SW } = Dimensions.get('window');
 const VW = SW - normalizeWidth(24);
 const VH = normalizeHeight(480);
-
-const EMPTY_GRAPH: SLDGraph = { nodes: [], edges: [] };
 
 type SiteDetailRouteProp = RouteProp<DashboardStackParamList, 'SiteDetail'>;
 type Nav = NativeStackNavigationProp<DashboardStackParamList>;
@@ -43,14 +34,14 @@ const SLDDiagram: FC = () => {
   // doubled tree is what tipped Reanimated's Fabric commit-hook clone over.
   const isFocused = useIsFocused();
 
-  // Graph from `siteConfig.siteComponents.sldV2`; values resolved live from
-  // `liveData.live.data.<param>` (same path a `dataStore:"live"` card uses).
-  const { data: config } = useSiteConfig(siteId);
-  const { data: liveData } = useSiteData(siteId);
-
-  const graph = useMemo(() => selectSldGraph(config) ?? EMPTY_GRAPH, [config]);
-  const resolve = useMemo(() => makeLiveResolver(liveData), [liveData]);
-  const bounds = useMemo(() => getGraphBounds(graph), [graph]);
+  // Graph (grouped by energy type or per-unit) + live resolver + bounds —
+  // shared with the full-screen route so both show the same mode.
+  const { graph, bounds, resolve, mode, setMode, canGroup } = useSldModel(siteId);
+  // Pan lock + routing live HERE, not in the viewport: the viewport is
+  // remounted (keyed by mode) on every Grouped ⇄ Units switch, and the
+  // user's choices must survive it. Opens locked + orthogonal.
+  const [locked, setLocked] = useState(true);
+  const [orthogonal, setOrthogonal] = useState(true);
 
   // Full-screen is a dedicated navigation screen (landscape). It lives in the
   // main React surface — unlike a core <Modal>, which is a separate Fabric
@@ -82,13 +73,23 @@ const SLDDiagram: FC = () => {
 
   return (
     <View style={styles.container}>
+      {/* Keyed by mode: switching Grouped ⇄ Units remounts the viewport so it
+          re-fits to the new graph's bounds (fresh pan/zoom shared values).
+          Lock / routing are held above, so they persist across the switch. */}
       <SLDViewport
+        key={mode}
         graph={graph}
         bounds={bounds}
         resolve={resolve}
         width={VW}
         height={VH}
         onFullscreen={openFullscreen}
+        groupMode={canGroup ? mode : undefined}
+        onGroupModeChange={setMode}
+        locked={locked}
+        onLockedChange={setLocked}
+        orthogonal={orthogonal}
+        onOrthogonalChange={setOrthogonal}
       />
     </View>
   );

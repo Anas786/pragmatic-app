@@ -12,25 +12,27 @@
  *
  * So the same Reanimated `SLDViewport` that's stable inline is stable here.
  * `rotated` tells the viewport to remap pan deltas into the rotated frame.
+ *
+ * Safe area: the device insets (notch / Dynamic Island, home indicator,
+ * Android status bar / display cutout / nav bar) are reported in PORTRAIT
+ * device terms, but the diagram lives in the rotated frame — so they're
+ * mapped through the same rotation (`rotateInsets`; for +90° the device top
+ * becomes the content's LEFT edge, see its derivation) before the viewport
+ * uses them for the initial fit / Grouped⇄Units re-fit, the control column
+ * and the mode pill.
  */
 
-import React, { FC, useMemo } from 'react';
-import { StatusBar, StyleSheet, useWindowDimensions, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import React, { FC, useCallback, useMemo, useState } from 'react';
+import { StatusBar, StyleSheet, View } from 'react-native';
+import { useSafeAreaFrame, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { AppText } from 'src/components/common';
 import { Scheme, useScheme, useThemedStyles } from 'src/theme';
-import {
-  FONT_SIZE_XS,
-  getGraphBounds,
-  makeLiveResolver,
-  selectSldGraph,
-} from 'src/utils';
-import { useSiteConfig, useSiteData } from 'src/hooks';
-import { DashboardStackParamList, SLDGraph } from 'src/types';
+import { FONT_SIZE_XS } from 'src/utils';
+import { DashboardStackParamList } from 'src/types';
 import SLDViewport from './SLDViewport';
-
-const EMPTY_GRAPH: SLDGraph = { nodes: [], edges: [] };
+import { useSldModel } from './useSldModel';
+import { rotateInsets, SLD_FULLSCREEN_ROTATION_DEG } from './sldViewportFit';
 
 type SLDFullscreenRouteProp = RouteProp<DashboardStackParamList, 'SLDFullscreen'>;
 
@@ -40,18 +42,22 @@ const SLDFullscreenScreen: FC = () => {
   const navigation = useNavigation();
   const route = useRoute<SLDFullscreenRouteProp>();
   const { siteId } = route.params;
-  const { width: W, height: H } = useWindowDimensions();
-  // App is portrait-locked, so the portrait `top` inset IS the camera/notch —
-  // and the rotated container's left edge maps to that physical edge. Push the
-  // controls in by that much so they clear the camera in landscape.
-  const insets = useSafeAreaInsets();
+  // The frame the safe-area insets are measured against (the provider's
+  // root view). Sizing the rotated container from it — rather than the
+  // window — keeps the mapped insets exact on Android edge-to-edge, where
+  // the window metrics can exclude the system bars the root view draws under.
+  const { width: W, height: H } = useSafeAreaFrame();
+  const { top, right, bottom, left } = useSafeAreaInsets();
+  const contentInsets = useMemo(
+    () => rotateInsets({ top, right, bottom, left }, SLD_FULLSCREEN_ROTATION_DEG),
+    [top, right, bottom, left],
+  );
 
-  const { data: config } = useSiteConfig(siteId);
-  const { data: liveData } = useSiteData(siteId);
-
-  const graph = useMemo(() => selectSldGraph(config) ?? EMPTY_GRAPH, [config]);
-  const resolve = useMemo(() => makeLiveResolver(liveData), [liveData]);
-  const bounds = useMemo(() => getGraphBounds(graph), [graph]);
+  // Same model (and shared Grouped/Units mode) as the inline diagram.
+  const { graph, bounds, resolve, mode, setMode, canGroup } = useSldModel(siteId);
+  // Owned here so they survive the keyed Grouped ⇄ Units remount below.
+  const [locked, setLocked] = useState(true);
+  const [orthogonal, setOrthogonal] = useState(true);
 
   // Landscape canvas = long edge × short edge, rotated 90° about centre.
   const landscapeW = Math.max(W, H);
@@ -63,10 +69,11 @@ const SLDFullscreenScreen: FC = () => {
       height: landscapeH,
       top: (H - landscapeH) / 2,
       left: (W - landscapeW) / 2,
-      transform: [{ rotate: '90deg' }],
+      transform: [{ rotate: `${SLD_FULLSCREEN_ROTATION_DEG}deg` }],
     }),
     [W, H, landscapeW, landscapeH],
   );
+  const close = useCallback(() => navigation.goBack(), [navigation]);
 
   return (
     <View style={themed.root}>
@@ -80,6 +87,7 @@ const SLDFullscreenScreen: FC = () => {
           </View>
         ) : (
           <SLDViewport
+            key={mode}
             graph={graph}
             bounds={bounds}
             resolve={resolve}
@@ -87,9 +95,14 @@ const SLDFullscreenScreen: FC = () => {
             height={landscapeH}
             fullscreen
             rotated
-            onClose={() => navigation.goBack()}
-            insetLeft={insets.top}
-            insetBottom={insets.left}
+            onClose={close}
+            safeInsets={contentInsets}
+            groupMode={canGroup ? mode : undefined}
+            onGroupModeChange={setMode}
+            locked={locked}
+            onLockedChange={setLocked}
+            orthogonal={orthogonal}
+            onOrthogonalChange={setOrthogonal}
           />
         )}
       </View>

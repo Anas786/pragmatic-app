@@ -1,8 +1,10 @@
-import React, { FC, useMemo } from 'react';
+import React, { FC, memo, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { PressableScale } from 'src/components/common';
+import { AppText, PressableScale } from 'src/components/common';
 import { ICON_SIZE_MD, normalizeWidth } from 'src/utils';
-import { radius as radiusTokens, space, useScheme } from 'src/theme';
+import { radius as radiusTokens, Scheme, space, useScheme } from 'src/theme';
+import type { SldViewMode } from 'src/hooks';
+import { sldModeToggleMetrics, type SldOverlayBox } from './sldViewportFit';
 import {
   FitOverviewIcon,
   LockIcon,
@@ -28,6 +30,49 @@ interface ControlButtonsProps {
   insetLeft?: number;
   insetBottom?: number;
 }
+
+// The accessible NAME is the visible label (WCAG 2.5.3 Label in Name — so
+// Voice Control's "Tap Units" works); the explanation goes in the hint.
+const GROUP_MODE_OPTIONS: ReadonlyArray<{
+  mode: SldViewMode;
+  label: string;
+  hint: string;
+}> = [
+  { mode: 'grouped', label: 'Grouped', hint: 'Groups the diagram units by energy type' },
+  { mode: 'units', label: 'Units', hint: 'Shows every unit individually' },
+];
+
+// Pill geometry — one source for its styles AND its fit footprint. The
+// CONTAINER is ≥44pt tall because Fabric drops touches outside a parent's
+// layout box, so slop past the pill would be dead (see sldModeToggleMetrics).
+const TOGGLE = sldModeToggleMetrics(normalizeWidth, GROUP_MODE_OPTIONS.length);
+// Vertical-only slop, exactly the container's padding + border: each
+// segment's touch area spans the full ≥44pt pill height and stays inside
+// the pill. No horizontal slop — the segments sit side by side (and each is
+// already ≥44pt wide).
+const SEGMENT_HIT_SLOP = { top: TOGGLE.slop, bottom: TOGGLE.slop, left: 0, right: 0 };
+
+/**
+ * Footprint of {@link SldModeToggle} for the viewport's fit math — the
+ * pill's real layout box. It is anchored `edge` points inside the safe
+ * area's top-right corner (same offset as the button column's bottom-left),
+ * and the fitted diagram keeps `gap` clear of it.
+ */
+export const SLD_MODE_TOGGLE_BOX: SldOverlayBox = {
+  width: TOGGLE.width,
+  height: TOGGLE.height,
+  edge: space.lg,
+  gap: space.sm,
+};
+
+/** Translucent surface shared by the button column and the mode pill. */
+const controlSurface = (scheme: Scheme) => ({
+  backgroundColor: scheme.isDark
+    ? 'rgba(17, 24, 39, 0.92)'
+    : 'rgba(244, 245, 247, 0.92)',
+  borderWidth: TOGGLE.border,
+  borderColor: scheme.border,
+});
 
 const ControlButtons: FC<ControlButtonsProps> = ({
   onZoomIn,
@@ -110,18 +155,14 @@ const ControlButtons: FC<ControlButtonsProps> = ({
   );
 };
 
-const createStyles = (scheme: ReturnType<typeof useScheme>) =>
+const createStyles = (scheme: Scheme) =>
   StyleSheet.create({
     container: {
       position: 'absolute',
       bottom: space.lg,
       left: space.lg,
-      backgroundColor: scheme.isDark
-        ? 'rgba(17, 24, 39, 0.92)'
-        : 'rgba(244, 245, 247, 0.92)',
+      ...controlSurface(scheme),
       borderRadius: radiusTokens.md,
-      borderWidth: 1,
-      borderColor: scheme.border,
       padding: normalizeWidth(6),
       gap: normalizeWidth(2),
     },
@@ -131,6 +172,77 @@ const createStyles = (scheme: ReturnType<typeof useScheme>) =>
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: radiusTokens.sm,
+    },
+  });
+
+interface SldModeToggleProps {
+  mode: SldViewMode;
+  onChange: (mode: SldViewMode) => void;
+}
+
+/**
+ * Grouped ⇄ Units segmented pill. Deliberately NOT part of the auto-fading
+ * button column: the viewport renders it in its own always-visible,
+ * always-tappable overlay so the Units view stays discoverable. Fixed
+ * footprint — see {@link SLD_MODE_TOGGLE_BOX}.
+ */
+export const SldModeToggle: FC<SldModeToggleProps> = memo(({ mode, onChange }) => {
+  const scheme = useScheme();
+  const styles = useMemo(() => createToggleStyles(scheme), [scheme]);
+  return (
+    <View style={styles.segmented}>
+      {GROUP_MODE_OPTIONS.map(opt => {
+        const active = opt.mode === mode;
+        return (
+          <PressableScale
+            key={opt.mode}
+            style={[styles.segment, active && styles.segmentActive]}
+            onPress={() => {
+              if (!active) onChange(opt.mode);
+            }}
+            haptic="select"
+            selected={active}
+            hitSlop={SEGMENT_HIT_SLOP}
+            accessibilityLabel={opt.label}
+            accessibilityHint={opt.hint}>
+            <AppText
+              fontSize={11}
+              lineHeight={14}
+              semi_bold={!active}
+              bold={active}
+              center
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
+              color={active ? scheme.brand : scheme.textSecondary}>
+              {opt.label}
+            </AppText>
+          </PressableScale>
+        );
+      })}
+    </View>
+  );
+});
+SldModeToggle.displayName = 'SldModeToggle';
+
+const createToggleStyles = (scheme: Scheme) =>
+  StyleSheet.create({
+    segmented: {
+      ...controlSurface(scheme),
+      flexDirection: 'row',
+      borderRadius: radiusTokens.pill,
+      padding: TOGGLE.padding,
+      gap: TOGGLE.gap,
+    },
+    segment: {
+      width: TOGGLE.segmentWidth,
+      height: TOGGLE.segmentHeight,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: radiusTokens.pill,
+    },
+    segmentActive: {
+      backgroundColor: scheme.brandSoft,
     },
   });
 

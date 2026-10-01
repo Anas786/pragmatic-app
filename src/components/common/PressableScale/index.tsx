@@ -1,5 +1,5 @@
 import React, { FC, ReactNode, useCallback } from 'react';
-import { Pressable, StyleProp, ViewStyle } from 'react-native';
+import { Insets, Pressable, StyleProp, ViewStyle } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -16,10 +16,12 @@ interface PressableScaleProps {
   disabled?: boolean;
   haptic?: boolean | keyof typeof haptics;
   style?: StyleProp<ViewStyle>;
-  /** Hit-slop in points (uniform). */
-  hitSlop?: number;
+  /** Hit-slop in points — uniform, or per side (e.g. vertical-only). */
+  hitSlop?: number | Insets;
   accessibilityLabel?: string;
   accessibilityHint?: string;
+  /** Selected state for segmented / toggle options (screen readers). */
+  selected?: boolean;
   testID?: string;
 }
 
@@ -43,6 +45,7 @@ const PressableScale: FC<PressableScaleProps> = ({
   hitSlop,
   accessibilityLabel,
   accessibilityHint,
+  selected,
   testID,
 }) => {
   const scale = useSharedValue(1);
@@ -89,11 +92,11 @@ const PressableScale: FC<PressableScaleProps> = ({
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       disabled={disabled}
-      hitSlop={hitSlop ? { top: hitSlop, bottom: hitSlop, left: hitSlop, right: hitSlop } : undefined}
+      hitSlop={hitSlop}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint}
-      accessibilityState={{ disabled }}
+      accessibilityState={{ disabled, selected }}
       testID={testID}>
       {/* User style merged straight onto the animated view (animatedStyle
           last so the scale transform wins) — one fewer native view per

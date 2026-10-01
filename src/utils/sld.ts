@@ -149,14 +149,26 @@ export const buildEdgeGeometry = (
   to: SLDPoint,
   toHandle: SLDHandle,
 ): SLDEdgeGeometry => {
+  const [c1, c2] = bezierControlPoints(from, fromHandle, to, toHandle);
+  const path = `M ${from.x} ${from.y} C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${to.x} ${to.y}`;
+  return { path, arrowPath: buildArrowPath(c2, to) };
+};
+
+/** The two cubic control points {@link buildEdgeGeometry} draws with. */
+export const bezierControlPoints = (
+  from: SLDPoint,
+  fromHandle: SLDHandle,
+  to: SLDPoint,
+  toHandle: SLDHandle,
+): [SLDPoint, SLDPoint] => {
   const dist = Math.hypot(to.x - from.x, to.y - from.y);
   const k = Math.max(48, dist * 0.4);
   const ds = handleDir(fromHandle);
   const dt = handleDir(toHandle);
-  const c1 = { x: from.x + ds.x * k, y: from.y + ds.y * k };
-  const c2 = { x: to.x + dt.x * k, y: to.y + dt.y * k };
-  const path = `M ${from.x} ${from.y} C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${to.x} ${to.y}`;
-  return { path, arrowPath: buildArrowPath(c2, to) };
+  return [
+    { x: from.x + ds.x * k, y: from.y + ds.y * k },
+    { x: to.x + dt.x * k, y: to.y + dt.y * k },
+  ];
 };
 
 /** Closed-triangle arrowhead at `tip`, oriented along (tip - ctrl). */
@@ -182,6 +194,22 @@ export const buildOrthogonalEdgeGeometry = (
   to: SLDPoint,
   toHandle: SLDHandle,
 ): SLDEdgeGeometry => {
+  const clean = orthogonalEdgePoints(from, fromHandle, to, toHandle);
+  const path = clean
+    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`)
+    .join(' ');
+  const tip = clean[clean.length - 1];
+  const prev = clean[clean.length - 2] ?? from;
+  return { path, arrowPath: buildArrowPath(prev, tip) };
+};
+
+/** The polyline vertices {@link buildOrthogonalEdgeGeometry} draws through. */
+export const orthogonalEdgePoints = (
+  from: SLDPoint,
+  fromHandle: SLDHandle,
+  to: SLDPoint,
+  toHandle: SLDHandle,
+): SLDPoint[] => {
   const ds = handleDir(fromHandle);
   const dt = handleDir(toHandle);
   const STUB = 20;
@@ -205,15 +233,9 @@ export const buildOrthogonalEdgeGeometry = (
   pts.push(p2, to);
 
   // Drop zero-length segments so the path is clean.
-  const clean = pts.filter(
+  return pts.filter(
     (p, i) => i === 0 || p.x !== pts[i - 1].x || p.y !== pts[i - 1].y,
   );
-  const path = clean
-    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`)
-    .join(' ');
-  const tip = clean[clean.length - 1];
-  const prev = clean[clean.length - 2] ?? from;
-  return { path, arrowPath: buildArrowPath(prev, tip) };
 };
 
 /* ─────────── value resolution ─────────── */
@@ -336,7 +358,9 @@ export const edgeColorForScheme = (color: string, isDark: boolean): string => {
 /**
  * Whether an edge should render its flowing-dash animation.
  *
- * Two drivers, in priority order:
+ * Drivers, in priority order:
+ *   0. An edge-level `data.animation` condition (client-side only — the
+ *      synthetic SLD group edges, one flag per group → target edge).
  *   1. If the source node carries a live `animation` condition, evaluate it
  *      against current data (e.g. `live.p26.value != 0`) — this is the
  *      dynamic, per-tick "is power actually flowing" signal.
@@ -348,6 +372,9 @@ export const isEdgeAnimated = (
   sourceNode: SLDNode | undefined,
   resolve: SLDValueResolver,
 ): boolean => {
+  if (edge.data?.animation) {
+    return evalAnimation(edge.data.animation, resolve);
+  }
   if (sourceNode?.data.animation) {
     return evalAnimation(sourceNode.data.animation, resolve);
   }

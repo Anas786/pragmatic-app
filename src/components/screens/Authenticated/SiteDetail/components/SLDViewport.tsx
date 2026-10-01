@@ -10,8 +10,14 @@
  * lockstep on the UI thread.
  *
  * Deliberately framework-agnostic about *where* it lives: it takes the
- * viewport `width`/`height` and a `fullscreen` flag and owns everything else
- * (shared values, gestures, the flowing-dash loop, fit math, controls).
+ * viewport `width`/`height`, a `fullscreen` flag and the safe-area insets in
+ * its own frame, and owns everything else (shared values, gestures, the
+ * flowing-dash loop, fit math, controls).
+ *
+ * Overlays: the zoom / routing / fullscreen / lock column (bottom-left)
+ * auto-fades after a short idle and ignores taps while hidden; the
+ * Grouped ⇄ Units pill (top-right) is ALWAYS visible and tappable, and the
+ * initial fit keeps the diagram clear of it (see `computeSldFit`).
  *
  * IMPORTANT: this must never be rendered inside a core React Native `<Modal>`.
  * A Modal is a separate Fabric surface, and Reanimated's commit/mount hooks
@@ -40,8 +46,10 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Scheme, useScheme, useThemedStyles } from 'src/theme';
 import { normalizeWidth, SLDBounds } from 'src/utils';
 import { SLDGraph, SLDValueResolver } from 'src/types';
-import ControlButtons from './ControlButtons';
+import type { SldViewMode } from 'src/hooks';
+import ControlButtons, { SLD_MODE_TOGGLE_BOX, SldModeToggle } from './ControlButtons';
 import { DiagramNodeLayer, DiagramSkiaLayer } from './SummaryView/SLDCanvas';
+import { computeSldFit, SldInsets } from './sldViewportFit';
 
 const ZOOM_STEP = 1.25;
 /** Idle time before the floating controls fade out. */
@@ -80,8 +88,29 @@ interface SLDViewportProps {
   onFullscreen?: () => void;
   /** Full-screen → collapse/close handler. */
   onClose?: () => void;
-  insetLeft?: number;
-  insetBottom?: number;
+  /**
+   * Safe-area insets in THIS viewport's frame (the full-screen route passes
+   * the device insets mapped through its rotation — `rotateInsets`). The
+   * initial fit, the controls and the mode pill all stay inside them.
+   * Omitted inline (the inline viewport sits inside the scrolled page).
+   */
+  safeInsets?: SldInsets;
+  /**
+   * Grouped / Units toggle state. Omit to hide the toggle (e.g. when no
+   * energy type has ≥2 units, so grouping would change nothing). The parent
+   * owns the mode and remounts this viewport (keyed by mode) to re-fit.
+   */
+  groupMode?: SldViewMode;
+  onGroupModeChange?: (mode: SldViewMode) => void;
+  /**
+   * Pan lock + orthogonal routing are OWNED BY THE HOST: the host remounts
+   * this viewport on every Grouped ⇄ Units switch (to re-fit), and the
+   * user's lock / routing choices must survive that remount.
+   */
+  locked: boolean;
+  onLockedChange: (locked: boolean) => void;
+  orthogonal: boolean;
+  onOrthogonalChange: (orthogonal: boolean) => void;
 }
 
 const noop = () => {};
@@ -96,36 +125,66 @@ const SLDViewport: FC<SLDViewportProps> = ({
   rotated = false,
   onFullscreen,
   onClose,
-  insetLeft,
-  insetBottom,
+  safeInsets,
+  groupMode,
+  onGroupModeChange,
+  locked: isLocked,
+  onLockedChange,
+  orthogonal,
+  onOrthogonalChange,
 }) => {
   const scheme = useScheme();
   const themed = useThemedStyles(createStyles);
 
+  const insetTop = safeInsets?.top ?? 0;
+  const insetRight = safeInsets?.right ?? 0;
+  const insetBottom = safeInsets?.bottom ?? 0;
+  const insetLeft = safeInsets?.left ?? 0;
+  const showModeToggle = groupMode !== undefined && onGroupModeChange !== undefined;
+
   // Fit math. Both inline and full-screen open fitted to the WHOLE diagram,
   // centred — a complete, tidy first view (no half-cut cards at the edges);
   // users pinch in for card-level detail. Zooming into the plant node by
-  // default read as broken to customers.
+  // default read as broken to customers. The fit area is the safe area (so
+  // nothing opens under a notch / Dynamic Island / nav bar), and the diagram
+  // is kept clear of the persistent mode pill — re-fitted with a strip
+  // reserved for it only when the plain fit would reach under it.
   const { minScale, maxScale, initialScale, focusTx, focusTy } =
     useMemo(() => {
-      const fit = Math.min(width / bounds.width, height / bounds.height);
-      const min = fit * 0.9;
-      const max = Math.max(fit * 8, 1.3);
+      const fit = computeSldFit({
+        viewWidth: width,
+        viewHeight: height,
+        contentWidth: bounds.width,
+        contentHeight: bounds.height,
+        insets: { top: insetTop, right: insetRight, bottom: insetBottom, left: insetLeft },
+        overlay: showModeToggle ? SLD_MODE_TOGGLE_BOX : undefined,
+      });
+      const min = fit.scale * 0.9;
+      const max = Math.max(fit.scale * 8, 1.3);
       return {
         minScale: min,
         maxScale: max,
-        initialScale: clamp(fit, min, max),
-        focusTx: 0,
-        focusTy: 0,
+        initialScale: clamp(fit.scale, min, max),
+        focusTx: fit.translateX,
+        focusTy: fit.translateY,
       };
-    }, [bounds, width, height]);
+    }, [
+      bounds.width,
+      bounds.height,
+      width,
+      height,
+      insetTop,
+      insetRight,
+      insetBottom,
+      insetLeft,
+      showModeToggle,
+    ]);
 
-  // Locked + orthogonal (right-angle) routing by default: the diagram opens
-  // as a tidy, fixed schematic — unlock to pan/pinch, toggle routing for
-  // curved edges. The +/- zoom buttons still work while locked (only
-  // gestures are gated), and the tap-to-show-controls gesture stays live.
-  const [isLocked, setIsLocked] = useState(true);
-  const [orthogonal, setOrthogonal] = useState(true);
+  // Lock (`isLocked`) + routing (`orthogonal`) come from the host (see
+  // props) — hosts default both to true: the diagram opens as a tidy, fixed
+  // schematic; unlock to pan/pinch, toggle routing for curved edges. The +/-
+  // zoom buttons still work while locked (only gestures are gated), and the
+  // tap-to-show-controls gesture stays live.
   const [currentZoom, setCurrentZoom] = useState(initialScale);
   // Auto-hiding controls: visible on tap, fade out after a short idle.
   const [controlsShown, setControlsShown] = useState(true);
@@ -180,30 +239,24 @@ const SLDViewport: FC<SLDViewportProps> = ({
     [minScale, maxScale],
   );
 
-  // Re-fit when the full-screen viewport size changes (e.g. the device
-  // rotates to landscape after the route mounts). No-op inline (VW/VH are
-  // constant). Safe here because we're in the main surface, not a Modal.
+  // Re-fit when the full-screen fit changes after mount — the viewport size
+  // or the safe-area insets settling (e.g. Android dropping the status-bar
+  // inset once the route hides it). On mount it animates to the values the
+  // shared values already hold, i.e. a no-op. Inline never re-fits (VW/VH
+  // are constant, no insets). Safe here: main surface, not a Modal.
   useEffect(() => {
     if (!fullscreen) return;
-    const fit = clamp(
-      Math.min(width / bounds.width, height / bounds.height),
-      minScale,
-      maxScale,
-    );
-    translateX.value = withTiming(0, { duration: 250 });
-    translateY.value = withTiming(0, { duration: 250 });
-    scale.value = withTiming(fit, { duration: 250 });
-    savedTX.value = 0;
-    savedTY.value = 0;
-    savedScale.value = fit;
+    translateX.value = withTiming(focusTx, { duration: 250 });
+    translateY.value = withTiming(focusTy, { duration: 250 });
+    scale.value = withTiming(initialScale, { duration: 250 });
+    savedTX.value = focusTx;
+    savedTY.value = focusTy;
+    savedScale.value = initialScale;
   }, [
     fullscreen,
-    width,
-    height,
-    bounds.width,
-    bounds.height,
-    minScale,
-    maxScale,
+    focusTx,
+    focusTy,
+    initialScale,
     translateX,
     translateY,
     scale,
@@ -379,9 +432,15 @@ const SLDViewport: FC<SLDViewportProps> = ({
     scale.value = withTiming(ns, { duration: 200 });
   }, [scale, savedScale, minScale, maxScale]);
 
-  const handleToggleRouting = useCallback(() => setOrthogonal(o => !o), []);
+  const handleToggleRouting = useCallback(
+    () => onOrthogonalChange(!orthogonal),
+    [onOrthogonalChange, orthogonal],
+  );
 
-  const handleToggleLock = useCallback(() => setIsLocked(l => !l), []);
+  const handleToggleLock = useCallback(
+    () => onLockedChange(!isLocked),
+    [onLockedChange, isLocked],
+  );
 
   const viewportStyle = useMemo(
     () =>
@@ -399,6 +458,19 @@ const SLDViewport: FC<SLDViewportProps> = ({
   const nodeFrameStyle = useMemo(
     () => [{ width: bounds.width, height: bounds.height }, panZoomStyle],
     [panZoomStyle, bounds.width, bounds.height],
+  );
+
+  // Top-right of the safe area — exactly where SLD_MODE_TOGGLE_BOX tells the
+  // fit math the pill sits.
+  const modeToggleAnchorStyle = useMemo(
+    () => [
+      styles.modeToggleAnchor,
+      {
+        top: insetTop + SLD_MODE_TOGGLE_BOX.edge,
+        right: insetRight + SLD_MODE_TOGGLE_BOX.edge,
+      },
+    ],
+    [insetTop, insetRight],
   );
 
   return (
@@ -444,6 +516,14 @@ const SLDViewport: FC<SLDViewportProps> = ({
             insetBottom={insetBottom}
           />
         </Animated.View>
+        {/* Grouped ⇄ Units: OUTSIDE the fading overlay — always visible and
+            tappable, so Units mode stays discoverable. Plain View, no
+            animated props. */}
+        {showModeToggle ? (
+          <View pointerEvents="box-none" style={modeToggleAnchorStyle}>
+            <SldModeToggle mode={groupMode} onChange={onGroupModeChange} />
+          </View>
+        ) : null}
       </View>
     </GestureDetector>
   );
@@ -461,6 +541,9 @@ const styles = StyleSheet.create({
   },
   clipSquare: {
     borderRadius: 0,
+  },
+  modeToggleAnchor: {
+    position: 'absolute',
   },
 });
 

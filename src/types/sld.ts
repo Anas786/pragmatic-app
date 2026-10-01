@@ -93,8 +93,13 @@ export interface SLDEdge {
    * Edge-level flow hint. `mode: "flow"` animates the edge; `"idle"` keeps
    * it solid. Used as the animation driver when the source node has no live
    * `animation` condition of its own.
+   *
+   * `animation` is a client-side, per-edge live condition (never shipped by
+   * the backend): synthetic SLD group edges use it so each group → target
+   * edge flows on its own target's members, which one node-level condition
+   * can't express. It takes priority over the node's condition.
    */
-  data?: { type?: string; mode?: 'flow' | 'idle' };
+  data?: { type?: string; mode?: 'flow' | 'idle'; animation?: SLDNodeAnimation };
 }
 
 export interface SLDGraph {

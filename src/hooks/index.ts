@@ -15,3 +15,4 @@ export * from './useEnergyReport';
 export * from './useTrendData';
 export * from './useReportMapping';
 export * from './useInteractionReady';
+export * from './useSldViewMode';
