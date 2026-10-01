@@ -15,20 +15,7 @@
                     <view key="view" contentMode="scaleToFill" id="Ze5-6b-2t3">
                         <rect key="frame" x="0.0" y="0.0" width="375" height="667"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
-                        <subviews>
-                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" image="SplashLogo" translatesAutoresizingMaskIntoConstraints="NO" id="Logo-Img-001">
-                                <rect key="frame" x="127.5" y="293" width="120" height="81"/>
-                                <constraints>
-                                    <constraint firstAttribute="width" constant="120" id="W-Logo-001"/>
-                                    <constraint firstAttribute="height" constant="81" id="H-Logo-001"/>
-                                </constraints>
-                            </imageView>
-                        </subviews>
-                        <color key="backgroundColor" red="0.08235294118" green="0.07450980392" blue="0.07843137255" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
-                        <constraints>
-                            <constraint firstItem="Logo-Img-001" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="CX-Logo-001"/>
-                            <constraint firstItem="Logo-Img-001" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" id="CY-Logo-001"/>
-                        </constraints>
+                        <color key="backgroundColor" red="0.04313725490" green="0.05882352941" blue="0.07843137255" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                         <viewLayoutGuide key="safeArea" id="Bcu-3y-fUS"/>
                     </view>
                 </viewController>
@@ -37,7 +24,4 @@
             <point key="canvasLocation" x="52.173913043478265" y="375"/>
         </scene>
     </scenes>
-    <resources>
-        <image name="SplashLogo" width="120" height="81"/>
-    </resources>
 </document>

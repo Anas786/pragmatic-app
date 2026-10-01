@@ -18,8 +18,10 @@ export const navigationRef = createNavigationContainerRef<RootStackParamList>();
  *
  * Used by the forced-logout path (terminal 401/403/419) so the user is never
  * stranded on authenticated screens with a dead session. No-ops when:
- *  - the container isn't mounted yet (a cold-start 401 — Splash's own status
- *    effect handles navigation in that window), or
+ *  - no navigator is mounted yet: during the cold-start SplashOverlay the
+ *    container renders no navigator until the overlay has picked a route,
+ *    so a cold-start 401 is a no-op here and the overlay's own auth result
+ *    decides the route, or
  *  - the root is already on the Onboarding stack (a login-screen-time 401
  *    must not clobber the Login form).
  */

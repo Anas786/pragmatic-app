@@ -382,6 +382,47 @@ export const spring = {
   cushion: { damping: 26, stiffness: 160, mass: 1 },
 };
 
+/* ─────────── 7b. Splash palette (brand-locked dark) ─────────── */
+
+/**
+ * Cold-start splash colours — a port of the web "signing-in" overlay
+ * (`.sit` custom properties, dark mode only). Brand-locked: the native
+ * launch screen can't read the persisted theme, so the splash never flips.
+ *
+ * `bg` is a NATIVE CONTRACT: it must equal the iOS LaunchScreen storyboard
+ * colour, the iOS root view / window background (AppDelegate) and Android
+ * `@color/splashBg` (windowBackground + v31 splash) so the native → JS
+ * handoff is seamless.
+ */
+/**
+ * The PES brand mark's colours (see `PESLogo`). Ink is the P, S and E-base;
+ * bars are the two green E bars (horizontal gradient per bar). The ink pair
+ * is the website's own light/dark treatment (`.sit.light --sit-ink #092819`
+ * vs `.sit --sit-ink #fff`); the bundled logo.png's ink (#0A281A) is the
+ * light one, which is why the PNG vanishes on dark backgrounds.
+ */
+export const brandMark = {
+  inkOnLight: '#092819',
+  inkOnDark: '#FFFFFF',
+  barFrom: '#A2CC3A',
+  barTo: '#4EA847',
+} as const;
+
+export const splashPalette = {
+  bg: '#0B0F14',
+  grid: '#94A3B8',
+  /** 0x12 / 255 — web `--sit-grid: #94a3b812`. */
+  gridAlpha: 0.0706,
+  idle: '#94A3B8',
+  lit: '#4ADE80',
+  core: '#FFFFFF',
+  substrate: '#0B0F14',
+  ink: brandMark.inkOnDark,
+  ink2: '#A6B3C4',
+  barFrom: brandMark.barFrom,
+  barTo: brandMark.barTo,
+} as const;
+
 /* ─────────── 8. Z-index scale ─────────── */
 
 export const zIndex = {

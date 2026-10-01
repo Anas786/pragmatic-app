@@ -2,7 +2,6 @@ import React, { FC, useState } from 'react';
 import { Controller } from 'react-hook-form';
 import {
   ActivityIndicator,
-  Image,
   Platform,
   StatusBar,
   StyleSheet,
@@ -12,6 +11,7 @@ import {
   AppText,
   AppTextInput,
   BaseKeyboardAvoid,
+  PESLogo,
   PressableScale,
   ScreenContainer,
   ScrollContainer,
@@ -34,13 +34,15 @@ import {
   normalizeHeight,
   normalizeWidth,
 } from 'src/utils';
-import { Logo } from 'src/assets';
 import {
   EmailPlainIcon,
   EyeIcon,
   EyeOffIcon,
   PasswordIcon,
 } from 'src/assets/icons';
+
+const LOGO_W = normalizeWidth(85);
+const LOGO_H = normalizeHeight(58);
 
 const EmailIcon: FC<{ color: string }> = ({ color }) => (
   <View style={styles.iconContainer}>
@@ -112,7 +114,9 @@ const Login: FC = () => {
           <View style={styles.content}>
             <View style={styles.headerContainer}>
               <View style={styles.logoContainer}>
-                <Image source={Logo} style={styles.logo} resizeMode="contain" />
+                {/* Vector mark, theme-aware ink: the bundled logo.png is the
+                    light-background artwork and vanishes on dark. */}
+                <PESLogo width={LOGO_W} height={LOGO_H} />
                 <AppText
                   color={scheme.textPrimary}
                   fontSize={FONT_SIZE_XL}
@@ -361,10 +365,6 @@ const styles = StyleSheet.create({
   logoContainer: {
     alignItems: 'center',
     gap: normalizeHeight(28),
-  },
-  logo: {
-    width: normalizeWidth(85),
-    height: normalizeHeight(58),
   },
   subtitle: {
     maxWidth: normalizeWidth(309),

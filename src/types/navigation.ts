@@ -6,7 +6,6 @@ export type RootStackParamList = {
 };
 
 export type OnboardingStackParamList = {
-  Splash: undefined;
   Login: undefined;
 };
 

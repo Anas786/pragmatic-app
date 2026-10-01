@@ -12,8 +12,10 @@ import {it, jest} from '@jest/globals';
 // Note: test renderer must be required after react-native.
 import renderer from 'react-test-renderer';
 
-// The app schedules real timers on mount (splash minimum-duration timer,
-// skeleton loops). Fake timers keep the test from leaking open handles.
+// The app schedules real timers on mount (the cold-start SplashOverlay's
+// JS fallback timer, skeleton loops). Fake timers keep the test from
+// leaking open handles. The overlay never builds its Skia scene here — the
+// test renderer never fires onLayout — so only its caption path renders.
 jest.useFakeTimers();
 
 it('renders correctly', () => {

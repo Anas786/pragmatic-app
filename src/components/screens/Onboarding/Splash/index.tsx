@@ -1,345 +1,465 @@
-import React, { FC, useEffect, useRef } from 'react';
-import { Image, StatusBar, StyleSheet, View } from 'react-native';
-import { CommonActions, useNavigation } from '@react-navigation/native';
-import LinearGradient from 'react-native-linear-gradient';
-import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
+/**
+ * SplashOverlay — the cold-start splash, a React Native port of the web
+ * "signing-in" animation (circuit board + self-drawing PES mark + caption).
+ *
+ * Architecture (see CLAUDE.md "Cold-start splash"):
+ *  - Rendered by App.tsx as an absolute overlay OUTSIDE the
+ *    NavigationContainer — so it must NEVER call navigation hooks. It
+ *    reports the auth-derived route via `onRoute`; App mounts `<Routes>`
+ *    under the (still opaque) overlay, reports `destReady` once that
+ *    destination has laid out, and the overlay's exit fade reveals an
+ *    already-mounted app. `onExited` → App unmounts the overlay.
+ *  - All continuous motion is ONE Skia picture per frame (SplashCanvas),
+ *    driven by one UI-thread frame callback (useSplashClock). RN styles
+ *    animate only in two short windows (caption entrance, root exit).
+ *  - Skia objects are created only after the first layout (buildScene) —
+ *    the Jest renderer never fires onLayout, so tests never touch Skia.
+ *  - Route: the useAuth outcome; if auth is still unresolved when the
+ *    stall abort fires (STALL_MAX_MS), or the hydrate could not decide
+ *    ('indeterminate': offline, Cognito 5xx …), a locally stored Cognito
+ *    session → Drawer, else Login (storedSession.ts). The first route handed
+ *    to App is final — a late auth outcome can never re-route or flip it.
+ */
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  AppState,
+  LayoutChangeEvent,
+  PixelRatio,
+  StatusBar,
+  StatusBarProps,
+  StyleSheet,
+} from 'react-native';
 import Animated, {
-  Easing,
-  cancelAnimation,
-  interpolate,
   useAnimatedStyle,
-  useSharedValue,
-  withDelay,
-  withRepeat,
-  withSequence,
-  withTiming,
+  useReducedMotion,
+  type SharedValue,
 } from 'react-native-reanimated';
-import { AppText } from 'src/components/common';
-import { Logo } from 'src/assets';
 import { useAuth } from 'src/hooks';
-import { energyPalette, glass, radius, space } from 'src/theme';
-import { normalizeHeight, normalizeWidth } from 'src/utils';
+import { useUserStore } from 'src/hooks/useUserStore';
+import { onSessionEnded } from 'src/networking/auth/cognito';
+import { splashPalette } from 'src/theme';
+import { userFromClaims } from 'src/utils/user';
+import { easeExit, easeOut } from './ease';
+import { buildScene, type Scene } from './scene';
+import SplashCanvas from './SplashCanvas';
+import SplashCaption, { type CaptionText } from './SplashCaption';
+import { probeStoredSession, type StoredSession } from './storedSession';
+import {
+  EXIT,
+  FALLBACK_AFTER_AUTH_MS,
+  FALLBACK_FROM_MOUNT_MS,
+} from './timeline';
+import { useSplashClock } from './useSplashClock';
 
-const MIN_SPLASH_MS = 2200;
+export type SplashRoute = 'Drawer' | 'Onboarding';
 
-/** Fixed premium "midnight emerald" gradient — brand-locked across themes. */
-const SPLASH_GRADIENT = ['#0C3B2E', '#06231B', '#03100C'];
-const GRADIENT_TL = { x: 0, y: 0 } as const;
-const GRADIENT_BR = { x: 1, y: 1 } as const;
-
-const GLOW_SIZE = normalizeWidth(340);
-const RING_SIZE = normalizeWidth(150);
-
-/** Energy-source palette drives the loader dots — on-brand for the domain. */
-const LOADER_DOTS = [
-  energyPalette.solar,
-  energyPalette.wind,
-  energyPalette.grid,
-  energyPalette.genset,
-  energyPalette.battery,
-];
-
-/* ─────────── Expanding pulse ring behind the logo lockup ─────────── */
-
-const PulseRing: FC<{ delay: number }> = ({ delay }) => {
-  const progress = useSharedValue(0);
-
-  useEffect(() => {
-    progress.value = withDelay(
-      delay,
-      withRepeat(
-        withTiming(1, { duration: 2600, easing: Easing.out(Easing.ease) }),
-        -1,
-        false,
-      ),
-    );
-    return () => cancelAnimation(progress);
-  }, [delay, progress]);
-
-  const style = useAnimatedStyle(() => ({
-    transform: [{ scale: interpolate(progress.value, [0, 1], [0.55, 2.3]) }],
-    opacity: interpolate(progress.value, [0, 0.12, 1], [0, 0.45, 0]),
-  }));
-
-  return <Animated.View pointerEvents="none" style={[styles.ring, style]} />;
-};
-
-/* ─────────── Wave-pulsing energy dot (loader) ─────────── */
-
-const WaveDot: FC<{ color: string; delay: number }> = ({ color, delay }) => {
-  const t = useSharedValue(0);
-
-  useEffect(() => {
-    t.value = withDelay(
-      delay,
-      withRepeat(
-        withSequence(
-          withTiming(1, { duration: 480, easing: Easing.inOut(Easing.quad) }),
-          withTiming(0, { duration: 480, easing: Easing.inOut(Easing.quad) }),
-        ),
-        -1,
-        false,
-      ),
-    );
-    return () => cancelAnimation(t);
-  }, [delay, t]);
-
-  const style = useAnimatedStyle(() => ({
-    opacity: interpolate(t.value, [0, 1], [0.3, 1]),
-    transform: [
-      { translateY: interpolate(t.value, [0, 1], [0, -6]) },
-      { scale: interpolate(t.value, [0, 1], [0.85, 1.25]) },
-    ],
-  }));
-
-  return <Animated.View style={[styles.dot, { backgroundColor: color }, style]} />;
-};
-
-/* ─────────── Slow-drifting ambient orb (depth) ─────────── */
-
-interface OrbProps {
-  color: string;
-  size: number;
-  start: { top?: number; bottom?: number; left?: number; right?: number };
-  shiftX: number;
-  shiftY: number;
-  duration: number;
+interface SplashOverlayProps {
+  /** App side: 1 once the destination wrapper laid out (+ one rAF). */
+  destReady: SharedValue<number>;
+  /** Mount this root route under the overlay. May be called more than once. */
+  onRoute: (route: SplashRoute) => void;
+  /** Exit finished — unmount the overlay. */
+  onExited: () => void;
+  /** App side: true once `onRoute` has mounted the destination Routes. */
+  destMounted: boolean;
 }
 
-const FloatingOrb: FC<OrbProps> = ({ color, size, start, shiftX, shiftY, duration }) => {
-  const t = useSharedValue(0);
+// NOT translucent (Android): the rest of the app runs with an opaque status
+// bar, so a translucent splash would resize the root view twice — once when
+// the flag lands AFTER the first layout (the frozen board would sit sb/2
+// off-centre with an ungridded bottom strip) and again when the overlay
+// unmounts (the revealed app would jump by sb). An opaque bar in the board
+// colour looks identical and keeps the root size fixed for the whole splash.
+// backgroundColor/translucent are Android-only; iOS reads barStyle only.
+const SPLASH_BAR: StatusBarProps = {
+  barStyle: 'light-content',
+  translucent: false,
+  backgroundColor: splashPalette.bg,
+  animated: false,
+};
+
+/** Long-background threshold: resume after this fast-forwards to land. */
+const FAST_FORWARD_AFTER_BG_MS = 3000;
+
+export default function SplashOverlay({
+  destReady,
+  onRoute,
+  onExited,
+  destMounted,
+}: SplashOverlayProps): React.JSX.Element {
+  // Read once — the whole timeline branches on it.
+  const reducedNow = useReducedMotion();
+  const [reduced] = useState(reducedNow);
+
+  /* ── layout → scene (frozen after the first layout; the root size cannot
+        change during the splash: portrait-locked, opaque status bar) ── */
+  const [size, setSize] = useState<{ W: number; H: number } | null>(null);
+  const onLayout = useCallback((e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    const W = Math.max(1, Math.round(width));
+    const H = Math.max(1, Math.round(height));
+    setSize(prev => prev ?? { W, H });
+  }, []);
+  const scene = useMemo<Scene | null>(() => {
+    if (!size) {
+      return null;
+    }
+    try {
+      return buildScene(size.W, size.H, PixelRatio.get(), reduced);
+    } catch (error) {
+      // Visuals only: the clock, caption and exit still run without a scene.
+      if (__DEV__) {
+        console.warn('[splash] buildScene failed', error);
+      }
+      return null;
+    }
+  }, [size, reduced]);
+
+  /* ── auth → route + caption ── */
+  const { status, displayName } = useAuth();
+  // The route the auth outcome implies, once known. 'stored' = the hydrate
+  // could not decide ('indeterminate'): route like the stall abort, by the
+  // stored-session probe (routeWithoutAuth), when the route is requested.
+  const routeRef = useRef<SplashRoute | 'stored' | null>(null);
+  // routeRef !== null, as state: gates authReady (→ the pre-mount).
+  const [authKnown, setAuthKnown] = useState(false);
+  const [caption, setCaption] = useState<CaptionText | null>(null);
+
+  // Stored-session probe — consulted only if auth is still unresolved when
+  // the stall abort (or the JS fallback) fires, or resolves 'indeterminate'.
+  // Local AsyncStorage reads, no network; started at mount so its answer is
+  // settled long before the abort (an 'indeterminate' outcome waits for it).
+  // undefined = still pending, null = none / error / timeout → Login.
+  // The answer is a snapshot, so it is voided for good if Cognito ends the
+  // session meanwhile: Amplify has then cleared the tokens, and the
+  // hydrate's 'unauthenticated' may not have committed before the abort
+  // reads this ref (executeLogout's navigation reset is a no-op until a
+  // route is mounted).
+  const storedSessionRef = useRef<StoredSession | null | undefined>(undefined);
+  // Settles once the probe has answered (it never rejects).
+  const probeSettledRef = useRef<Promise<void> | null>(null);
+  useEffect(() => {
+    let alive = true;
+    let ended = false;
+    const stopListening = onSessionEnded(() => {
+      ended = true;
+      storedSessionRef.current = null;
+    });
+    probeSettledRef.current = probeStoredSession().then(result => {
+      if (alive && !ended) {
+        storedSessionRef.current = result;
+      }
+    });
+    return () => {
+      alive = false;
+      stopListening();
+    };
+  }, []);
 
   useEffect(() => {
-    t.value = withRepeat(
-      withTiming(1, { duration, easing: Easing.inOut(Easing.sin) }),
-      -1,
-      true,
-    );
-    return () => cancelAnimation(t);
-  }, [duration, t]);
+    if (status === 'loading') {
+      return;
+    }
+    let live = true;
+    const decide = () => {
+      if (!live) {
+        return;
+      }
+      routeRef.current =
+        status === 'authenticated'
+          ? 'Drawer'
+          : status === 'unauthenticated'
+          ? 'Onboarding'
+          : 'stored';
+      setCaption(
+        prev =>
+          prev ??
+          (status === 'authenticated'
+            ? displayName
+              ? { kind: 'named', name: displayName }
+              : { kind: 'plain' }
+            : { kind: 'neutral' }),
+      );
+      setAuthKnown(true);
+    };
+    if (status === 'indeterminate') {
+      // Routed by the probe — so decide only once it has answered: a fast
+      // failure (offline rejects in ~1 s) must not find it still pending and
+      // fall through to Login. Bounded by STORED_SESSION_PROBE_MS.
+      (probeSettledRef.current ?? Promise.resolve()).then(decide);
+    } else {
+      decide();
+    }
+    return () => {
+      live = false;
+    };
+  }, [status, displayName]);
 
-  const style = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: interpolate(t.value, [0, 1], [0, shiftX]) },
-      { translateY: interpolate(t.value, [0, 1], [0, shiftY]) },
-    ],
-  }));
+  /* ── stable JS callbacks for the UI-thread clock (read refs only) ── */
+  const onRouteRef = useRef(onRoute);
+  const onExitedRef = useRef(onExited);
+  useEffect(() => {
+    onRouteRef.current = onRoute;
+    onExitedRef.current = onExited;
+  }, [onRoute, onExited]);
+
+  const exitedRef = useRef(false);
+  const statusEntryRef = useRef<StatusBarProps | null>(null);
+  const fallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const authReadyRef = useRef(false);
+  const bgAtRef = useRef<number | null>(null);
+
+  const clearFallback = useCallback(() => {
+    if (fallbackRef.current !== null) {
+      clearTimeout(fallbackRef.current);
+      fallbackRef.current = null;
+    }
+  }, []);
+
+  const popStatusEntry = useCallback(() => {
+    if (statusEntryRef.current) {
+      StatusBar.popStackEntry(statusEntryRef.current);
+      statusEntryRef.current = null;
+    }
+  }, []);
+
+  const handleExited = useCallback(() => {
+    if (exitedRef.current) {
+      return;
+    }
+    exitedRef.current = true;
+    clearFallback();
+    popStatusEntry();
+    onExitedRef.current();
+  }, [clearFallback, popStatusEntry]);
+
+  // Route when the auth hydrate never resolved (stall abort / JS fallback) or
+  // resolved without a verdict ('indeterminate' — a transient failure, e.g.
+  // offline at launch): a session stored on the device → Drawer, so a slow,
+  // hanging or absent network doesn't force a re-login. Its stored ID-token
+  // claims fill the user store (display only — name/email/company in the
+  // drawer; empty claims are tolerated, the drawer falls back to
+  // placeholders). No auth bypass: every protected request still goes
+  // through the interceptor, which sends it only with a valid access token
+  // (refreshing first if needed, bounded by session.ts' token timeout) and,
+  // on a 401, force-refreshes once and retries — executeLogout()ing if the
+  // retry is 401 too. If Cognito rejects the stored refresh token once the
+  // network is back, Amplify clears it and config.ts' onSessionEnded
+  // listener runs executeLogout → Login. So this path always ends in either
+  // a successful refresh or the normal logout.
+  // No stored session (or the probe failed / is still pending) → Login. The
+  // stored session is never cleared here either: if Amplify still holds one,
+  // cognitoSignIn's UserAlreadyAuthenticated retry drops it at the moment the
+  // user actually signs in again.
+  const routeWithoutAuth = useCallback((): SplashRoute => {
+    const stored = storedSessionRef.current;
+    if (!stored) {
+      return 'Onboarding';
+    }
+    if (stored.idClaims) {
+      useUserStore.getState().setUser(userFromClaims(stored.idClaims));
+    }
+    return 'Drawer';
+  }, []);
+
+  // The route handed to App — decided ONCE. The pre-mount (LAND), the abort
+  // and the JS fallback all come through here; whichever asks first fixes
+  // the destination, and every later request re-sends the same route, so a
+  // late auth outcome can never double-route or flip it. A real auth outcome
+  // that is already known (it can beat the abort by a frame) wins over the
+  // probe.
+  const sentRouteRef = useRef<SplashRoute | null>(null);
+  const requestMount = useCallback(() => {
+    if (sentRouteRef.current === null) {
+      const decided = routeRef.current;
+      sentRouteRef.current =
+        decided === null || decided === 'stored' ? routeWithoutAuth() : decided;
+    }
+    onRouteRef.current(sentRouteRef.current);
+  }, [routeWithoutAuth]);
+
+  const requestNeutralCaption = useCallback(() => {
+    setCaption(prev => prev ?? { kind: 'neutral' });
+  }, []);
+
+  // StatusBar entries apply in MOUNT order (last pushed wins). The keyed
+  // <StatusBar> below already re-pushes in the destination's mount commit;
+  // this second push at exit time also outranks any <StatusBar> the
+  // destination mounts LATER (after that commit) while the overlay is up.
+  const onDestReady = useCallback(() => {
+    if (statusEntryRef.current || exitedRef.current) {
+      return;
+    }
+    statusEntryRef.current = StatusBar.pushStackEntry(SPLASH_BAR);
+  }, []);
+
+  const {
+    frameW,
+    realMs,
+    authReady,
+    captionLatched,
+    captionP,
+    exitKind,
+    exitAtW,
+    logoExitAtW,
+    exitP,
+    ffRequest,
+    clock,
+  } = useSplashClock({
+    reduced,
+    destReady,
+    requestMount,
+    requestNeutralCaption,
+    onDestReady,
+    onExited: handleExited,
+  });
+
+  /* ── JS hard-cut fallback (the UI loop should always exit first) ── */
+  const armFallback = useCallback(
+    (ms: number) => {
+      clearFallback();
+      fallbackRef.current = setTimeout(() => {
+        fallbackRef.current = null;
+        if (exitedRef.current) {
+          return;
+        }
+        requestMount();
+        handleExited();
+      }, ms);
+    },
+    [clearFallback, handleExited, requestMount],
+  );
+
+  useEffect(() => {
+    if (AppState.currentState !== 'background') {
+      armFallback(FALLBACK_FROM_MOUNT_MS);
+    }
+    return () => {
+      clearFallback();
+      popStatusEntry();
+    };
+  }, [armFallback, clearFallback, popStatusEntry]);
+
+  // Caption committed → hand it to the UI thread. authReady is set only
+  // here (post-commit), so the land can never reveal stale caption text.
+  useEffect(() => {
+    if (!caption) {
+      return;
+    }
+    captionLatched.value = 1;
+    if (authKnown && !authReadyRef.current) {
+      authReadyRef.current = true;
+      authReady.value = 1;
+      armFallback(FALLBACK_AFTER_AUTH_MS);
+    }
+  }, [caption, authKnown, captionLatched, authReady, armFallback]);
+
+  /* ── clock start: after the first layout (scene built), next frame ── */
+  // Idempotent on purpose: Reanimated 3.16's setActive(true) on an already
+  // active callback starts a SECOND UI-thread rAF loop (FrameCallbackRegistryUI
+  // .runCallbacks), so every call site goes through this guard.
+  // `clock.isActive` is updated synchronously by setActive.
+  const activateClock = useCallback(() => {
+    if (!exitedRef.current && !clock.isActive) {
+      clock.setActive(true);
+    }
+  }, [clock]);
+
+  const laidOut = size !== null;
+  useEffect(() => {
+    if (!laidOut || AppState.currentState === 'background') {
+      return;
+    }
+    const raf = requestAnimationFrame(activateClock);
+    return () => cancelAnimationFrame(raf);
+  }, [laidOut, activateClock]);
+
+  /* ── background / foreground ── */
+  const laidOutRef = useRef(false);
+  laidOutRef.current = laidOut;
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', next => {
+      if (exitedRef.current) {
+        return;
+      }
+      if (next === 'background') {
+        clock.setActive(false);
+        bgAtRef.current = Date.now();
+        clearFallback();
+      } else if (next === 'active') {
+        const bgAt = bgAtRef.current;
+        bgAtRef.current = null;
+        if (
+          bgAt !== null &&
+          Date.now() - bgAt > FAST_FORWARD_AFTER_BG_MS &&
+          authReadyRef.current
+        ) {
+          ffRequest.value = 1;
+        }
+        if (laidOutRef.current) {
+          activateClock();
+        }
+        // Re-arm only when disarmed (by 'background', or a background
+        // launch): an inactive → active round trip (Control Centre, a system
+        // alert) keeps the running timer instead of extending it.
+        if (fallbackRef.current === null) {
+          armFallback(
+            authReadyRef.current
+              ? FALLBACK_AFTER_AUTH_MS
+              : FALLBACK_FROM_MOUNT_MS,
+          );
+        }
+      }
+      // 'inactive' (control centre, app switcher peek) is ignored.
+    });
+    return () => sub.remove();
+  }, [clock, clearFallback, armFallback, activateClock, ffRequest]);
+
+  /* ── root exit: opacity 1→0, scale 1→1.03 (land) / fade only (abort) ── */
+  const rootExitStyle = useAnimatedStyle(() => {
+    const p = exitP.value;
+    if (exitKind.value === EXIT.ABORT) {
+      return { opacity: 1 - easeOut(p), transform: [{ scale: 1 }] };
+    }
+    const e = easeExit(p);
+    return { opacity: 1 - e, transform: [{ scale: 1 + 0.03 * e }] };
+  });
 
   return (
     <Animated.View
-      pointerEvents="none"
-      style={[
-        styles.orb,
-        start,
-        { width: size, height: size, borderRadius: size / 2, backgroundColor: color },
-        style,
-      ]}
-    />
+      pointerEvents="auto"
+      style={[styles.root, rootExitStyle]}
+      onLayout={onLayout}>
+      {/* Re-keyed when the destination mounts: the remount pushes this entry
+          in that same commit, AFTER the destination's own <StatusBar>
+          (overlay = later sibling of the NavigationContainer), so the
+          destination's bar style never reaches native under the overlay. */}
+      <StatusBar key={destMounted ? 'dest' : 'boot'} {...SPLASH_BAR} />
+      {scene ? (
+        <SplashCanvas
+          scene={scene}
+          frameW={frameW}
+          exitKind={exitKind}
+          exitAtW={exitAtW}
+          logoExitAtW={logoExitAtW}
+          reduced={reduced}
+        />
+      ) : null}
+      <SplashCaption
+        text={caption}
+        captionP={captionP}
+        realMs={realMs}
+        reduced={reduced}
+        showDots={scene !== null}
+      />
+    </Animated.View>
   );
-};
-
-const Splash: FC = () => {
-  const navigation = useNavigation<any>();
-  const { status } = useAuth();
-
-  // Anchor the minimum splash duration to MOUNT, not to auth resolution —
-  // otherwise every cold start pays auth time + the full MIN_SPLASH_MS.
-  const mountedAtRef = useRef(Date.now());
-
-  // Entrance + ambient drivers
-  const logoScale = useSharedValue(0.7);
-  const logoOpacity = useSharedValue(0);
-  const glowPulse = useSharedValue(0);
-  const textOpacity = useSharedValue(0);
-  const textShift = useSharedValue(16);
-  const taglineOpacity = useSharedValue(0);
-
-  useEffect(() => {
-    logoOpacity.value = withTiming(1, { duration: 420, easing: Easing.out(Easing.cubic) });
-    logoScale.value = withDelay(
-      60,
-      withTiming(1, { duration: 620, easing: Easing.out(Easing.back(1.4)) }),
-    );
-    textOpacity.value = withDelay(320, withTiming(1, { duration: 460 }));
-    textShift.value = withDelay(320, withTiming(0, { duration: 520, easing: Easing.out(Easing.cubic) }));
-    taglineOpacity.value = withDelay(560, withTiming(1, { duration: 460 }));
-    glowPulse.value = withRepeat(
-      withTiming(1, { duration: 2200, easing: Easing.inOut(Easing.sin) }),
-      -1,
-      true,
-    );
-    return () => {
-      cancelAnimation(logoScale);
-      cancelAnimation(logoOpacity);
-      cancelAnimation(glowPulse);
-      cancelAnimation(textOpacity);
-      cancelAnimation(textShift);
-      cancelAnimation(taglineOpacity);
-    };
-  }, [logoScale, logoOpacity, glowPulse, textOpacity, textShift, taglineOpacity]);
-
-  useEffect(() => {
-    if (status === 'loading') return;
-
-    // Auth resolution already consumed part of the splash window — only wait
-    // for whatever remains of MIN_SPLASH_MS since mount.
-    const elapsed = Date.now() - mountedAtRef.current;
-    const remaining = Math.max(0, MIN_SPLASH_MS - elapsed);
-
-    const timer = setTimeout(() => {
-      if (status === 'authenticated') {
-        navigation.dispatch(
-          CommonActions.reset({ index: 0, routes: [{ name: 'Drawer' }] }),
-        );
-      } else {
-        navigation.dispatch(
-          CommonActions.reset({
-            index: 0,
-            routes: [{ name: 'Onboarding', state: { routes: [{ name: 'Login' }] } }],
-          }),
-        );
-      }
-    }, remaining);
-
-    return () => clearTimeout(timer);
-  }, [navigation, status]);
-
-  const glowStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(glowPulse.value, [0, 1], [0.55, 1]),
-    transform: [{ scale: interpolate(glowPulse.value, [0, 1], [0.92, 1.12]) }],
-  }));
-  const logoTileStyle = useAnimatedStyle(() => ({
-    opacity: logoOpacity.value,
-    transform: [{ scale: logoScale.value }],
-  }));
-  const wordmarkStyle = useAnimatedStyle(() => ({
-    opacity: textOpacity.value,
-    transform: [{ translateY: textShift.value }],
-  }));
-  const taglineStyle = useAnimatedStyle(() => ({ opacity: taglineOpacity.value }));
-
-  return (
-    <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#03100C" translucent />
-
-      <LinearGradient
-        colors={SPLASH_GRADIENT}
-        start={GRADIENT_TL}
-        end={GRADIENT_BR}
-        style={StyleSheet.absoluteFillObject}
-      />
-
-      <FloatingOrb
-        color={energyPalette.wind}
-        size={normalizeWidth(260)}
-        start={{ top: -normalizeHeight(60), right: -normalizeWidth(70) }}
-        shiftX={-24}
-        shiftY={28}
-        duration={6000}
-      />
-      <FloatingOrb
-        color="#10B981"
-        size={normalizeWidth(300)}
-        start={{ bottom: -normalizeHeight(80), left: -normalizeWidth(90) }}
-        shiftX={30}
-        shiftY={-24}
-        duration={7200}
-      />
-
-      <View style={styles.content}>
-        <View style={styles.lockup}>
-          <Animated.View style={[styles.glowWrap, glowStyle]} pointerEvents="none">
-            <Svg width={GLOW_SIZE} height={GLOW_SIZE}>
-              <Defs>
-                <RadialGradient id="pulseGlow" cx="50%" cy="50%" r="50%">
-                  <Stop offset="0" stopColor="#34D399" stopOpacity={0.5} />
-                  <Stop offset="0.55" stopColor="#10B981" stopOpacity={0.14} />
-                  <Stop offset="1" stopColor="#10B981" stopOpacity={0} />
-                </RadialGradient>
-              </Defs>
-              <Circle cx={GLOW_SIZE / 2} cy={GLOW_SIZE / 2} r={GLOW_SIZE / 2} fill="url(#pulseGlow)" />
-            </Svg>
-          </Animated.View>
-
-          <PulseRing delay={0} />
-          <PulseRing delay={1300} />
-
-          <Animated.View style={[styles.logoTile, logoTileStyle]}>
-            <Image source={Logo} style={styles.logo} resizeMode="contain" />
-          </Animated.View>
-        </View>
-
-        <Animated.View style={wordmarkStyle}>
-          <AppText bold fontSize={24} center color={glass.textBold} lineHeight={32} style={styles.wordmark}>
-            Pragmatic Engineering Solution
-          </AppText>
-        </Animated.View>
-
-        <Animated.View style={taglineStyle}>
-          <AppText semi_bold fontSize={11} center color={glass.textMuted} style={styles.tagline}>
-            SOLAR · WIND · GRID · STORAGE
-          </AppText>
-        </Animated.View>
-      </View>
-
-      <View style={styles.loader}>
-        {LOADER_DOTS.map((color, i) => (
-          <WaveDot key={color} color={color} delay={i * 110} />
-        ))}
-      </View>
-    </View>
-  );
-};
+}
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#03100C' },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: space.xl,
-    gap: space.xl,
-  },
-  lockup: { alignItems: 'center', justifyContent: 'center' },
-  glowWrap: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
-  ring: {
-    position: 'absolute',
-    width: RING_SIZE,
-    height: RING_SIZE,
-    borderRadius: RING_SIZE / 2,
-    borderWidth: 1.5,
-    borderColor: glass.border,
-  },
-  logoTile: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: radius['2xl'],
-    paddingHorizontal: space['2xl'],
-    paddingVertical: space.xl,
-    shadowColor: '#10B981',
-    shadowOpacity: 0.5,
-    shadowRadius: 28,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 16,
-  },
-  logo: { width: normalizeWidth(150), height: normalizeHeight(72) },
-  wordmark: { maxWidth: normalizeWidth(280), letterSpacing: 0.2 },
-  tagline: { letterSpacing: 2.5 },
-  orb: { position: 'absolute', opacity: 0.08 },
-  loader: {
-    position: 'absolute',
-    bottom: normalizeHeight(64),
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: space.md,
-  },
-  dot: {
-    width: normalizeWidth(9),
-    height: normalizeWidth(9),
-    borderRadius: normalizeWidth(9) / 2,
+  root: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: splashPalette.bg,
+    zIndex: 1,
   },
 });
-
-export default Splash;

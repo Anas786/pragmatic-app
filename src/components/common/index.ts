@@ -17,6 +17,8 @@ export { default as PowerMixBar } from './PowerMixBar';
 export type { PowerMixSegment } from './PowerMixBar';
 export { default as HeroGradientCard } from './HeroGradientCard';
 export type { HeroVariant } from './HeroGradientCard';
+export { default as PESLogo } from './PESLogo';
+export type { PESLogoProps } from './PESLogo';
 export { HeroTopRow, HeroLiveBadge, HeroValueRow } from './HeroRow';
 export { default as AppTextInput } from './AppTextInput';
 export { default as EmptyStateCard } from './EmptyStateCard';

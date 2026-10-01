@@ -12,9 +12,21 @@ require('react-native-gesture-handler/jestSetup');
 require('@shopify/react-native-skia/jestSetup');
 
 // Reanimated 3 — official mock keeps worklets/entering animations inert.
-jest.mock('react-native-reanimated', () =>
-  require('react-native-reanimated/mock'),
-);
+// It lacks useReducedMotion / useFrameCallback (both "ADD ME IF NEEDED"),
+// which the cold-start SplashOverlay uses; the frame callback stays inert.
+jest.mock('react-native-reanimated', () => {
+  const mock = require('react-native-reanimated/mock');
+  return {
+    __esModule: true,
+    ...mock,
+    useReducedMotion: () => false,
+    useFrameCallback: () => ({
+      setActive: jest.fn(),
+      isActive: false,
+      callbackId: -1,
+    }),
+  };
+});
 
 // AsyncStorage — official in-memory mock (Amplify token store + zustand persist).
 // Amplify's loadAsyncStorage() reads `.default` off the required module, so

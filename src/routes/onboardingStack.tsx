@@ -4,13 +4,11 @@ import React, { ReactElement } from 'react';
 // synchronously evaluates the entire Authenticated tree (~170 modules)
 // during the splash's first render, defeating Metro's inlineRequires.
 import Login from 'src/components/screens/Onboarding/Login';
-import Splash from 'src/components/screens/Onboarding/Splash';
 import { OnboardingStackParamList } from 'src/types';
 
 const OnboardingStack = createNativeStackNavigator<OnboardingStackParamList>();
 export const Onboarding = (): ReactElement => (
   <OnboardingStack.Navigator screenOptions={{ headerShown: false }}>
-    <OnboardingStack.Screen name="Splash" component={Splash} />
     <OnboardingStack.Screen name="Login" component={Login} />
   </OnboardingStack.Navigator>
 );

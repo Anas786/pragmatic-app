@@ -1,0 +1,8 @@
+<resources>
+    <!-- Android 12+ system splash: same flat board, transparent (empty) icon. -->
+    <style name="SplashTheme" parent="BaseSplashTheme">
+        <item name="android:windowSplashScreenBackground">@color/splashBg</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icon_empty</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/splashBg</item>
+    </style>
+</resources>

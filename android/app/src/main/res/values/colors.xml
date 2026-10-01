@@ -1,3 +1,4 @@
 <resources>
-    <color name="splashBg">#151314</color>
+    <!-- Cold-start board colour; must match splashPalette.bg (JS), LaunchScreen.storyboard and AppDelegate.swift. -->
+    <color name="splashBg">#0B0F14</color>
 </resources>
