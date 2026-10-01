@@ -185,6 +185,7 @@ const Dashboard: FC = () => {
     refetch,
     refresh,
     error,
+    isPaused,
   } = useSiteList({ q: debouncedQuery });
 
   // RefreshControl is driven by LOCAL state so the spinner engages ONLY on
@@ -324,6 +325,26 @@ const Dashboard: FC = () => {
         </StatusContainer>
       );
     }
+    // Offline: the fetch is paused, not failed (see useSiteList#isPaused),
+    // so without this the list fell through to "No sites available." — e.g.
+    // an airplane-mode launch, which the splash now routes here when a
+    // session is stored. The paused fetch resumes by itself when back online.
+    if (isPaused) {
+      return (
+        <StatusContainer>
+          <AppText
+            fontSize={FONT_SIZE_MD}
+            semi_bold
+            color={scheme.textPrimary}
+            center>
+            You're offline
+          </AppText>
+          <StatusSubtext>
+            Your sites will load as soon as you're back online.
+          </StatusSubtext>
+        </StatusContainer>
+      );
+    }
     if (debouncedQuery.length > 0) {
       return (
         <StatusContainer>
@@ -355,6 +376,7 @@ const Dashboard: FC = () => {
   }, [
     isLoading,
     error,
+    isPaused,
     debouncedQuery,
     clearSearch,
     refetch,

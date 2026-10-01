@@ -37,6 +37,13 @@ interface UseSiteListResult {
   isFetchingNextPage: boolean;
   hasNextPage: boolean;
   error: Error | null;
+  /**
+   * The fetch is waiting for the network: App.tsx wires react-query's
+   * onlineManager to NetInfo, so offline it PAUSES instead of failing —
+   * `isLoading` is false and `error` null — and resumes on its own once
+   * the device is back online.
+   */
+  isPaused: boolean;
   fetchNextPage: () => void;
   refetch: () => void;
   /**
@@ -155,6 +162,7 @@ export const useSiteList = (
     isFetchingNextPage: query.isFetchingNextPage,
     hasNextPage: !!query.hasNextPage,
     error: query.error,
+    isPaused: query.isPaused,
     fetchNextPage: () => {
       if (query.hasNextPage && !query.isFetchingNextPage) {
         query.fetchNextPage();
