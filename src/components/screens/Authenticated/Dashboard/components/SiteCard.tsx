@@ -1,51 +1,40 @@
-import React, { FC, memo, ReactNode, useMemo, useState } from 'react';
-import { Image, StyleSheet, View, ViewStyle } from 'react-native';
+import React, { FC, memo, useCallback, useMemo, useState } from 'react';
+import { AccessibilityActionEvent, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import LinearGradient from 'react-native-linear-gradient';
-import Svg, {
-  Defs,
-  LinearGradient as SvgGradient,
-  Path,
-  Stop,
-} from 'react-native-svg';
 import {
   AppText,
-  CardHeader,
-  CardHeaderText,
   Dot,
-  HeroLiveBadge,
-  HeroTopRow,
-  HeroValueRow,
-  MetricChip,
-  OverlineLabel,
+  FreshnessStatus,
+  PowerMixBar,
   PressableScale,
-  PulseDot,
+  SiteLogo,
   Surface,
-  TintedPill,
 } from 'src/components/common';
+import type { PowerMixSegment } from 'src/components/common';
+import { useNow } from 'src/hooks/useNow';
 import {
   duration,
+  energyPalette,
   radius as radiusTokens,
   Scheme,
   space,
+  touch,
   useScheme,
   useThemedStyles,
 } from 'src/theme';
+import { siteStatus } from 'src/utils/freshness';
+import { buildSiteLogoUrl } from 'src/utils/site';
+import { PERIOD_LABEL } from 'src/utils/sources';
+import { ISite } from 'src/types';
 import {
-  buildSiteLogoUrl,
-  formatCompact,
-  formatRelativeTime,
-  FONT_SIZE_HUGE,
-  FONT_SIZE_SM,
-  FONT_SIZE_XS,
-  FONT_SIZE_XXS,
-  ICON_SIZE_MD,
-  numericCardValue,
-  resolveCardColor,
-  shortSourceLabel,
-} from 'src/utils';
-import { ISite, ISiteCard } from 'src/types';
-import { DownArrow, UpArrow } from 'src/assets/icons';
+  buildSiteCardModel,
+  capacityText,
+  siteCardA11yLabel,
+  SiteCardMetric,
+  SiteCardModel,
+  toggleMetricsLabel,
+  visibleMetrics,
+} from '../siteCardModel';
 
 const STAGGER_MS = 60;
 const STAGGER_CAP = 6;
@@ -54,153 +43,255 @@ const STAGGER_CAP = 6;
 // Matches STAGGER_CAP so every animated row also gets a staggered delay.
 const ANIM_LIMIT = 6;
 
-/** Pick the highest-numeric card as the hero. Falls back to the first card
- *  when no value is numeric (so a site with only "NA" entries still shows
- *  a hero shell instead of collapsing to a tiny chip row). */
-const findHeroCard = (cards: ISiteCard[]): ISiteCard | null => {
-  if (cards.length === 0) return null;
-  let best = cards[0];
-  let bestNum = numericCardValue(best.value) ?? -Infinity;
-  for (let i = 1; i < cards.length; i++) {
-    const n = numericCardValue(cards[i].value);
-    if (n !== null && n > bestNum) {
-      best = cards[i];
-      bestNum = n;
-    }
-  }
-  return best;
-};
+/** Visual height of one legend row (and of the '+N more' toggle). */
+const LEGEND_ROW_H = 20;
+/** Vertical slop that grows the toggle to a full touch.min target. */
+const TOGGLE_SLOP = Math.ceil((touch.min - LEGEND_ROW_H) / 2);
+const TOGGLE_HIT_SLOP = { top: TOGGLE_SLOP, bottom: TOGGLE_SLOP };
 
-/* ─────────────────── Layout primitives (card-local) ─────────────────── */
+/** Logo plate edge — the header row is exactly this tall (name + status). */
+export const SITE_CARD_LOGO = 40;
 
-const StatusRow: FC<{ children?: ReactNode }> = ({ children }) => (
-  <View style={styles.statusRow}>{children}</View>
-);
+/* ─────────────────── Legend ─────────────────── */
 
-/** One component, prop-driven — toggling `expanded` must diff a style, not
- *  swap the element TYPE (a type swap unmounts/remounts every MetricChip,
- *  defeating their memo; see the frozen-wrapper convention below). */
-const SatellitesGrid: FC<{ expanded: boolean; children?: ReactNode }> = ({
-  expanded,
-  children,
-}) => (
-  <View style={[styles.satellitesGrid, expanded && styles.satellitesGridExpanded]}>
-    {children}
-  </View>
-);
-
-const NoTelemetry: FC<{ children?: ReactNode }> = ({ children }) => {
-  const themed = useThemedStyles(createCardStyles);
-  return <View style={themed.noTelemetry}>{children}</View>;
-};
-
-/* ─────────────────── Site avatar (online ring + muted fill) ─────────────────── */
-
-interface SiteAvatarRingProps {
-  online: boolean;
-  children: ReactNode;
+interface LegendItemProps {
+  metric: SiteCardMetric;
+  /** 0 = left column, 1 = right column (2-column wrapping grid). */
+  column: number;
 }
 
-const SiteAvatarRing: FC<SiteAvatarRingProps> = ({ online, children }) => {
+/** 'dot · label ········ value unit' — one cell of the 2-column legend.
+ *  Only the DOT is coloured (energy fill); text stays on ink roles. */
+const LegendItem: FC<LegendItemProps> = memo(({ metric, column }) => {
   const scheme = useScheme();
-  const ringStyle = useMemo<ViewStyle>(
-    () =>
-      StyleSheet.flatten([
-        styles.avatarRing,
-        { borderColor: online ? scheme.brand : scheme.hairline },
-      ]),
-    [online, scheme.brand, scheme.hairline],
-  );
-  return <View style={ringStyle}>{children}</View>;
-};
-
-const SiteAvatar: FC<{ children: ReactNode }> = ({ children }) => {
-  const scheme = useScheme();
-  const avatarStyle = useMemo<ViewStyle>(
-    () =>
-      StyleSheet.flatten([
-        styles.avatar,
-        { backgroundColor: scheme.surfaceMuted },
-      ]),
-    [scheme.surfaceMuted],
-  );
-  return <View style={avatarStyle}>{children}</View>;
-};
-
-/* ─────────────────── Hero block (source-tinted gradient + sparkline) ─────────────────── */
-
-interface HeroBlockProps {
-  heroColor: string;
-  children: ReactNode;
-}
-
-const HeroBlock: FC<HeroBlockProps> = ({ heroColor, children }) => {
-  const blockStyle = useMemo<ViewStyle>(
-    () =>
-      StyleSheet.flatten([
-        styles.heroBlock,
-        { borderColor: `${heroColor}2E` },
-      ]),
-    [heroColor],
-  );
+  const q = metric.quantity;
+  const dotColor = metric.source ? energyPalette[metric.source] : scheme.textTertiary;
+  const label = metric.periodSuffix
+    ? `${metric.label} · ${PERIOD_LABEL[metric.periodSuffix]}`
+    : metric.label;
   return (
-    <View style={blockStyle}>
-      <HeroGradientLayer heroColor={heroColor} />
-      <HeroContent>{children}</HeroContent>
+    <View style={[styles.cell, column === 0 ? styles.cellLeft : styles.cellRight]}>
+      <Dot color={dotColor} size={8} />
+      <AppText variant="caption" tone="secondary" numberOfLines={1} style={styles.cellLabel}>
+        {label}
+      </AppText>
+      <AppText
+        variant="caption"
+        semi_bold
+        tone={q.isMissing ? 'tertiary' : 'primary'}
+        numberOfLines={1}
+        style={styles.cellValue}>
+        {q.text}
+        {q.unit ? (
+          <AppText variant="micro" tone="secondary">
+            {` ${q.unit}`}
+          </AppText>
+        ) : null}
+      </AppText>
+    </View>
+  );
+});
+LegendItem.displayName = 'LegendItem';
+
+interface LegendToggleProps {
+  column: number;
+  expanded: boolean;
+  hiddenCount: number;
+  label: string;
+  onToggle: () => void;
+}
+
+/** '+N more' / 'Show less' — the last legend cell. Visually one legend row
+ *  tall; vertical hitSlop brings the target to touch.min (no ancestor
+ *  clips, so the slop is real on both platforms). */
+const LegendToggle: FC<LegendToggleProps> = memo(
+  ({ column, expanded, hiddenCount, label, onToggle }) => (
+    <View style={[styles.cellBox, column === 0 ? styles.cellLeft : styles.cellRight]}>
+      <PressableScale
+        onPress={onToggle}
+        hitSlop={TOGGLE_HIT_SLOP}
+        expanded={expanded}
+        accessibilityLabel={label}
+        style={styles.toggle}>
+        <AppText variant="caption" semi_bold tone="brand" numberOfLines={1}>
+          {expanded ? 'Show less' : `+${hiddenCount} more`}
+        </AppText>
+      </PressableScale>
+    </View>
+  ),
+);
+LegendToggle.displayName = 'LegendToggle';
+
+/* ─────────────────── Card body ─────────────────── */
+
+const ControllerTag: FC = () => {
+  const themed = useThemedStyles(createCardStyles);
+  return (
+    <View style={themed.controllerTag}>
+      <AppText variant="micro" tone="secondary" numberOfLines={1}>
+        Controller
+      </AppText>
     </View>
   );
 };
 
-const HeroGradientLayer: FC<{ heroColor: string }> = ({ heroColor }) => {
-  const colors = useMemo(
-    () => [`${heroColor}2E`, `${heroColor}0A`, `${heroColor}05`],
-    [heroColor],
-  );
-  return (
-    <LinearGradient
-      colors={colors}
-      locations={[0, 0.6, 1]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={styles.heroGradientLayer}
-    />
-  );
-};
-
-const HeroContent: FC<{ children: ReactNode }> = ({ children }) => (
-  <View style={styles.heroContent}>{children}</View>
-);
-
-interface HeroSparklineProps {
-  color: string;
-  /** Unique per card — required so the SVG gradient `id` doesn't collide on
-   *  Android, where SVG defs are not scoped per `<Svg>` root. */
-  id: string;
+interface CardBodyProps {
+  site: ISite;
+  model: SiteCardModel;
+  expanded: boolean;
+  onToggle: () => void;
+  toggleLabel: string | null;
 }
 
-const HeroSparkline: FC<HeroSparklineProps> = ({ color, id }) => {
-  const gradId = `spark-${id}`;
+/**
+ * Everything visible on the card. Memoised on props that only change with
+ * new data / expansion, so the parent's per-minute a11y-label refresh
+ * (useNow) never re-renders it; FreshnessStatus ticks on its own.
+ */
+const CardBody: FC<CardBodyProps> = memo(
+  ({ site, model, expanded, onToggle, toggleLabel }) => {
+    const scheme = useScheme();
+    const logoUrl = buildSiteLogoUrl(site);
+    const hasMetrics = model.metrics.length > 0;
+
+    // Weights pulled into locals before they reach a style (§4.7).
+    const segments = useMemo<PowerMixSegment[]>(
+      () =>
+        (model.mix ?? []).map(seg => {
+          const weight = seg.weight;
+          return { key: seg.key, color: energyPalette[seg.source], weight };
+        }),
+      [model.mix],
+    );
+
+    const { visible, hiddenCount } = visibleMetrics(model, expanded);
+    const periodCaption = model.sharedPeriod ? PERIOD_LABEL[model.sharedPeriod] : null;
+    const showMixRow = segments.length > 0 || periodCaption !== null;
+
+    return (
+      <Surface
+        elevation="md"
+        radius="xl"
+        background={scheme.surface}
+        padding={space.lg}
+        style={styles.card}>
+        <View style={styles.header}>
+          <SiteLogo uri={logoUrl} name={site.name} size={SITE_CARD_LOGO} />
+          <View style={styles.headerText}>
+            <View style={styles.nameRow}>
+              <AppText variant="bodyLg" semi_bold numberOfLines={1} style={styles.name}>
+                {site.name}
+              </AppText>
+              {model.controller ? <ControllerTag /> : null}
+            </View>
+            <FreshnessStatus
+              state={site.state}
+              lastUpdate={site.dataLastUpdate}
+              variant="status"
+              trailing={capacityText(model)}
+            />
+            {hasMetrics ? null : (
+              <AppText variant="micro" tone="tertiary" numberOfLines={1}>
+                No summary metrics
+              </AppText>
+            )}
+          </View>
+        </View>
+
+        {hasMetrics && showMixRow ? (
+          <View style={styles.mixRow}>
+            {segments.length > 0 ? (
+              <View style={styles.mixBar}>
+                <PowerMixBar segments={segments} height={6} trackColor={scheme.surfaceMuted} />
+              </View>
+            ) : null}
+            {periodCaption ? (
+              <AppText variant="micro" tone="secondary" numberOfLines={1}>
+                {periodCaption}
+              </AppText>
+            ) : null}
+          </View>
+        ) : null}
+
+        {hasMetrics ? (
+          <View style={styles.legend}>
+            {visible.map((metric, i) => (
+              <LegendItem key={metric.key} metric={metric} column={i % 2} />
+            ))}
+            {toggleLabel ? (
+              <LegendToggle
+                column={visible.length % 2}
+                expanded={expanded}
+                hiddenCount={hiddenCount}
+                label={toggleLabel}
+                onToggle={onToggle}
+              />
+            ) : null}
+          </View>
+        ) : null}
+      </Surface>
+    );
+  },
+);
+CardBody.displayName = 'CardBody';
+
+/* ─────────────────── Pressable shell (a11y) ─────────────────── */
+
+interface CardPressableProps extends CardBodyProps {
+  onPress: () => void;
+}
+
+/**
+ * The card's single tappable + screen-reader element. Its label carries
+ * the live status age, so it subscribes to the shared `useNow` ticker —
+ * only this thin shell re-renders on the tick, not the memoised body.
+ */
+const CardPressable: FC<CardPressableProps> = ({
+  site,
+  model,
+  expanded,
+  onToggle,
+  toggleLabel,
+  onPress,
+}) => {
+  const now = useNow();
+  const statusSpoken = siteStatus(site.state, site.dataLastUpdate, now).spoken;
+  const label = useMemo(
+    () => siteCardA11yLabel(site.name, statusSpoken, model, expanded),
+    [site.name, statusSpoken, model, expanded],
+  );
+  const actions = useMemo(
+    () => (toggleLabel ? [{ name: 'toggleMetrics', label: toggleLabel }] : undefined),
+    [toggleLabel],
+  );
+  const handleAction = useCallback(
+    (event: AccessibilityActionEvent) => {
+      if (event.nativeEvent.actionName === 'toggleMetrics') onToggle();
+    },
+    [onToggle],
+  );
+
   return (
-    <Svg width={72} height={26} viewBox="0 0 80 28">
-      <Defs>
-        <SvgGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={color} stopOpacity={0.35} />
-          <Stop offset="1" stopColor={color} stopOpacity={0} />
-        </SvgGradient>
-      </Defs>
-      <Path
-        d="M0 20 L10 16 L20 18 L30 12 L40 14 L50 8 L60 11 L70 6 L80 9 L80 28 L0 28 Z"
-        fill={`url(#${gradId})`}
-      />
-      <Path
-        d="M0 20 L10 16 L20 18 L30 12 L40 14 L50 8 L60 11 L70 6 L80 9"
-        stroke={color}
-        strokeWidth={1.5}
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
+    <PressableScale
+      onPress={onPress}
+      scaleTo={0.98}
+      accessibilityLabel={label}
+      accessibilityHint="Opens site details"
+      accessibilityActions={actions}
+      onAccessibilityAction={handleAction}>
+      {/* Android: the card is ONE TalkBack stop (iOS already folds an
+          accessible element's children). The toggle stays reachable
+          through the 'toggleMetrics' custom action. */}
+      <View importantForAccessibility="no-hide-descendants">
+        <CardBody
+          site={site}
+          model={model}
+          expanded={expanded}
+          onToggle={onToggle}
+          toggleLabel={toggleLabel}
+        />
+      </View>
+    </PressableScale>
   );
 };
 
@@ -214,196 +305,25 @@ interface SiteCardProps {
 
 export const SiteCard: FC<SiteCardProps> = memo(
   ({ site, index, onPress }) => {
-    const scheme = useScheme();
-    const themed = useThemedStyles(createCardStyles);
-    // Tracks the exact URL that failed (not a boolean) so a changed
-    // logo_ext retries immediately, and is reset whenever a refreshed
-    // `site` object arrives (render-phase adjustment below) so one
-    // transient CDN/network failure doesn't downgrade the avatar to
-    // initials for the rest of the Dashboard session.
-    const [failedLogoUrl, setFailedLogoUrl] = useState<string | null>(null);
     const [expanded, setExpanded] = useState(false);
     // Frozen at first mount: if `index` later crosses the ANIM_LIMIT
     // boundary (search narrowing, refresh pruning), the wrapper element
     // type must not flip — that would remount the card and drop
-    // `expanded`/`failedLogoUrl` state.
+    // `expanded` state.
     const [animateEntrance] = useState(() => index < ANIM_LIMIT);
-    // React's "derived state" pattern: react-query structural sharing
-    // keeps `site` identity stable unless the payload actually changed,
-    // so this only fires (and re-renders) on genuinely fresh data.
-    const [lastSite, setLastSite] = useState(site);
-    if (site !== lastSite) {
-      setLastSite(site);
-      setFailedLogoUrl(null);
-    }
-    const resolvedLogoUrl = buildSiteLogoUrl(site);
-    const logoUrl =
-      resolvedLogoUrl && resolvedLogoUrl !== failedLogoUrl
-        ? resolvedLogoUrl
-        : null;
-    // Stable identity (the `?? []` would otherwise be a new array each
-    // render) so the heroCard/satellites memos below don't recompute.
-    const cards = useMemo(() => site.cards ?? [], [site.cards]);
-    const isOnline = (site.state ?? '').toLowerCase() === 'online';
-
-    const heroCard = useMemo(() => findHeroCard(cards), [cards]);
-    const satellites = useMemo(
-      () => (heroCard ? cards.filter(c => c !== heroCard) : []),
-      [cards, heroCard],
-    );
-    const hasOverflow = satellites.length > 3;
-    const visibleSatellites = expanded ? satellites : satellites.slice(0, 3);
-
-    const heroColor = heroCard ? resolveCardColor(heroCard) : scheme.brand;
-    const heroLabel = heroCard
-      ? shortSourceLabel(heroCard.name).toUpperCase()
-      : '';
+    const model = useMemo(() => buildSiteCardModel(site), [site]);
+    const toggle = useCallback(() => setExpanded(prev => !prev), []);
+    const toggleLabel = toggleMetricsLabel(model, expanded);
 
     const body = (
-      <PressableScale
+      <CardPressable
+        site={site}
+        model={model}
+        expanded={expanded}
+        onToggle={toggle}
+        toggleLabel={toggleLabel}
         onPress={onPress}
-        accessibilityLabel={`Open ${site.name}`}
-        haptic="select">
-        <Surface
-          elevation="md"
-          radius="xl"
-          background={scheme.surface}
-          padding={space.lg}
-          style={styles.card}>
-          <CardHeader>
-            <SiteAvatarRing online={isOnline}>
-              <SiteAvatar>
-                {logoUrl ? (
-                  <Image
-                    source={{ uri: logoUrl }}
-                    style={styles.avatarImage}
-                    onError={() => setFailedLogoUrl(logoUrl)}
-                  />
-                ) : (
-                  <AppText
-                    fontSize={FONT_SIZE_SM}
-                    bold
-                    color={scheme.textSecondary}>
-                    {site.name.substring(0, 2).toUpperCase()}
-                  </AppText>
-                )}
-              </SiteAvatar>
-            </SiteAvatarRing>
-
-            <CardHeaderText>
-              <AppText
-                fontSize={FONT_SIZE_SM}
-                semi_bold
-                color={scheme.textPrimary}
-                numberOfLines={1}>
-                {site.name}
-              </AppText>
-              <StatusRow>
-                <Dot
-                  color={isOnline ? scheme.brand : scheme.textTertiary}
-                  size={6}
-                />
-                <AppText
-                  fontSize={FONT_SIZE_XXS}
-                  color={scheme.textSecondary}
-                  numberOfLines={1}>
-                  {isOnline ? 'Online' : site.state ?? 'Unknown'}
-                  {' · '}
-                  {formatRelativeTime(site.dataLastUpdate)}
-                </AppText>
-              </StatusRow>
-            </CardHeaderText>
-
-            {site.controller ? (
-              <TintedPill
-                color={scheme.accentGold}
-                alpha="22"
-                paddingX={space.sm}
-                paddingY={4}>
-                <AppText
-                  fontSize={FONT_SIZE_XXS}
-                  semi_bold
-                  color={scheme.accentGold}>
-                  PRO
-                </AppText>
-              </TintedPill>
-            ) : null}
-          </CardHeader>
-
-          {heroCard ? (
-            <HeroBlock heroColor={heroColor}>
-              <HeroTopRow>
-                <HeroLiveBadge>
-                  <PulseDot color={heroColor} size={8} />
-                  <OverlineLabel color={heroColor}>
-                    LIVE · {heroLabel}
-                  </OverlineLabel>
-                </HeroLiveBadge>
-                <HeroSparkline color={heroColor} id={site.id} />
-              </HeroTopRow>
-              <HeroValueRow>
-                <AppText
-                  fontSize={FONT_SIZE_HUGE}
-                  bold
-                  color={heroColor}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.7}>
-                  {formatCompact(heroCard.value)}
-                </AppText>
-                <AppText
-                  fontSize={FONT_SIZE_XS}
-                  color={scheme.textSecondary}>
-                  {heroCard.unit}
-                </AppText>
-              </HeroValueRow>
-            </HeroBlock>
-          ) : (
-            <NoTelemetry>
-              <AppText fontSize={FONT_SIZE_XXS} color={scheme.textTertiary}>
-                No live telemetry
-              </AppText>
-            </NoTelemetry>
-          )}
-
-          {visibleSatellites.length > 0 ? (
-            <SatellitesGrid expanded={expanded}>
-              {visibleSatellites.map((card, i) => (
-                <MetricChip
-                  key={`${site.id}-sat-${i}`}
-                  card={card}
-                  surfaceColor={scheme.surfaceMuted}
-                  textPrimary={scheme.textPrimary}
-                  textSecondary={scheme.textSecondary}
-                  textTertiary={scheme.textTertiary}
-                />
-              ))}
-            </SatellitesGrid>
-          ) : null}
-
-          {hasOverflow ? (
-            <PressableScale
-              onPress={() => setExpanded(prev => !prev)}
-              haptic="select"
-              accessibilityLabel={
-                expanded ? 'Collapse metric list' : 'Expand metric list'
-              }
-              style={themed.expandToggle}>
-              <AppText
-                fontSize={FONT_SIZE_XXS}
-                medium
-                color={scheme.textSecondary}>
-                {expanded ? 'Show less' : `Show all ${satellites.length}`}
-              </AppText>
-              {expanded ? (
-                <UpArrow size={ICON_SIZE_MD} color={scheme.textSecondary} />
-              ) : (
-                <DownArrow size={ICON_SIZE_MD} color={scheme.textSecondary} />
-              )}
-            </PressableScale>
-          ) : null}
-        </Surface>
-      </PressableScale>
+      />
     );
 
     // Cap the entrance animation to ANIM_LIMIT — same convention as
@@ -435,70 +355,77 @@ SiteCard.displayName = 'SiteCard';
 
 const styles = StyleSheet.create({
   card: { gap: space.md },
-  avatarRing: {
-    width: 52,
-    height: 52,
-    borderRadius: radiusTokens.pill,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 2,
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: radiusTokens.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  avatarImage: {
-    width: 44,
-    height: 44,
-    borderRadius: radiusTokens.pill,
-  },
-  statusRow: {
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: space.md,
   },
-  heroBlock: {
-    overflow: 'hidden',
-    borderRadius: radiusTokens.lg,
-    borderWidth: 1,
-    paddingHorizontal: space.md,
-    paddingVertical: space.md,
+  headerText: {
+    flex: 1,
+    minWidth: 0,
   },
-  heroGradientLayer: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  heroContent: {
-    gap: 6,
-  },
-  satellitesGrid: {
+  nameRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: space.sm,
   },
-  satellitesGridExpanded: {
+  name: {
+    flex: 1,
+    minWidth: 0,
+    // 22 (not the ramp's 24) keeps name + status inside the 40pt logo
+    // height, and the no-metrics card (3 lines) under 84pt.
+    lineHeight: 22,
+  },
+  mixRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    minHeight: 14,
+  },
+  mixBar: {
+    flex: 1,
+  },
+  legend: {
+    flexDirection: 'row',
     flexWrap: 'wrap',
+    rowGap: space.xs,
+    marginTop: -space.xs,
+  },
+  cell: {
+    width: '50%',
+    minHeight: LEGEND_ROW_H,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  cellBox: {
+    width: '50%',
+    minHeight: LEGEND_ROW_H,
+    justifyContent: 'center',
+  },
+  cellLeft: { paddingRight: space.sm },
+  cellRight: { paddingLeft: space.sm },
+  cellLabel: {
+    flex: 1,
+    minWidth: 0,
+  },
+  cellValue: {
+    flexShrink: 0,
+  },
+  toggle: {
+    minHeight: LEGEND_ROW_H,
+    minWidth: touch.min,
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
   },
 });
 
 const createCardStyles = (scheme: Scheme) =>
   StyleSheet.create({
-    noTelemetry: {
-      paddingVertical: space.md,
-      paddingHorizontal: space.md,
-      borderRadius: radiusTokens.lg,
-      alignItems: 'center',
-      backgroundColor: scheme.surfaceMuted,
-    },
-    expandToggle: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: space.sm,
-      paddingVertical: space.sm,
+    controllerTag: {
+      flexShrink: 0,
+      paddingHorizontal: space.sm,
+      paddingVertical: 2,
       borderRadius: radiusTokens.pill,
       backgroundColor: scheme.surfaceMuted,
     },

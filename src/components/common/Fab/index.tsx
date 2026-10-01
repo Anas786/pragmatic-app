@@ -5,6 +5,10 @@ import PressableScale from '../PressableScale';
 
 type PressableScaleProps = React.ComponentProps<typeof PressableScale>;
 
+/** Visual (and touch) diameter of the FAB — ≥ touch.min on both platforms.
+ *  Exported so callers can slide a hidden FAB fully off-screen. */
+export const FAB_SIZE = 52;
+
 interface FabWrapProps {
   opacity: RNAnimated.Value;
   children?: ReactNode;
@@ -34,6 +38,8 @@ export const FabWrap: FC<FabWrapProps> = ({ opacity, children }) => {
 };
 FabWrap.displayName = 'FabWrap';
 
+/** Floating action button: a brand-filled circle; icons inside use
+ *  `scheme.textOnBrand`. Always pass an `accessibilityLabel`. */
 const Fab: FC<Omit<PressableScaleProps, 'style'>> = props => {
   const themed = useThemedStyles(createFabStyles);
   return <PressableScale {...props} style={themed.fab} />;
@@ -51,9 +57,9 @@ const staticStyles = StyleSheet.create({
 const createFabStyles = (scheme: Scheme) =>
   StyleSheet.create({
     fab: {
-      width: 52,
-      height: 52,
-      borderRadius: 26,
+      width: FAB_SIZE,
+      height: FAB_SIZE,
+      borderRadius: FAB_SIZE / 2,
       alignItems: 'center',
       justifyContent: 'center',
       shadowOpacity: 0.3,

@@ -1,13 +1,9 @@
 import React, { FC, memo, ReactNode, useMemo } from 'react';
 import { StyleSheet, View, ViewStyle } from 'react-native';
 import { radius as radiusTokens, space } from 'src/theme';
-import {
-  FONT_SIZE_SM,
-  FONT_SIZE_XXS,
-  formatCompact,
-  resolveCardColor,
-  shortSourceLabel,
-} from 'src/utils';
+import { FONT_SIZE_SM, FONT_SIZE_XXS } from 'src/utils/theme';
+import { resolveCardColor, shortSourceLabel } from 'src/utils/sources';
+import { formatQuantity } from 'src/utils/units';
 import { ISiteCard } from 'src/types';
 import AppText from '../AppText';
 import Dot from '../Dot';
@@ -41,13 +37,10 @@ interface ChipLabelProps {
   children: ReactNode;
 }
 
+/** Backend-derived label: original case, no tracking (never uppercased —
+ *  see the heading-pattern rule), 1 line. */
 export const ChipLabel: FC<ChipLabelProps> = ({ color, children }) => (
-  <AppText
-    fontSize={FONT_SIZE_XXS}
-    color={color}
-    medium
-    numberOfLines={1}
-    style={styles.chipLabel}>
+  <AppText fontSize={FONT_SIZE_XXS} color={color} medium numberOfLines={1}>
     {children}
   </AppText>
 );
@@ -117,6 +110,12 @@ interface MetricChipProps {
   textTertiary: string;
 }
 
+/**
+ * Compact metric tile: source dot + label, the value via `formatQuantity`
+ * (compact: '15.6 MWh', never 'K' next to a unit; '—' with no unit when
+ * the backend sends 'NA'), and an optional share bar. Colour lives on the
+ * dot and bar only — every text uses an ink role.
+ */
 const MetricChip: FC<MetricChipProps> = memo(
   ({
     card,
@@ -129,26 +128,27 @@ const MetricChip: FC<MetricChipProps> = memo(
   }) => {
     const sourceColor = resolveCardColor(card);
     const label = shortSourceLabel(card.name);
+    const q = formatQuantity(card.value, card.unit, { mode: 'compact' });
     const hasPercent = (percent ?? 0) > 0 && trackColor !== undefined;
     return (
       <Chip surfaceColor={surfaceColor}>
         <ChipHeader>
           <Dot color={sourceColor} size={8} />
-          <ChipLabel color={textTertiary}>{label.toUpperCase()}</ChipLabel>
+          <ChipLabel color={textSecondary}>{label}</ChipLabel>
         </ChipHeader>
         <ChipValueRow>
           <AppText
             fontSize={FONT_SIZE_SM}
             bold
-            color={textPrimary}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.7}>
-            {formatCompact(card.value)}
+            color={q.isMissing ? textTertiary : textPrimary}
+            numberOfLines={1}>
+            {q.text}
           </AppText>
-          <AppText fontSize={FONT_SIZE_XXS} color={textSecondary}>
-            {card.unit}
-          </AppText>
+          {q.unit ? (
+            <AppText fontSize={FONT_SIZE_XXS} color={textSecondary}>
+              {q.unit}
+            </AppText>
+          ) : null}
         </ChipValueRow>
         {hasPercent && percent !== undefined && trackColor ? (
           <>
@@ -159,8 +159,8 @@ const MetricChip: FC<MetricChipProps> = memo(
             />
             <AppText
               fontSize={FONT_SIZE_XXS}
-              bold
-              color={sourceColor}
+              semi_bold
+              color={textSecondary}
               numberOfLines={1}>
               {percent.toFixed(0)}%
             </AppText>
@@ -186,9 +186,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-  },
-  chipLabel: {
-    letterSpacing: 0.6,
   },
   chipValueRow: {
     flexDirection: 'row',

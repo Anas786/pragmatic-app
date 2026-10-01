@@ -9,6 +9,8 @@ import {
   getSiteList,
 } from 'src/networking';
 import { ISite, ISiteListResponse } from 'src/types';
+import { toEpochMs } from 'src/utils/dates';
+import { display } from 'src/utils/logger';
 
 /**
  * Base cache namespace. The active search query is appended at runtime
@@ -18,6 +20,9 @@ import { ISite, ISiteListResponse } from 'src/types';
 const SITE_LIST_BASE_KEY = ['user', 'site-list'] as const;
 
 export const SITE_LIST_QUERY_KEY = SITE_LIST_BASE_KEY;
+
+/** One cached page, stamped with when ITS request succeeded. */
+type SiteListPage = ISiteListResponse & { fetchedAt: number };
 
 interface UseSiteListOptions {
   pageSize?: number;
@@ -44,6 +49,21 @@ interface UseSiteListResult {
    * the device is back online.
    */
   isPaused: boolean;
+  /**
+   * Epoch ms when page 1 — the rows at the top of the list — was last
+   * fetched successfully (0 before the first success). Drives the list
+   * header's 'Updated 14:36', the offline strip's 'showing data from
+   * 14:36' and the Dashboard's foreground-resume refresh gate.
+   *
+   * Deliberately NOT react-query's `dataUpdatedAt`: that one also moves on
+   * every `fetchNextPage` (page 5 loading would claim the top rows were
+   * just updated) and on manual `setQueryData` writes.
+   */
+  listUpdatedAt: number;
+  /** A refetch failed while cached rows are still shown. */
+  isRefetchError: boolean;
+  /** Loading the next page failed — the list footer offers a Retry. */
+  isFetchNextPageError: boolean;
   fetchNextPage: () => void;
   refetch: () => void;
   /**
@@ -57,6 +77,32 @@ interface UseSiteListResult {
    */
   refresh: () => Promise<unknown>;
 }
+
+/**
+ * Dev-only: which backend layer served a page (`metadata.source` flips
+ * between the Redis snapshot and origin) next to the rows' newest/oldest
+ * `dataLastUpdate`, so a 'Just now' vs '4 h ago' discrepancy between two
+ * fetches can be traced to the cache with the backend team.
+ */
+const logPageFreshness = (res: ISiteListResponse) => {
+  const stamps = res.data
+    .map(s => toEpochMs(s.dataLastUpdate))
+    .filter((n): n is number => n !== null);
+  const newest = stamps.length ? new Date(Math.max(...stamps)).toISOString() : null;
+  const oldest = stamps.length ? new Date(Math.min(...stamps)).toISOString() : null;
+  display(
+    'site-list page',
+    {
+      source: res.metadata.source ?? null,
+      page: res.metadata.page,
+      rows: res.data.length,
+      newestDataLastUpdate: newest,
+      oldestDataLastUpdate: oldest,
+      dataLastUpdate: res.data.slice(0, 5).map(s => ({ name: s.name, dataLastUpdate: s.dataLastUpdate })),
+    },
+    `source=${res.metadata.source ?? '?'} page=${res.metadata.page}`,
+  );
+};
 
 /**
  * Loads the authenticated user's site list as an infinite-scroll feed,
@@ -78,15 +124,20 @@ export const useSiteList = (
   const searchKey = trimmedQ.length > 0 ? trimmedQ : null;
 
   const query = useInfiniteQuery<
-    ISiteListResponse,
+    SiteListPage,
     Error,
-    { pages: ISiteListResponse[]; pageParams: number[] },
+    { pages: SiteListPage[]; pageParams: number[] },
     readonly [...typeof SITE_LIST_BASE_KEY, string | null, number],
     number
   >({
     queryKey: [...SITE_LIST_BASE_KEY, searchKey, pageSize] as const,
-    queryFn: ({ pageParam }) =>
-      getSiteList(pageParam, pageSize, trimmedQ || undefined),
+    queryFn: async ({ pageParam }) => {
+      const res = await getSiteList(pageParam, pageSize, trimmedQ || undefined);
+      if (__DEV__) logPageFreshness(res);
+      // Stamped once the request has SUCCEEDED — a failed fetch never
+      // reaches here, so the cached page keeps its previous stamp.
+      return { ...res, fetchedAt: Date.now() };
+    },
     initialPageParam: 1,
     getNextPageParam: lastPage => {
       const { page, total, pageSize: ps } = lastPage.metadata;
@@ -117,16 +168,23 @@ export const useSiteList = (
   // The remaining page keeps the list rendered (no skeleton flash) and the
   // refetch only fires a single page-1 request instead of replaying the
   // whole pagination history serially.
+  //
+  // `setQueryData` is a manual 'success' write that stamps the query with
+  // Date.now() — so with nothing to prune the updater returns undefined
+  // (no write at all), and a real prune keeps the existing timestamp: a
+  // refresh that then fails must not make the cache look freshly fetched.
   const refresh = useCallback(() => {
-    queryClient.setQueryData<InfiniteData<ISiteListResponse, number>>(
-      [...SITE_LIST_BASE_KEY, searchKey, pageSize],
+    const key = [...SITE_LIST_BASE_KEY, searchKey, pageSize] as const;
+    queryClient.setQueryData<InfiniteData<SiteListPage, number>>(
+      key,
       data =>
         data && data.pages.length > 1
           ? {
               pages: data.pages.slice(0, 1),
               pageParams: data.pageParams.slice(0, 1),
             }
-          : data,
+          : undefined,
+      { updatedAt: queryClient.getQueryState(key)?.dataUpdatedAt },
     );
     return refetch();
   }, [queryClient, searchKey, pageSize, refetch]);
@@ -163,6 +221,9 @@ export const useSiteList = (
     hasNextPage: !!query.hasNextPage,
     error: query.error,
     isPaused: query.isPaused,
+    listUpdatedAt: query.data?.pages[0]?.fetchedAt ?? 0,
+    isRefetchError: query.isRefetchError,
+    isFetchNextPageError: query.isFetchNextPageError,
     fetchNextPage: () => {
       if (query.hasNextPage && !query.isFetchingNextPage) {
         query.fetchNextPage();
