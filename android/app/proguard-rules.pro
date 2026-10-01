@@ -39,6 +39,16 @@
 -keep,includedescriptorclasses class com.facebook.react.bridge.** { *; }
 -keep,includedescriptorclasses class com.facebook.react.turbomodule.core.** { *; }
 
+# Classes Fabric's C++ looks up BY NAME over JNI (fbjni `kJavaDescriptor`).
+# Their methods carry @DoNotStrip, but the CLASSES don't, so R8 renamed
+# them — e.g. ReactModalHostView → `views.modal.d` — and every core
+# <Modal> (date pickers, chart fullscreen…) crashed the release build
+# with "ClassNotFoundException: …ReactModalHostView". Audited against
+# mapping.txt: these were the only renamed JNI-referenced classes in
+# app code paths (TaskInterface is dev-inspector-only, kept for safety).
+-keep class com.facebook.react.views.modal.ReactModalHostView { *; }
+-keep class com.facebook.react.interfaces.TaskInterface { *; }
+
 # ------------------------------------------------------------------
 # Hermes
 # ------------------------------------------------------------------

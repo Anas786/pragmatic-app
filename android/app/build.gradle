@@ -103,10 +103,18 @@ android {
         }
     }
     buildTypes {
+        // AndroidManifest.xml uses android:usesCleartextTraffic="${usesCleartextTraffic}"
+        // (a newer React Native template convention). Newer RN Gradle plugins
+        // fill that placeholder automatically; RN 0.77.3's does not, so it is
+        // provided here — without it the manifest merge fails on every build.
+        // Debug needs cleartext for Metro (http://localhost:8081); release
+        // talks only to https endpoints.
         debug {
             signingConfig signingConfigs.debug
+            manifestPlaceholders = [usesCleartextTraffic: "true"]
         }
         release {
+            manifestPlaceholders = [usesCleartextTraffic: "false"]
             // Caution! In production, you need to generate your own keystore file.
             // see https://reactnative.dev/docs/signed-apk-android.
             signingConfig signingConfigs.debug
