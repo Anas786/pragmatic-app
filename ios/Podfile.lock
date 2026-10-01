@@ -1680,27 +1680,6 @@ PODS:
     - React-logger (= 0.77.3)
     - React-perflogger (= 0.77.3)
     - React-utils (= 0.77.3)
-  - RNBootSplash (6.3.12):
-    - DoubleConversion
-    - glog
-    - hermes-engine
-    - RCT-Folly (= 2024.11.18.00)
-    - RCTRequired
-    - RCTTypeSafety
-    - React-Core
-    - React-debug
-    - React-Fabric
-    - React-featureflags
-    - React-graphics
-    - React-ImageManager
-    - React-NativeModulesApple
-    - React-RCTFabric
-    - React-rendererdebug
-    - React-utils
-    - ReactCodegen
-    - ReactCommon/turbomodule/bridging
-    - ReactCommon/turbomodule/core
-    - Yoga
   - RNCAsyncStorage (2.2.0):
     - DoubleConversion
     - glog
@@ -2061,7 +2040,6 @@ DEPENDENCIES:
   - ReactAppDependencyProvider (from `build/generated/ios`)
   - ReactCodegen (from `build/generated/ios`)
   - ReactCommon/turbomodule/core (from `../node_modules/react-native/ReactCommon`)
-  - RNBootSplash (from `../node_modules/react-native-bootsplash`)
   - "RNCAsyncStorage (from `../node_modules/@react-native-async-storage/async-storage`)"
   - "RNDateTimePicker (from `../node_modules/@react-native-community/datetimepicker`)"
   - RNGestureHandler (from `../node_modules/react-native-gesture-handler`)
@@ -2227,8 +2205,6 @@ EXTERNAL SOURCES:
     :path: build/generated/ios
   ReactCommon:
     :path: "../node_modules/react-native/ReactCommon"
-  RNBootSplash:
-    :path: "../node_modules/react-native-bootsplash"
   RNCAsyncStorage:
     :path: "../node_modules/@react-native-async-storage/async-storage"
   RNDateTimePicker:
@@ -2324,7 +2300,6 @@ SPEC CHECKSUMS:
   ReactAppDependencyProvider: 9b3704075c2fe8fd7c739779655fb88700a1ca30
   ReactCodegen: c9645fb81bcaf5afebaebb25874bcd5224cd40f1
   ReactCommon: 271491c2343c91609d3dc18bb4b4ebe67160de03
-  RNBootSplash: 3752909d19b63f6aa16fbca9108cc44716ec3b4d
   RNCAsyncStorage: efa02b644121f4e1f7f33e712f4f82c30aa4ff4a
   RNDateTimePicker: 38a9d4781c3812512d4f8322fd717ae2b43c1df4
   RNGestureHandler: f0580b83fe9ce7732dec4a8add37bf3204f85e27

@@ -42,14 +42,6 @@ jest.mock('@react-native-community/netinfo', () =>
   require('@react-native-community/netinfo/jest/netinfo-mock.js'),
 );
 
-jest.mock('react-native-bootsplash', () => ({
-  __esModule: true,
-  default: {
-    hide: jest.fn().mockResolvedValue(undefined),
-    isVisible: jest.fn().mockResolvedValue(false),
-  },
-}));
-
 // Native-view libraries — render as plain Views in the test tree.
 jest.mock('react-native-webview', () => {
   const React = require('react');

@@ -19,10 +19,8 @@
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		7F017B4F96AB41FE94C71192 /* Poppins-LightItalic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 6DF429C09748424E9AF58DD4 /* Poppins-LightItalic.ttf */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
-		824D71CFBD0F41939D765828 /* Colors.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BA233283922E44048BC60D3C /* Colors.xcassets */; };
 		880B48B46D574E81BC778028 /* Poppins-SemiBoldItalic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 632847A1CD1C47FFB1478FD8 /* Poppins-SemiBoldItalic.ttf */; };
 		8F8798AD9D734DEC8CCB832B /* Poppins-ExtraLightItalic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 41677B5E28F44769A004BE56 /* Poppins-ExtraLightItalic.ttf */; };
-		A8D8BB2C7D7F482B86842BD5 /* BootSplash.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 244A5693032B4303BFCC5082 /* BootSplash.storyboard */; };
 		B7527A787D404ECA9F9151AC /* Poppins-ExtraBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = B2E0B0AE716A4191A6AD9806 /* Poppins-ExtraBold.ttf */; };
 		DA9CA0F34F8620D3271A60A8 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 		DB3B0D2DA559406D88FB0079 /* Poppins-BoldItalic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 18897126D0D44126B0A75022 /* Poppins-BoldItalic.ttf */; };
@@ -40,7 +38,6 @@
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = PragmaticEnergySolution/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = PragmaticEnergySolution/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		18897126D0D44126B0A75022 /* Poppins-BoldItalic.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Poppins-BoldItalic.ttf"; path = "../assets/fonts/Poppins-BoldItalic.ttf"; sourceTree = "<group>"; };
-		244A5693032B4303BFCC5082 /* BootSplash.storyboard */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = BootSplash.storyboard; path = PragmaticEnergySolution/BootSplash.storyboard; sourceTree = "<group>"; };
 		3B4392A12AC88292D35C810B /* Pods-PragmaticEnergySolution.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-PragmaticEnergySolution.debug.xcconfig"; path = "Target Support Files/Pods-PragmaticEnergySolution/Pods-PragmaticEnergySolution.debug.xcconfig"; sourceTree = "<group>"; };
 		41677B5E28F44769A004BE56 /* Poppins-ExtraLightItalic.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Poppins-ExtraLightItalic.ttf"; path = "../assets/fonts/Poppins-ExtraLightItalic.ttf"; sourceTree = "<group>"; };
 		5709B34CF0A7D63546082F79 /* Pods-PragmaticEnergySolution.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-PragmaticEnergySolution.release.xcconfig"; path = "Target Support Files/Pods-PragmaticEnergySolution/Pods-PragmaticEnergySolution.release.xcconfig"; sourceTree = "<group>"; };
@@ -58,7 +55,6 @@
 		9AB44E0CB2E844E091228DFA /* Poppins-Bold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Poppins-Bold.ttf"; path = "../assets/fonts/Poppins-Bold.ttf"; sourceTree = "<group>"; };
 		B2E0B0AE716A4191A6AD9806 /* Poppins-ExtraBold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Poppins-ExtraBold.ttf"; path = "../assets/fonts/Poppins-ExtraBold.ttf"; sourceTree = "<group>"; };
 		B73442F5EC384339A7A8C680 /* Poppins-Regular.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Poppins-Regular.ttf"; path = "../assets/fonts/Poppins-Regular.ttf"; sourceTree = "<group>"; };
-		BA233283922E44048BC60D3C /* Colors.xcassets */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = folder.assetcatalog; name = Colors.xcassets; path = PragmaticEnergySolution/Colors.xcassets; sourceTree = "<group>"; };
 		BD60F5B56C484E86A0CEA93B /* Poppins-Black.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Poppins-Black.ttf"; path = "../assets/fonts/Poppins-Black.ttf"; sourceTree = "<group>"; };
 		C8EA5EA0D4AF4C4BA8B9B671 /* Poppins-ExtraLight.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Poppins-ExtraLight.ttf"; path = "../assets/fonts/Poppins-ExtraLight.ttf"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
@@ -87,8 +83,6 @@
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
-				244A5693032B4303BFCC5082 /* BootSplash.storyboard */,
-				BA233283922E44048BC60D3C /* Colors.xcassets */,
 			);
 			name = PragmaticEnergySolution;
 			sourceTree = "<group>";
@@ -229,8 +223,6 @@
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				DA9CA0F34F8620D3271A60A8 /* PrivacyInfo.xcprivacy in Resources */,
-				A8D8BB2C7D7F482B86842BD5 /* BootSplash.storyboard in Resources */,
-				824D71CFBD0F41939D765828 /* Colors.xcassets in Resources */,
 				0E9875CCC9F344EDB008FCB5 /* Poppins-ExtraLight.ttf in Resources */,
 				4DA15177039546C4995E17F9 /* Poppins-ThinItalic.ttf in Resources */,
 				8F8798AD9D734DEC8CCB832B /* Poppins-ExtraLightItalic.ttf in Resources */,
