@@ -11,6 +11,8 @@ import React, {
 } from 'react';
 import {
   ActivityIndicator,
+  HostInstance,
+  LayoutChangeEvent,
   NativeScrollEvent,
   NativeSyntheticEvent,
   RefreshControl,
@@ -74,8 +76,15 @@ import {
 } from './siteDetailModel';
 import { PullToRefreshGateContext, usePullToRefreshGate } from './pullToRefreshGate';
 import { SiteRefreshContext } from './siteRefresh';
+import { BodyViewportContext, createBodyViewportStore } from './bodyViewport';
 
 type SiteDetailRouteProp = RouteProp<DashboardStackParamList, 'SiteDetail'>;
+
+/** `getInnerViewRef()` is a public ScrollView instance method (ScrollView.js)
+ *  that RN's TypeScript types leave out. */
+type InnerViewAccess = { getInnerViewRef?: () => HostInstance | null };
+const scrollContentNode = (scroll: ScrollView | null): HostInstance | null =>
+  (scroll as unknown as InnerViewAccess | null)?.getInnerViewRef?.() ?? null;
 
 /** Which control started a refresh — only that control shows a spinner. */
 type RefreshSource = 'pull' | 'button' | 'retry';
@@ -213,6 +222,12 @@ const SiteDetail: FC = () => {
      the chip update (otherwise the morph appears to lag). The same rAF
      resets the body to the top — a new tab opens at its start. ── */
   const scrollRef = useRef<ScrollView>(null);
+  // Scroll offset + height of the body, published without re-rendering:
+  // the inline SLD pauses its flow animation while scrolled out of view.
+  const bodyViewport = useMemo(
+    () => createBodyViewportStore(() => scrollContentNode(scrollRef.current)),
+    [],
+  );
   const [pendingTab, setPendingTab] = useState<TabOption>('Summary');
   const [renderedTab, setRenderedTab] = useState<TabOption>('Summary');
   const rafRef = useRef<number | null>(null);
@@ -234,11 +249,12 @@ const SiteDetail: FC = () => {
       rafRef.current = requestAnimationFrame(() => {
         rafRef.current = null;
         scrollRef.current?.scrollTo({ y: 0, animated: false });
+        bodyViewport.setScrollY(0);
         setScrolledIfChanged(false);
         setRenderedTab(tab);
       });
     },
-    [setScrolledIfChanged],
+    [setScrolledIfChanged, bodyViewport],
   );
 
   useEffect(
@@ -249,9 +265,16 @@ const SiteDetail: FC = () => {
   );
 
   const handleBodyScroll = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) =>
-      setScrolledIfChanged(isBodyScrolled(e.nativeEvent.contentOffset.y)),
-    [setScrolledIfChanged],
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const y = e.nativeEvent.contentOffset.y;
+      bodyViewport.setScrollY(y);
+      setScrolledIfChanged(isBodyScrolled(y));
+    },
+    [setScrolledIfChanged, bodyViewport],
+  );
+  const handleBodyLayout = useCallback(
+    (e: LayoutChangeEvent) => bodyViewport.setHeight(e.nativeEvent.layout.height),
+    [bodyViewport],
   );
 
   // A child that owns vertical drags (the unlocked SLD viewport) switches
@@ -330,7 +353,9 @@ const SiteDetail: FC = () => {
         <ContentFade>
           <PullToRefreshGateContext.Provider value={acquirePullBlock}>
             <SiteRefreshContext.Provider value={handleHeaderRefresh}>
-              <ViewsContent tab={renderedTab} />
+              <BodyViewportContext.Provider value={bodyViewport.store}>
+                <ViewsContent tab={renderedTab} />
+              </BodyViewportContext.Provider>
             </SiteRefreshContext.Provider>
           </PullToRefreshGateContext.Provider>
         </ContentFade>
@@ -379,6 +404,10 @@ const SiteDetail: FC = () => {
         // events settle the hairline at rest.
         onScrollEndDrag={handleBodyScroll}
         onMomentumScrollEnd={handleBodyScroll}
+        onLayout={handleBodyLayout}
+        // Content above a tab section changed size (refresh strip, a card
+        // finished loading) → viewport consumers re-measure themselves.
+        onContentSizeChange={bodyViewport.notify}
         scrollEventThrottle={32}
         bounces={!pullBlocked}
         refreshControl={refreshControl}>

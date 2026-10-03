@@ -25,6 +25,7 @@ import {
 } from '../src/components/screens/Authenticated/SiteDetail/components/sldViewportFit';
 import { buildSldPhoneLayout, SLD_PHONE_CARD, SldPhoneLayout } from '../src/utils/sldPhoneLayout';
 import { buildSldGrouping } from '../src/utils/sldGroup';
+import { isLogoNode, resolveNodeRects } from '../src/utils/sld';
 import { sldGraphMock } from '../src/data/mock/sld';
 import { SLDEdge, SLDGraph, SLDNode } from '../src/types';
 
@@ -129,6 +130,7 @@ describe('computeSldFit — fill the width', () => {
       overviewScale: INLINE_W / 360,
       reserve: 'none',
       insets: SLD_NO_INSETS,
+      mask: 0,
     });
     // Wider than the diagram (tablet, Pro Max full screen): never magnified.
     const wide = computeSldFit({ ...input, viewWidth: 820 });
@@ -205,6 +207,9 @@ describe('computeSldFit — fill the width', () => {
     const fit = computeSldFit({ ...input, overlay: PILL });
     expect(fit.reserve).toBe('top');
     expect(fit.insets).toEqual({ ...SLD_NO_INSETS, top: STRIP });
+    // The reserved strip is a masked band down to the fit area's top.
+    expect(fit.mask).toBe(STRIP);
+    expect(plain.mask).toBe(0);
     expect(fit.scale).toBe(plain.scale);
     // Exactly the panel height sldPanelHeight asks for: flush under the strip.
     expect(box(input, fit).y).toBeCloseTo(STRIP, 9);
@@ -402,6 +407,10 @@ const FIXTURES: [string, SldPhoneLayout][] = [
   ['star + a 14-unit island', buildSldPhoneLayout(starWithIsland(6, 14))],
 ];
 
+/** The card rects the node layer draws (FRAME coordinates), as SLDViewport passes them. */
+const cardRects = (l: SldPhoneLayout): Rect[] =>
+  Array.from(resolveNodeRects(l.graph, l.bounds).values());
+
 /** The inline panel for a layout (content box, mode pill on), as SLDViewport sets it up. */
 const inlinePanel = (l: SldPhoneLayout) => {
   const input: SldFitInput = {
@@ -418,6 +427,7 @@ const inlinePanel = (l: SldPhoneLayout) => {
     contentHeight: l.bounds.height,
     overlay: PILL,
     focusY: l.focus.y,
+    cards: cardRects(l),
   };
   const fit = computeSldFit(input);
   const geo = {
@@ -431,7 +441,7 @@ const inlinePanel = (l: SldPhoneLayout) => {
 };
 
 const boxOf = (input: SldFitInput, t: SldViewTransform): Rect =>
-  box(input, { ...t, overviewScale: 0, reserve: 'none', insets: SLD_NO_INSETS });
+  box(input, { ...t, overviewScale: 0, reserve: 'none', insets: SLD_NO_INSETS, mask: 0 });
 
 /** Screen point of content point `p` (frame coordinates) under transform `t`. */
 const screenOf = (input: SldFitInput, t: SldViewTransform, p: { x: number; y: number }) => ({
@@ -526,3 +536,208 @@ describe('zoom about the viewport centre, clamped to the fit area', () => {
     }
   });
 });
+
+/* ─────────── the pill never covers a card at open ─────────── */
+
+describe('the Grouped/Units pill never covers a card at open (hub-focused fits)', () => {
+  // Field report (Android release, Lucky Cement, Oct 2026): full screen →
+  // Units re-fitted centred on the "LCL Plant" hub, and the pill covered
+  // SG-CI-PV-06's P/Q values. A diagram taller than the view must cover its
+  // fit area, so its upper rows ran up into the strip reserved for the pill:
+  // the strip only moved the fit AREA. The strip is now a masked band
+  // (`fit.mask`, painted by SLDViewport) and its edge settles between rows.
+
+  /** SLD_MODE_TOGGLE_BOX on a device `screenWidth` points wide. */
+  const pillFor = (screenWidth: number): SldOverlayBox => {
+    const m = sldModeToggleMetrics(normalizeAt(screenWidth), 2);
+    return { width: m.width, height: m.height, edge: 16, gap: 8 };
+  };
+
+  interface Host {
+    label: string;
+    screenWidth: number;
+    viewWidth: number;
+    /** Fixed view height (full screen), or the inline panel's cap. */
+    viewHeight?: number;
+    inlineMax?: number;
+    insets: SldInsets;
+  }
+
+  const HOSTS: Host[] = [
+    { label: 'full screen, iPhone 17 Pro', screenWidth: 402, viewWidth: 402, viewHeight: 874, insets: IPHONE_17_PRO },
+    { label: 'full screen, Pixel 7a e2e', screenWidth: 412, viewWidth: 412, viewHeight: 915, insets: ANDROID_E2E },
+    { label: 'full screen, Pixel 7a bars outside', screenWidth: 411, viewWidth: 411, viewHeight: 866, insets: { top: 24, right: 0, bottom: 0, left: 0 } },
+    { label: 'full screen, 360pt Android', screenWidth: 360, viewWidth: 360, viewHeight: 740, insets: SLD_NO_INSETS },
+    // Inline: content box = screen − 2 × 16 gutter − 2 × 1 border; the
+    // panel follows its diagram up to 0.85 × the window height.
+    { label: 'inline, 393pt iPhone', screenWidth: 393, viewWidth: 393 - 34, inlineMax: 722, insets: SLD_NO_INSETS },
+    { label: 'inline, Pixel 7a', screenWidth: 412, viewWidth: 412 - 34, inlineMax: 775, insets: SLD_NO_INSETS },
+    { label: 'inline, 360pt Android', screenWidth: 360, viewWidth: 360 - 34, inlineMax: 627, insets: SLD_NO_INSETS },
+  ];
+
+  const LAYOUTS: [string, SldPhoneLayout][] = [
+    ['Grouped', GROUPED],
+    ['Units', UNITS],
+    ['hub under a 12-deep chain', buildSldPhoneLayout(chain(12))],
+    ['star + a 14-unit island', buildSldPhoneLayout(starWithIsland(6, 14))],
+  ];
+
+  const open = (host: Host, l: SldPhoneLayout, withCards = true) => {
+    const pill = pillFor(host.screenWidth);
+    const viewHeight =
+      host.viewHeight ??
+      sldPanelHeight({
+        viewWidth: host.viewWidth,
+        contentWidth: l.bounds.width,
+        contentHeight: l.bounds.height,
+        overlay: pill,
+        minHeight: 318,
+        maxHeight: host.inlineMax!,
+      });
+    const input: SldFitInput = {
+      viewWidth: host.viewWidth,
+      viewHeight,
+      contentWidth: l.bounds.width,
+      contentHeight: l.bounds.height,
+      insets: host.insets,
+      overlay: pill,
+      focusY: l.focus.y,
+      cards: withCards ? cardRects(l) : undefined,
+    };
+    const fit = computeSldFit(input);
+    const pillBox: Rect = {
+      x: host.viewWidth - host.insets.right - pill.edge - pill.width,
+      y: host.insets.top + pill.edge,
+      w: pill.width,
+      h: pill.height,
+    };
+    /** Each card's on-screen rect at the fit, with its heading. */
+    const onScreen = Array.from(resolveNodeRects(l.graph, l.bounds)).map(([id, c]) => {
+      const p = screenOf(input, fit, c);
+      const heading = l.graph.nodes.find(n => n.id === id)!.data.heading;
+      return { id, heading, rect: { x: p.x, y: p.y, w: c.w * fit.scale, h: c.h * fit.scale } };
+    });
+    const hub = screenY(input, fit, l.focus.y);
+    return { input, fit, pill, pillBox, onScreen, hub };
+  };
+
+  /** Positive-area overlap of a and b (touching edges don't count). */
+  const hit = (a: Rect, b: Rect) =>
+    a.x < b.x + b.w - EPS && b.x < a.x + a.w - EPS && a.y < b.y + b.h - EPS && b.y < a.y + a.h - EPS;
+
+  /** The part of `r` below the mask band (the band hides the rest). */
+  const visible = (r: Rect, mask: number): Rect | null => {
+    const top = Math.max(r.y, mask);
+    return r.y + r.h - top > EPS ? { ...r, y: top, h: r.y + r.h - top } : null;
+  };
+
+  /** The pill plus its clearance gap — what a visible card must stay out of. */
+  const zoneOf = (pillBox: Rect, pill: SldOverlayBox): Rect => ({
+    x: pillBox.x - pill.gap,
+    y: pillBox.y - pill.gap,
+    w: pillBox.w + 2 * pill.gap,
+    h: pillBox.h + 2 * pill.gap,
+  });
+
+  for (const host of HOSTS) {
+    for (const [name, l] of LAYOUTS) {
+      it(`${host.label} · ${name}: no visible card under the pill, hub in view`, () => {
+        const { input, fit, pill, pillBox, onScreen, hub } = open(host, l);
+        const label = `${host.label} · ${name}`;
+        const zone = zoneOf(pillBox, pill);
+        // No VISIBLE part of any card reaches the pill (+ its gap).
+        const covered = onScreen
+          .filter(({ rect }) => {
+            const v = visible(rect, fit.mask);
+            return v !== null && hit(v, zone);
+          })
+          .map(c => c.heading);
+        expect([label, covered]).toEqual([label, []]);
+        if (fit.mask > 0) {
+          // The band holds the whole pill + gap…
+          expect([label, pillBox.y + pillBox.h + pill.gap <= fit.mask + EPS]).toEqual([label, true]);
+          // …and its edge falls between rows. (Not always possible: a hub
+          // the clamp pins to the area's bottom under a deep chain can't
+          // move — the band still hides what's under the pill.)
+          const cut = onScreen
+            .filter(({ rect }) => rect.y < fit.mask - EPS && rect.y + rect.h > fit.mask + EPS)
+            .map(c => c.heading);
+          if (name === 'Grouped' || name === 'Units') expect([label, cut]).toEqual([label, []]);
+        } else {
+          // No band: nothing at all under the pill.
+          const under = onScreen.filter(({ rect }) => hit(rect, zone)).map(c => c.heading);
+          expect([label, under]).toEqual([label, []]);
+        }
+        // The hub opens in view, below the band and above the bottom inset.
+        const hubRect = onScreen.find(c => c.id === hubId(l))!.rect;
+        expect([label, hubRect.y >= fit.mask - EPS]).toEqual([label, true]);
+        expect([label, hubRect.y + hubRect.h <= input.viewHeight - host.insets.bottom + EPS]).toEqual([label, true]);
+        // …where the hub-centred fit put it, give or take the edge settle
+        // (at most half the tallest card).
+        const bare = open(host, l, false);
+        const tallest = Math.max(...onScreen.map(c => c.rect.h));
+        expect([label, Math.abs(hub - bare.hub) <= tallest / 2 + EPS]).toEqual([label, true]);
+        // Still a valid resting transform (inside the clamp range).
+        expectInView(label, input, fit.insets, boxOf(input, fit));
+      });
+    }
+  }
+
+  it('the reported case: SG-CI-PV-06 is never visible under the pill (full screen, Units)', () => {
+    for (const host of HOSTS) {
+      const { fit, pill, pillBox, onScreen } = open(host, UNITS);
+      const card = onScreen.find(c => c.heading === 'SG-CI-PV-06')!;
+      const v = visible(card.rect, fit.mask);
+      expect([host.label, v !== null && hit(v, zoneOf(pillBox, pill))]).toEqual([host.label, false]);
+      // Before the band, the hub-centred fit drew it right under the pill.
+      expect([host.label, fit.reserve, fit.mask > 0]).toEqual([host.label, 'top', true]);
+    }
+  });
+
+  it('Grouped full screen keeps its plain fit: no band, pill over empty space', () => {
+    const { fit, pill, pillBox, onScreen } = open(HOSTS[0], GROUPED);
+    expect(fit.reserve).toBe('none');
+    expect(fit.mask).toBe(0);
+    expect(onScreen.filter(({ rect }) => hit(rect, zoneOf(pillBox, pill)))).toEqual([]);
+  });
+
+  it('without card rects the band still masks; the hub-centred fit is not nudged', () => {
+    const host = HOSTS[0];
+    const bare = open(host, UNITS, false);
+    const withCards = open(host, UNITS);
+    expect(bare.fit.mask).toBe(withCards.fit.mask);
+    expect(bare.fit.scale).toBe(withCards.fit.scale);
+    // Hub-centred in the fit area when nothing can be nudged.
+    const areaH = bare.input.viewHeight - bare.fit.insets.top - bare.fit.insets.bottom;
+    expect(bare.hub).toBeCloseTo(bare.fit.insets.top + areaH / 2, 9);
+    // The settle only ever moves the diagram a little.
+    expect(Math.abs(withCards.fit.translateY - bare.fit.translateY)).toBeLessThan(80);
+  });
+
+  it('settles the band edge between rows even when the hub sits at a card boundary', () => {
+    // A synthetic column: 10 cards 100 tall, 16 apart, hub in the middle.
+    const cards: Rect[] = Array.from({ length: 10 }, (_, i) => ({ x: 200, y: 12 + i * 116, w: 148, h: 100 }));
+    const contentHeight = 12 + 10 * 116 - 16 + 12;
+    for (let focusY = 300; focusY <= 900; focusY += 37) {
+      const input: SldFitInput = {
+        viewWidth: 360,
+        viewHeight: 600,
+        contentWidth: 360,
+        contentHeight,
+        overlay: PILL,
+        focusY,
+        cards,
+      };
+      const fit = computeSldFit(input);
+      const cut = cards.filter(c => {
+        const top = screenOf(input, fit, c).y;
+        return top < fit.mask - EPS && top + c.h * fit.scale > fit.mask + EPS;
+      });
+      expect([focusY, cut]).toEqual([focusY, []]);
+      expectInView(String(focusY), input, fit.insets, boxOf(input, fit));
+    }
+  });
+});
+
+/** The hub a layout centres on: the logo node (every fixture has one). */
+const hubId = (l: SldPhoneLayout): string => l.graph.nodes.find(isLogoNode)!.id;

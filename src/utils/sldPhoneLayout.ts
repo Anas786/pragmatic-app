@@ -85,7 +85,8 @@ export const SLD_PHONE_CARD = {
   padTop: 10,
   padBottom: 10,
   iconWell: 28,
-  icon: 22,
+  /** MaterialIcons glyph size in the well (see src/utils/sldIcon.ts). */
+  icon: 18,
   headerGap: 8,
   headingSize: 14,
   headingLine: 18,
@@ -110,7 +111,8 @@ export const SLD_PHONE_HUB = {
   padX: 14,
   padY: 10,
   iconWell: 36,
-  icon: 28,
+  /** MaterialIcons glyph size in the well (see src/utils/sldIcon.ts). */
+  icon: 22,
   gap: 10,
   headingSize: 14,
   headingLine: 18,

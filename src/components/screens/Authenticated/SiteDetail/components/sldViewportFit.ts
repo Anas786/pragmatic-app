@@ -1,7 +1,7 @@
 /**
  * Pure SLD viewport geometry: the Grouped/Units pill's footprint, the
- * initial fit (fill the WIDTH, scroll-pan the rest) and the inline panel's
- * content-driven height.
+ * initial fit (fill the WIDTH, scroll-pan the rest; the band masked under
+ * the pill) and the inline panel's content-driven height.
  *
  * No React / React Native imports — unit-tested in
  * `__tests__/sldViewportFit.test.ts`.
@@ -25,6 +25,14 @@
  * 2-column diagram — see src/utils/sldPhoneLayout.ts), so safe-area insets
  * are used as the device reports them.
  */
+
+/** An axis-aligned rectangle (top-left + size). */
+export interface SldRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
 /** Edge insets in points. */
 export interface SldInsets {
@@ -139,6 +147,13 @@ export interface SldFitInput {
    * is taller than the view — the hub. Defaults to the frame's centre.
    */
   focusY?: number;
+  /**
+   * Card footprints in FRAME coordinates (bounds origin) — the rects the
+   * node layer draws (`resolveNodeRects`). With them, a diagram that runs
+   * under the overlay's band opens with the band's edge between two card
+   * rows, so no card is cut in half by it (see {@link computeSldFit}).
+   */
+  cards?: ReadonlyArray<SldRect>;
 }
 
 /** Strip given up so the diagram clears the overlay. */
@@ -162,14 +177,17 @@ export interface SldFit {
    * Zoom / pan clamp to the same area ({@link sldClampTranslate}).
    */
   insets: SldInsets;
+  /**
+   * Height (view points, from the view's top edge) of the band the host
+   * must paint OVER the diagram, under the overlay: `insets.top` when a top
+   * strip is reserved, else 0. Whatever is panned or zoomed into the band —
+   * and the rows of a diagram taller than the view that sit above the fit
+   * area at open — is hidden by it, so the overlay never covers a card.
+   */
+  mask: number;
 }
 
-interface Rect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
+type Rect = SldRect;
 
 /**
  * Clamp a translation on ONE axis (see the transform model above) so the
@@ -298,7 +316,75 @@ const fitInto = (input: SldFitInput, ins: SldInsets, reserve: SldFitReserve): Sl
     overviewScale: Math.min(scale, availH / ch),
     reserve,
     insets: ins,
+    mask: reserve === 'top' ? ins.top : 0,
   };
+};
+
+/** Float slack for the mask-edge interval maths. */
+const EDGE_EPS = 1e-6;
+
+/**
+ * A diagram taller than its fit area covers the area, so at the hub-centred
+ * fit its rows above the area run up under the mask band — and the band's
+ * edge would usually cut a card in half (the half under the pill used to be
+ * the visible one). Nudge `translateY` by the smallest amount that puts the
+ * edge into a gap between card rows (or above the diagram's top), staying
+ * inside the clamp range and keeping the hub's row — the cards spanning
+ * `focusY` — wholly inside the fit area; a tie moves the content down (the
+ * straddling card shows whole). When no such translation exists (a hub
+ * pinned to the area's bottom by the clamp, under a deep chain) the fit is
+ * left as is: the band still hides everything under the pill.
+ */
+const settleMaskEdge = (input: SldFitInput, fit: SldFit): SldFit => {
+  const cards = input.cards;
+  if (fit.mask <= 0 || !cards || cards.length === 0) return fit;
+  const H = input.viewHeight;
+  const ch = Math.max(1, input.contentHeight);
+  const s = fit.scale;
+  const box = ch * s;
+  // The clamp range of `sldClampTranslate` (either order — see there).
+  const toEnd = H / 2 - fit.insets.bottom - box / 2;
+  const toStart = fit.insets.top - H / 2 + box / 2;
+  const lo = Math.min(toEnd, toStart);
+  const hi = Math.max(toEnd, toStart);
+  // A card straddles the edge (top above it, bottom below) for translations
+  // strictly between these two values.
+  const blocked = cards.map(c => {
+    const enter = fit.mask - H / 2 - s * (c.y + c.h - ch / 2);
+    const leave = fit.mask - H / 2 - s * (c.y - ch / 2);
+    return [enter, leave] as const;
+  });
+  // The hub's row stays wholly inside the fit area (when it opens there).
+  const areaTop = fit.insets.top;
+  const areaBottom = H - fit.insets.bottom;
+  const focusY = input.focusY;
+  const screenTop = (t: number, y: number) => H / 2 + t + s * (y - ch / 2);
+  const rowInView = (row: ReadonlyArray<SldRect>) => (t: number) =>
+    row.every(
+      c =>
+        screenTop(t, c.y) >= areaTop - EDGE_EPS &&
+        screenTop(t, c.y + c.h) <= areaBottom + EDGE_EPS,
+    );
+  const target = fit.translateY;
+  const hubRow =
+    focusY === undefined ? [] : cards.filter(c => c.y <= focusY && focusY <= c.y + c.h);
+  const keepHub = rowInView(rowInView(hubRow)(target) ? hubRow : []);
+  const free = (t: number) =>
+    t >= lo - EDGE_EPS &&
+    t <= hi + EDGE_EPS &&
+    keepHub(t) &&
+    blocked.every(([enter, leave]) => t <= enter + EDGE_EPS || t >= leave - EDGE_EPS);
+  if (free(target)) return fit;
+  let best: number | null = null;
+  for (const t of [lo, hi, ...blocked.flat()]) {
+    if (!free(t)) continue;
+    const d = Math.abs(t - target);
+    const bestD = best === null ? Infinity : Math.abs(best - target);
+    if (d < bestD - EDGE_EPS || (Math.abs(d - bestD) <= EDGE_EPS && best !== null && t > best)) {
+      best = t;
+    }
+  }
+  return best === null ? fit : { ...fit, translateY: best };
 };
 
 /** The fitted diagram's on-screen box (bounds incl. their empty padding). */
@@ -333,9 +419,19 @@ export const sldOverlayStrip = (overlay: SldOverlayBox): number =>
  *
  * Conservative by construction: the test uses the full graph BOUNDS, which
  * contain every card (`resolveNodeRects` clamps cards inside them), so a fit
- * that clears the bounds clears every card. A diagram taller than the view
- * always reaches under the overlay somewhere; the top strip then keeps its
- * TOP row clear whenever the view is panned to the top (the clamp above).
+ * that clears the bounds clears every card.
+ *
+ * A reserved strip is a real band (`mask`): the host paints it over the
+ * diagram, under the overlay. That is what keeps a diagram TALLER than the
+ * view clear of the pill at open: centred on its hub it must cover the fit
+ * area, so its upper rows run up past the area's top into the strip — no
+ * translation can avoid that and keep the hub in view (the phone layout's
+ * row gaps, 16–40 units, are narrower than the 44pt pill; the only clear
+ * translation is the diagram's top under the strip, which pushes Lucky
+ * Cement's Units hub off-screen), and the strip alone used to leave those
+ * rows visible under the pill (SG-CI-PV-06's values, Units full screen).
+ * With `cards`, the hub-centred translation is then nudged so the band's
+ * edge falls between card rows ({@link settleMaskEdge}).
  */
 export const computeSldFit = (input: SldFitInput): SldFit => {
   const ins = input.insets ?? SLD_NO_INSETS;
@@ -350,7 +446,10 @@ export const computeSldFit = (input: SldFitInput): SldFit => {
     h: ov.height + ov.gap * 2,
   };
   if (!overlaps(diagramBox(input, plain), zone)) return plain;
-  return fitInto(input, { ...ins, top: ins.top + sldOverlayStrip(ov) }, 'top');
+  return settleMaskEdge(
+    input,
+    fitInto(input, { ...ins, top: ins.top + sldOverlayStrip(ov) }, 'top'),
+  );
 };
 
 export interface SldPanelHeightInput {

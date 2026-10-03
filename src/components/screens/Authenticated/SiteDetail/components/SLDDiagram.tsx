@@ -12,6 +12,7 @@ import { Scheme, space, useThemedStyles } from 'src/theme';
 import { normalizeHeight, normalizeWidth, SLDBounds } from 'src/utils';
 import { DashboardStackParamList } from 'src/types';
 import { usePullToRefreshBlock } from '../pullToRefreshGate';
+import { useBodyViewportVisibility } from '../bodyViewport';
 import SLDViewport from './SLDViewport';
 import { SLD_MODE_TOGGLE_BOX } from './ControlButtons';
 import { sldPanelHeight, SLD_VIEWPORT_BORDER } from './sldViewportFit';
@@ -140,6 +141,17 @@ const SLDDiagram: FC = () => {
   // SiteDetail's pull-to-refresh (no-op outside SiteDetail, e.g. tests).
   usePullToRefreshBlock(!locked);
   const [orthogonal, setOrthogonal] = useState(true);
+  // The flowing dashes only animate while the panel overlaps the body's
+  // visible area: once it is scrolled fully out of view (possible when the
+  // Summary content above it is taller than the screen — small phones,
+  // large text) the flow clock's UI-thread loop is paused and nothing is
+  // redrawn. A shared value flipped from the scroll events — no React
+  // commit — and held here so it survives the keyed Grouped ⇄ Units remount.
+  const {
+    ref: panelRef,
+    onLayout: onPanelLayout,
+    visible: inView,
+  } = useBodyViewportVisibility();
 
   // Full-screen is a dedicated navigation screen. It lives in the main React
   // surface — unlike a core <Modal>, which is a separate Fabric surface that
@@ -167,7 +179,11 @@ const SLDDiagram: FC = () => {
   }
 
   return (
-    <View style={styles.container}>
+    <View
+      ref={panelRef}
+      onLayout={onPanelLayout}
+      collapsable={false}
+      style={styles.container}>
       {/* Keyed by mode: switching Grouped ⇄ Units remounts the viewport so it
           re-fits to the new graph's bounds (fresh pan/zoom shared values).
           Lock / routing are held above, so they persist across the switch. */}
@@ -186,6 +202,7 @@ const SLDDiagram: FC = () => {
         onLockedChange={setLocked}
         orthogonal={orthogonal}
         onOrthogonalChange={setOrthogonal}
+        animate={inView}
       />
     </View>
   );

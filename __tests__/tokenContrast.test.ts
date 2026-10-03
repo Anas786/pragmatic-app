@@ -20,6 +20,17 @@ import {
   type as typeRamp,
 } from '../src/theme/tokens';
 import { heroTint } from '../src/components/screens/Authenticated/Dashboard/siteCardModel';
+import {
+  SLD_DEFAULT_GLYPH,
+  SLD_HUB_GLYPH,
+  SLD_ICON_KEY_GLYPH,
+  SLD_TYPE_GLYPH,
+  sldIconAccents,
+  sldNodeIcon,
+} from '../src/utils/sldIcon';
+import { buildSldGrouping } from '../src/utils/sldGroup';
+import { edgeColorForScheme, isLogoNode } from '../src/utils/sld';
+import { sldGraphMock } from '../src/data/mock/sld';
 
 type RGB = [number, number, number];
 
@@ -64,12 +75,15 @@ const contrast = (fg: string, bg: string): number => {
   return (hi + 0.05) / (lo + 0.05);
 };
 
+/** `fill` (may be translucent) flattened over an opaque `base`, as #RRGGBB. */
+const flatten = (fill: string, base: string): string =>
+  `#${over(fill, base)
+    .map(v => Math.round(v).toString(16).padStart(2, '0'))
+    .join('')}`;
+
 /** Contrast of `fg` on a translucent `fill` composited over `base`. */
-const contrastOnTint = (fg: string, fill: string, base: string): number => {
-  const tinted = over(fill, base);
-  const hex = `#${tinted.map(v => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
-  return contrast(fg, hex);
-};
+const contrastOnTint = (fg: string, fill: string, base: string): number =>
+  contrast(fg, flatten(fill, base));
 
 const AA = 4.5;
 const NON_TEXT = 3;
@@ -185,6 +199,83 @@ describe.each(SCHEMES)('%s scheme', (name, s) => {
     expect(failing).toEqual([]);
   });
 
+  // SLD node cards (SummaryView/SLDCanvas): a MaterialIcons glyph in its
+  // theme's ink on a tinted icon well, on the card surface. In dark mode a
+  // source card also lays its backend accent over the surface at '0D'
+  // before the well — so every wash colour the diagram can carry is tried,
+  // plus the white / black extremes. Field bug: the old GIF artwork drew a
+  // white turbine on the pale-cyan "Wind · 6" well in light mode.
+  const isDark = name === 'dark';
+  const SLD_BACKEND_ACCENTS = Array.from(
+    new Set(sldGraphMock.nodes.map(n => n.data.icon.color.toUpperCase())),
+  );
+  const sldCardBases = (): string[] =>
+    isDark
+      ? [
+          s.surface,
+          ...[...Object.values(energyPalette), s.brand, ...SLD_BACKEND_ACCENTS, '#FFFFFF', '#000000'].map(
+            accent => flatten(`${edgeColorForScheme(accent, true)}0D`, s.surface),
+          ),
+        ]
+      : [s.surface];
+
+  it('SLD icon glyphs are ≥ 3:1 on their icon wells (every source + brand, over every card base)', () => {
+    const failing = Object.entries(sldIconAccents(s, isDark))
+      .flatMap(([key, { well, ink }]) =>
+        sldCardBases().map(base => [key, base, contrastOnTint(ink, well, base)] as const),
+      )
+      .filter(([, , ratio]) => ratio < NON_TEXT);
+    expect(failing).toEqual([]);
+  });
+
+  it('every node of the Lucky Cement SLD (Grouped + Units) gets a legible themed glyph', () => {
+    const grouped = buildSldGrouping(sldGraphMock).graph;
+    const failing = [...grouped.nodes, ...sldGraphMock.nodes]
+      .flatMap(node => {
+        const icon = sldNodeIcon(node, s, isDark);
+        // The hub capsule has no accent wash.
+        const bases = isLogoNode(node) ? [s.surface] : sldCardBases();
+        return bases.map(base => [node.data.heading, contrastOnTint(icon.ink, icon.well, base)] as const);
+      })
+      .filter(([, ratio]) => ratio < NON_TEXT);
+    expect(failing).toEqual([]);
+  });
+
+  it('SLD wells follow the energy source; the hub, WHR and switch gear take the brand', () => {
+    const grouped = buildSldGrouping(sldGraphMock).graph;
+    const byHeading = new Map(
+      [...grouped.nodes, ...sldGraphMock.nodes].map(n => [n.data.heading, sldNodeIcon(n, s, isDark)]),
+    );
+    const accents = sldIconAccents(s, isDark);
+    const expectations: [string, keyof typeof accents, string][] = [
+      ['Wind · 6', 'wind', 'wind-power'],
+      ['Solar · 9', 'solar', 'solar-power'],
+      ['GW-WTG-01', 'wind', 'wind-power'],
+      ['SG-CI-PV-06', 'solar', 'solar-power'],
+      ['Captive Plant', 'genset', 'local-gas-station'],
+      ['BESS', 'battery', 'battery-charging-full'],
+      ['WHR Plant', 'brand', 'local-fire-department'],
+      ['SVG', 'brand', 'swap-horiz'],
+      ['LCL Plant', 'brand', 'factory'],
+    ];
+    for (const [heading, accent, glyph] of expectations) {
+      const icon = byHeading.get(heading)!;
+      expect([heading, icon.accent, icon.glyph, icon.well, icon.ink]).toEqual([
+        heading,
+        accent,
+        glyph,
+        accents[accent].well,
+        accents[accent].ink,
+      ]);
+    }
+    // Light mode: the glyph is always a DARK ink on its pale well.
+    if (!isDark) {
+      for (const { ink } of Object.values(accents)) {
+        expect(luminance(parseColor(ink).rgb)).toBeLessThan(0.25);
+      }
+    }
+  });
+
   it('borderStrong meets the 3:1 non-text minimum on surface', () => {
     expect(contrast(s.borderStrong, s.surface)).toBeGreaterThanOrEqual(NON_TEXT);
   });
@@ -196,6 +287,19 @@ describe.each(SCHEMES)('%s scheme', (name, s) => {
       expect(soft.a).toBeCloseTo(alpha, 5);
       expect(soft.rgb).toEqual(parseColor(semantic[role]).rgb);
     }
+  });
+});
+
+describe('SLD node glyphs', () => {
+  it('every glyph name exists in the bundled MaterialIcons font', () => {
+    const glyphMap: Record<string, number> = require('react-native-vector-icons/glyphmaps/MaterialIcons.json');
+    const names = [
+      ...Object.values(SLD_TYPE_GLYPH),
+      ...Object.values(SLD_ICON_KEY_GLYPH),
+      SLD_DEFAULT_GLYPH,
+      SLD_HUB_GLYPH,
+    ];
+    expect(names.filter(n => !(n in glyphMap))).toEqual([]);
   });
 });
 

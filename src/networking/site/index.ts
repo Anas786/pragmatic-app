@@ -1,7 +1,7 @@
 import { ISiteAllData, ISiteConfig, TrendDataResponse } from 'src/types';
 import { display, inspectError } from 'src/utils';
 import { appAxios } from '../config';
-import { FRESH_PARAM } from '../freshFetch';
+import { FRESH_PARAM, markFromOrigin, sentPastCdn } from '../freshFetch';
 
 /**
  * GET /protected/data/all/{siteId}
@@ -20,6 +20,11 @@ import { FRESH_PARAM } from '../freshFetch';
  * old — is skipped. Used when the user OPENS a site (useSwitchActiveSite),
  * so the header age is accurate from the first paint.
  *
+ * A response whose request went past the CDN (this option, or any request
+ * sent during a user refresh) is tagged with `markFromOrigin`: the
+ * site-data cache always accepts it, whereas a CDN copy older than the
+ * cached snapshot is ignored (`keepNewerSiteData`, useSiteData.ts).
+ *
  * Spec: openapi.yaml#/paths/protected/data/all/{id}/get
  */
 export const getSiteAllData = async (
@@ -28,15 +33,17 @@ export const getSiteAllData = async (
 ): Promise<ISiteAllData> => {
   if (!siteId) throw new Error('getSiteAllData: siteId is required');
   try {
-    const { data } = await appAxios.get<ISiteAllData>(
+    const response = await appAxios.get<ISiteAllData>(
       `/protected/data/all/${encodeURIComponent(siteId)}`,
       options?.bypassCdn ? { params: { [FRESH_PARAM]: Date.now() } } : undefined,
     );
-    return {
+    const data = response?.data;
+    const result: ISiteAllData = {
       live: data?.live ?? null,
       processed: data?.processed ?? null,
       alarms: data?.alarms ?? null,
     };
+    return sentPastCdn(response?.config) ? markFromOrigin(result) : result;
   } catch (err) {
     display('site.getSiteAllData FAILED', inspectError(err));
     throw err;
@@ -262,6 +269,13 @@ export interface TrendDataArgs {
  *
  * Auth: Bearer accessToken — attached automatically by the axios request
  * interceptor.
+ *
+ * A response whose request went past the CDN (sent during a user refresh)
+ * is tagged with `markFromOrigin`, like `getSiteAllData`: the trend cache
+ * always accepts it, whereas an older CDN copy is ignored
+ * (`keepNewerTrendData`, useTrendData.ts). Preset windows are relative
+ * (`now() - INTERVAL …`), so their URL never changes and CloudFront can
+ * answer one with a copy up to s-maxage = 30 min old.
  */
 export const getTrendData = async (
   siteId: string,
@@ -270,14 +284,16 @@ export const getTrendData = async (
 ): Promise<TrendDataResponse> => {
   if (!siteId) throw new Error('getTrendData: siteId is required');
   try {
-    const { data } = await appAxios.get<TrendDataResponse>(
+    const response = await appAxios.get<TrendDataResponse>(
       `/protected/data/v2/trends/${encodeURIComponent(siteId)}`,
       { params: { idx, start: args.start, end: args.end, tz: args.tz } },
     );
-    return {
+    const data = response?.data;
+    const result: TrendDataResponse = {
       metadata: data?.metadata,
       data: Array.isArray(data?.data) ? data.data : [],
     };
+    return sentPastCdn(response?.config) ? markFromOrigin(result) : result;
   } catch (err) {
     display('site.getTrendData FAILED', inspectError(err));
     throw err;

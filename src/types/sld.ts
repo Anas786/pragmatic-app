@@ -30,7 +30,8 @@ export interface SLDNodeKey {
 
 /** Icon descriptor. `name` maps to a GIF via `resolveLottieIcon`. */
 export interface SLDNodeIcon {
-  /** Hex accent colour (used to tint the node, not the GIF itself). */
+  /** Hex accent colour (the card's top bar / border / edges; the icon well
+   *  and glyph follow the energy source — see src/utils/sldIcon.ts). */
   color: string;
   /** Icon key, e.g. "industry" / "wind" / "solarLg" / "genset" / "battery" / "switchLg". */
   name: string;

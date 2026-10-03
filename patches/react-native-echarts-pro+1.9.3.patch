@@ -1,8 +1,29 @@
 diff --git a/node_modules/react-native-echarts-pro/src/components/Echarts/index.js b/node_modules/react-native-echarts-pro/src/components/Echarts/index.js
-index c319b69..18081e8 100755
+index c319b69..01622d1 100755
 --- a/node_modules/react-native-echarts-pro/src/components/Echarts/index.js
 +++ b/node_modules/react-native-echarts-pro/src/components/Echarts/index.js
-@@ -50,6 +50,14 @@ function Echarts(props, ref) {
+@@ -5,6 +5,7 @@ import React, {
+   forwardRef,
+   useEffect,
+   useImperativeHandle,
++  useMemo,
+   useRef,
+   useState,
+ } from "react";
+@@ -16,12 +17,9 @@ import { stringIfy } from "../../util/toString";
+ 
+ function Echarts(props, ref) {
+   const eChartRef = useRef();
+-  const [extensionScript, setExtensionScript] = useState("");
+   const [instanceFlag] = useState(false);
+   const [showContainer, setShowContainer] = useState(true);
+   const [instanceResult, setInstanceResult] = useState({});
+-  const [fontFamiliesObject, setFontFamiliesObject] = useState({});
+-  const [eventArrays, setEventArrays] = useState([]);
+   const latestCount = useRef(instanceFlag);
+   const latestResult = useRef(instanceResult);
+   /**
+@@ -50,6 +48,14 @@ function Echarts(props, ref) {
       * @param {object} params
       */
      async getInstance(functionName, params) {
@@ -17,3 +38,177 @@ index c319b69..18081e8 100755
        eChartRef.current?.postMessage(
          JSON.stringify({ type: "getInstance", functionName, params })
        );
+@@ -71,18 +77,25 @@ function Echarts(props, ref) {
+   /**
+    * Customized fontFamily handle.
+    * Concat fontType and fontFile strings.
++   *
++   * PATCH (patches/react-native-echarts-pro+1.9.3.patch): this, the
++   * extension scripts and the event list below are DERIVED with useMemo.
++   * They were state set from mount effects, so every chart rendered 2-3
++   * times on mount, and each render rebuilt the ~1 MB page source and the
++   * injected script (the option serialised twice + a ~1 MB world-map
++   * literal) on the JS thread. The values are identical.
+    */
+-  useEffect(() => {
++  const fontFamiliesObject = useMemo(() => {
+     let fontTypeString = "";
+     let fontFamilyString = "";
+     for (let tempFontFamily of props?.fontFamilies || []) {
+       fontTypeString += `<div style="font-family: ${tempFontFamily.fontName};height:0px">&nbsp;</div>`;
+       fontFamilyString += tempFontFamily.fontFile;
+     }
+-    setFontFamiliesObject({
++    return {
+       fontTypeString,
+       fontFamilyString,
+-    });
++    };
+   }, [props.fontFamilies]);
+ 
+   /**
+@@ -131,7 +144,7 @@ function Echarts(props, ref) {
+    * Support third-party extension.
+    * extension: array
+    */
+-  useEffect(() => {
++  const extensionScript = useMemo(() => {
+     let result = ``;
+     props.extension &&
+       props.extension.map((res) => {
+@@ -141,18 +154,44 @@ function Echarts(props, ref) {
+           result += `<script>${res}</script>`;
+         }
+       });
+-    setExtensionScript(result);
++    return result;
+   }, [props.extension]);
+ 
+   /**
+    * Support custom dynamic events.
+    * eventActions: object
++   * (PATCH: always an array — the old "[]" STRING fallback made the
++   * injected loop subscribe to the events "[" and "]".)
+    */
+-  useEffect(() => {
+-    const eventArrays =
+-      (props.eventActions && Object.keys(props.eventActions)) || "[]";
+-    setEventArrays(eventArrays);
+-  }, [props.eventActions]);
++  const eventArrays = useMemo(
++    () => (props.eventActions ? Object.keys(props.eventActions) : []),
++    [props.eventActions]
++  );
++
++  /**
++   * PATCH: the page source and the injected script are rebuilt only when
++   * an input they read changes — not on every render (e.g. each
++   * getInstance reply, as Export uses).
++   */
++  const source = useMemo(
++    () => ({ html: `${HtmlWeb(fontFamiliesObject)} ${extensionScript}` }),
++    [fontFamiliesObject, extensionScript]
++  );
++  const injectedJavaScript = useMemo(
++    () => renderChart({ ...props, eventArrays }),
++    [
++      props.option,
++      props.width,
++      props.height,
++      props.backgroundColor,
++      props.enableParseStringFunction,
++      props.themeName,
++      props.renderMode,
++      props.formatterVariable,
++      props.customMapData,
++      eventArrays,
++    ]
++  );
+ 
+   return (
+     <View style={{ flex: 1, height: props.height || 400 }}>
+@@ -168,10 +207,10 @@ function Echarts(props, ref) {
+           }}
+           {...props.webViewSettings}
+           ref={eChartRef}
+-          injectedJavaScript={renderChart({ ...props, eventArrays })}
++          injectedJavaScript={injectedJavaScript}
+           scalesPageToFit={Platform.OS !== "ios"}
+           originWhitelist={["*"]}
+-          source={{ html: `${HtmlWeb(fontFamiliesObject)} ${extensionScript}` }}
++          source={source}
+           onMessage={onMessage}
+         />
+       )}
+diff --git a/node_modules/react-native-echarts-pro/src/components/Echarts/renderChart.js b/node_modules/react-native-echarts-pro/src/components/Echarts/renderChart.js
+index 85bd19f..c32b7ff 100755
+--- a/node_modules/react-native-echarts-pro/src/components/Echarts/renderChart.js
++++ b/node_modules/react-native-echarts-pro/src/components/Echarts/renderChart.js
+@@ -14,14 +14,20 @@ export default function renderChart(props) {
+   const height = `${(props.height || 400) * displayScale}px`;
+   const width = props.width ? `${props.width * displayScale}px` : "auto";
+   const enableParseStringFunction = !!props.enableParseStringFunction;
++  // PATCH (patches/react-native-echarts-pro+1.9.3.patch): serialise the
++  // option ONCE and embed it ONCE (it was serialised twice and embedded in
++  // both branches of an if — 2x the script for a large option), and build
++  // the ~1 MB world-map literal only when the option has geo components
++  // (getMapJSON constructed it and returned {} otherwise).
++  const optionSource = toString(props.option);
++  const mapJSON =
++    props.customMapData || (props?.option?.geo?.length ? getMapJSON(true) : {});
+   return `
+     const eChartsContainer = document.getElementById('main')
+     eChartsContainer.style.height = "${height}";
+     eChartsContainer.style.width = "${width}";
+     eChartsContainer.style.background = "${props.backgroundColor}";
+-    echarts.registerMap('world', ${JSON.stringify(
+-      props.customMapData || getMapJSON(props?.option?.geo?.length)
+-    )});
++    echarts.registerMap('world', ${JSON.stringify(mapJSON)});
+     const myChart = echarts.init(eChartsContainer, '${
+       props.themeName
+     }',{ renderer: '${props.renderMode ? props.renderMode : "canvas"}' });
+@@ -31,14 +37,23 @@ export default function renderChart(props) {
+     props.formatterVariable || ""
+   )};
+     // Configuration dynamic events.
++    // PATCH (patches/react-native-echarts-pro+1.9.3.patch): echarts fires
++    // 'finished' after EVERY render once animations are idle (each tooltip
++    // move, each dataZoom drag frame), so a 'finished' subscription would
++    // post ~60 bridge messages a second while the chart is touched. It is
++    // reported ONCE per chart (the first finished render) and unsubscribed.
+     for(let temp of ${JSON.stringify(props.eventArrays || "")}){
+-      myChart.on(temp, (params)=>{
++      const handler = (params)=>{
++        if (temp === 'finished') {
++          myChart.off('finished', handler);
++        }
+         const clickParams = {
+           ...params,
+           type: temp
+         };
+         window.ReactNativeWebView.postMessage(JSON.stringify(clickParams));
+-      });
++      };
++      myChart.on(temp, handler);
+     }
+     myChart.on('click', (params)=>{
+       const clickParams = {
+@@ -106,12 +121,12 @@ export default function renderChart(props) {
+         }
+       }
+     }
+-    if (${enableParseStringFunction}) {
+-      const option = ${toString(props.option)};
+-      parseStringFunction(option);
++    {
++      const option = ${optionSource};
++      if (${enableParseStringFunction}) {
++        parseStringFunction(option);
++      }
+       myChart.setOption(option);
+-    } else {
+-      myChart.setOption(${toString(props.option)});
+     }
+     // 触发ECharts 中支持的图表行为
+     let dispatchAction = (action) => {

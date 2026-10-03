@@ -1,7 +1,8 @@
 /**
  * Pure helpers behind the SiteDetail shell: the header's freshness
  * timestamp + capacity + spoken label (the freshness resolver is also the
- * Summary hero's — one copy app-wide), which queries a refresh covers,
+ * Summary hero's — one copy app-wide; `useSiteData`'s "never older"
+ * cache guard orders snapshots by the same stamps), which queries a refresh covers,
  * the refresh-status strip, and the pinned tab strip's scroll maths. No React / RN imports, so it
  * is unit-tested directly (`__tests__/siteDetailModel.test.ts`).
  *
@@ -73,6 +74,36 @@ export const headerLastUpdate = (
   siteMetadataLastUpdate(liveData) ??
   newestLiveParamAt(liveData) ??
   toEpochMs(routeLastUpdate);
+
+/**
+ * True when `/data/all` payload `next` is an OLDER snapshot of the site
+ * than `prev` — so swapping it in would make the header's "Updated x min
+ * ago" (and the tiles' ages) jump backwards. Like is only ever compared
+ * with like — the site sync stamp and the readings' `update_at` are
+ * different clocks (the sync stamp can lag the readings by tens of
+ * minutes):
+ *
+ *   1. Both payloads carry a site sync stamp (`live.metadata.last_update`,
+ *      what the header shows) and they differ → it decides.
+ *   2. Otherwise (equal stamps, or a stamp on one side only) → the newest
+ *      live `update_at` of BOTH payloads decides (two copies can share the
+ *      sync stamp while one holds older readings).
+ *   3. No common timestamp → `false` (can't tell, so the caller replaces
+ *      as usual — never invent an order).
+ *
+ * Only the two payloads' own (server-side) clocks are compared — never the
+ * phone's clock.
+ */
+export const isOlderSiteSnapshot = (next: unknown, prev: unknown): boolean => {
+  const nextSync = siteMetadataLastUpdate(next);
+  const prevSync = siteMetadataLastUpdate(prev);
+  if (nextSync !== null && prevSync !== null && nextSync !== prevSync) {
+    return nextSync < prevSync;
+  }
+  const nextNewest = newestLiveParamAt(next);
+  const prevNewest = newestLiveParamAt(prev);
+  return nextNewest !== null && prevNewest !== null && nextNewest < prevNewest;
+};
 
 /* ─────────── load phase ─────────── */
 

@@ -1,4 +1,4 @@
-import React, { FC, useCallback, useMemo, useRef, useState } from 'react';
+import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   LayoutChangeEvent,
   Modal,
@@ -12,11 +12,24 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import RNEChartsPro from 'react-native-echarts-pro';
 import { AppText, PressableScale } from 'src/components/common';
 import { radius as radiusTokens, space, touch, useScheme } from 'src/theme';
+import { display } from 'src/utils/logger';
 import { WEBVIEW_SETTINGS } from './chartConfig';
 import { ChartExportRef, exportChartImage } from './exportChart';
 
 /** Minimum breathing room on every edge of the landscape canvas. */
 const PAD = 12;
+
+/**
+ * First-paint watchdog: when the chart hasn't reported its first finished
+ * render (echarts' `finished` event) this long after its WebView mounted,
+ * the WebView is remounted ONCE. Seen once on an Android emulator (root
+ * cause unproven): the WebView was laid out at full size, the app and the
+ * renderer sat idle, and it never drew; closing + reopening drew normally.
+ * Far above a real first paint (well under a second on a phone; 15–37 s on
+ * a software-GL emulator with the intro animation).
+ */
+export const FULLSCREEN_CHART_PAINT_TIMEOUT_MS = 45_000;
+
 /** Minimum title-row height — fits the ≥ touch.min action buttons. The
  *  row grows past it when the captions wrap (large text, a long note). */
 const HEADER_MIN_H = Math.max(54, touch.min + space.sm);
@@ -166,18 +179,62 @@ const FullscreenBody: FC<ChartFullscreenModalProps> = ({
 
   const chartW = landscapeW - pad.left - pad.right;
   const chartH = landscapeH - (headerH ?? HEADER_MIN_H) - pad.top - pad.bottom;
+  const chartMounted = visible && headerH !== null;
 
-  const chart = visible && headerH !== null ? (
+  /* ── first-paint probe + one-shot remount (FULLSCREEN_CHART_PAINT_TIMEOUT_MS).
+     `firstPaint` is per WebView mount; the event map is built once, so the
+     library's injected script (which lists the subscribed events) never
+     changes because of it. ── */
+  const [remounts, setRemounts] = useState(0);
+  const firstPaint = useRef({ since: 0, done: false });
+  const titleRef = useRef(title);
+  titleRef.current = title;
+  const remountsRef = useRef(remounts);
+  remountsRef.current = remounts;
+  const eventActions = useMemo(
+    () => ({
+      finished: () => {
+        if (firstPaint.current.done) return;
+        firstPaint.current.done = true;
+        display('chart fullscreen paint', {
+          title: titleRef.current,
+          ms: Date.now() - firstPaint.current.since,
+          remounts: remountsRef.current,
+        });
+      },
+    }),
+    [],
+  );
+  useEffect(() => {
+    if (!chartMounted) return undefined;
+    firstPaint.current = { since: Date.now(), done: false };
+    if (remounts > 0) return undefined; // remount once, never loop
+    const id = setTimeout(() => {
+      if (firstPaint.current.done) return;
+      display(
+        'chart fullscreen paint stalled — remounting the WebView',
+        { title: titleRef.current, waitedMs: FULLSCREEN_CHART_PAINT_TIMEOUT_MS },
+        undefined,
+        true,
+      );
+      setRemounts(1);
+    }, FULLSCREEN_CHART_PAINT_TIMEOUT_MS);
+    return () => clearTimeout(id);
+  }, [chartMounted, chartH, remounts]);
+
+  const chart = chartMounted ? (
     <RNEChartsPro
       // A new height needs a fresh WebView (see `headerH`); only happens
-      // if the header re-wraps while open (e.g. a longer note).
-      key={chartH}
+      // if the header re-wraps while open (e.g. a longer note). `remounts`
+      // is the first-paint watchdog's one retry.
+      key={`${chartH}:${remounts}`}
       ref={chartRef as never}
       height={chartH}
       width={chartW}
       option={option}
       backgroundColor="transparent"
       enableParseStringFunction
+      eventActions={eventActions}
       webViewSettings={WEBVIEW_SETTINGS}
     />
   ) : null;

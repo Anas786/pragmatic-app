@@ -57,6 +57,16 @@ import {
 const INVALID_NOTE_ID = 'trend-invalid-note';
 
 /**
+ * Above this many plotted points (buckets × series) the inline chart skips
+ * echarts' animations. The intro animation re-rasters the WHOLE canvas
+ * every frame — 9 smooth area series × 1,440 minute buckets took seconds
+ * to settle on a slow GPU — and a merge-mode update animates the same way.
+ * The full-screen chart (`detailed`) never animates: its canvas is ~5× the
+ * card's. Presentation only: every value is drawn exactly the same.
+ */
+export const TREND_ANIMATION_MAX_POINTS = 2000;
+
+/**
  * Axis-trigger tooltip formatter (string fn, eval'd in the WebView via
  * `enableParseStringFunction`). Renders the x-label header then one
  * colour-marked row per series; null → "–". An ordinary value is compact
@@ -233,8 +243,12 @@ export const buildTrendComboOption = (
     ? layoutTrendNote(formatInvalidReadingsNote(invalidCount), width)
     : null;
   const gridTop = legend.gridTop + (note ? note.height : 0);
+  const animation =
+    !detailed && sorted.length * aggregations.length <= TREND_ANIMATION_MAX_POINTS;
 
   const option = {
+    // Set either way (never omitted), so a merge-mode update can switch it.
+    animation,
     backgroundColor: 'transparent',
     textStyle: { color: theme.textSecondary },
     legend: {

@@ -6,7 +6,11 @@ import {
 } from 'src/networking';
 import { REPORT_MAPPING_QUERY_KEY } from './useReportMapping';
 import { SITE_CONFIG_STALE_TIME, siteConfigQueryKey } from './useSiteConfig';
-import { SITE_DATA_STALE_TIME, siteDataQueryKey } from './useSiteData';
+import {
+  keepNewerSiteData,
+  SITE_DATA_STALE_TIME,
+  siteDataQueryKey,
+} from './useSiteData';
 
 /**
  * Tracks the most recently opened site so we know whether the user is
@@ -69,10 +73,14 @@ export const useSwitchActiveSite = () => {
     // is right from the first paint. Within staleTime (same-site re-tap)
     // the cache still answers and nothing is sent. Config / report-mapping
     // change rarely and keep the CDN.
+    // `keepNewerSiteData` too: the query keeps the options of its last
+    // fetch, so a later refetch that inherits these must still refuse an
+    // older CDN copy (useSiteData.ts).
     queryClient.prefetchQuery({
       queryKey: siteDataQueryKey(siteId),
       queryFn: () => getSiteAllData(siteId, { bypassCdn: true }),
       staleTime: SITE_DATA_STALE_TIME,
+      structuralSharing: keepNewerSiteData,
     });
     queryClient.prefetchQuery({
       queryKey: siteConfigQueryKey(siteId),

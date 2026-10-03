@@ -12,14 +12,17 @@
  * Deliberately framework-agnostic about *where* it lives: it takes the
  * viewport `width`/`height`, a `fullscreen` flag, the safe-area insets and
  * the hub to centre, and owns everything else (shared values, gestures, the
- * flowing-dash loop, fit math, controls). Both hosts are portrait and
+ * flowing-dash layer — its clock gated by the host's `animate` — fit math,
+ * controls). Both hosts are portrait and
  * unrotated: the phone layout is a tall diagram, so the old 90°-rotated
  * landscape fullscreen (and its pan remap) is gone.
  *
  * Overlays: the zoom / routing / fullscreen / lock column (bottom-left)
  * auto-fades after a short idle and ignores taps while hidden; the
  * Grouped ⇄ Units pill (top-right) is ALWAYS visible and tappable, and the
- * initial fit keeps the diagram clear of it (see `computeSldFit`).
+ * initial fit keeps the diagram clear of it (see `computeSldFit`): when the
+ * fit reserves a top strip for it, that strip is a band painted over the
+ * diagram (`fit.mask`), so no card is ever drawn under the pill.
  *
  * IMPORTANT: this must never be rendered inside a core React Native `<Modal>`.
  * A Modal is a separate Fabric surface, and Reanimated's commit/mount hooks
@@ -43,10 +46,11 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withTiming,
+  type SharedValue,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Scheme, useScheme, useThemedStyles } from 'src/theme';
-import { normalizeWidth, SLDBounds, SLDPoint } from 'src/utils';
+import { normalizeWidth, resolveNodeRects, SLDBounds, SLDPoint } from 'src/utils';
 import { SLDGraph, SLDValueResolver } from 'src/types';
 import type { SldViewMode } from 'src/hooks';
 import ControlButtons, { SLD_MODE_TOGGLE_BOX, SldModeToggle } from './ControlButtons';
@@ -122,6 +126,13 @@ interface SLDViewportProps {
   onLockedChange: (locked: boolean) => void;
   orthogonal: boolean;
   onOrthogonalChange: (orthogonal: boolean) => void;
+  /**
+   * Flow-animation gate (UI thread) handed to `DiagramSkiaLayer`: the
+   * inline host clears it while the panel is scrolled out of view, so the
+   * flowing dashes cost nothing there. Omitted = always on (full screen).
+   * Owned by the host, so it survives the keyed Grouped ⇄ Units remount.
+   */
+  animate?: SharedValue<boolean>;
 }
 
 const noop = () => {};
@@ -143,6 +154,7 @@ const SLDViewport: FC<SLDViewportProps> = ({
   onLockedChange,
   orthogonal,
   onOrthogonalChange,
+  animate,
 }) => {
   const scheme = useScheme();
   const themed = useThemedStyles(createStyles);
@@ -175,6 +187,12 @@ const SLDViewport: FC<SLDViewportProps> = ({
   const contentW = bounds.width;
   const contentH = bounds.height;
   const focusY = focus?.y;
+  // The card rects the node layer draws (structure-only: graph + bounds),
+  // so the fit can open with the mask band's edge between card rows.
+  const cardRects = useMemo(
+    () => Array.from(resolveNodeRects(graph, bounds).values()),
+    [graph, bounds],
+  );
   const {
     minScale,
     maxScale,
@@ -185,6 +203,7 @@ const SLDViewport: FC<SLDViewportProps> = ({
     areaRight,
     areaBottom,
     areaLeft,
+    maskHeight,
   } = useMemo(() => {
     const fit = computeSldFit({
       viewWidth: viewW,
@@ -195,6 +214,7 @@ const SLDViewport: FC<SLDViewportProps> = ({
       overlay: showModeToggle ? SLD_MODE_TOGGLE_BOX : undefined,
       maxScale: SLD_MAX_FIT_SCALE,
       focusY,
+      cards: cardRects,
     });
     const { min, max } = sldZoomLimits(fit);
     return {
@@ -208,6 +228,7 @@ const SLDViewport: FC<SLDViewportProps> = ({
       areaRight: fit.insets.right,
       areaBottom: fit.insets.bottom,
       areaLeft: fit.insets.left,
+      maskHeight: fit.mask,
     };
   }, [
     contentW,
@@ -220,6 +241,7 @@ const SLDViewport: FC<SLDViewportProps> = ({
     insetLeft,
     showModeToggle,
     focusY,
+    cardRects,
   ]);
 
   // Lock (`isLocked`) + routing (`orthogonal`) come from the host (see
@@ -601,6 +623,14 @@ const SLDViewport: FC<SLDViewportProps> = ({
     [panZoomStyle, bounds.width, bounds.height],
   );
 
+  // The band reserved under the pill (`fit.mask`): it hides whatever the
+  // diagram puts there — the upper rows of a diagram taller than the view
+  // at open, anything panned / zoomed up later. 0 when no strip is reserved.
+  const maskStyle = useMemo(
+    () => [themed.mask, fullscreen && styles.maskSquare, { height: maskHeight }],
+    [themed.mask, fullscreen, maskHeight],
+  );
+
   // Top-right of the safe area — exactly where SLD_MODE_TOGGLE_BOX tells the
   // fit math the pill sits.
   const modeToggleAnchorStyle = useMemo(
@@ -628,6 +658,7 @@ const SLDViewport: FC<SLDViewportProps> = ({
           translateY={translateY}
           scale={scale}
           clipRadius={fullscreen ? 0 : VIEWPORT_RADIUS - 1}
+          animate={animate}
         />
         {/* Explicit clipping wrapper: the viewport's own overflow:'hidden'
             doesn't reliably clip the Reanimated-transformed frame on every
@@ -639,6 +670,8 @@ const SLDViewport: FC<SLDViewportProps> = ({
             <DiagramNodeLayer graph={graph} bounds={bounds} resolve={resolve} />
           </Animated.View>
         </View>
+        {/* Static, non-interactive (touches fall through to the gestures). */}
+        {maskHeight > 0 ? <View pointerEvents="none" style={maskStyle} /> : null}
         <Animated.View
           pointerEvents={controlsShown ? 'box-none' : 'none'}
           style={[StyleSheet.absoluteFill, controlsStyle]}>
@@ -683,6 +716,10 @@ const styles = StyleSheet.create({
   clipSquare: {
     borderRadius: 0,
   },
+  maskSquare: {
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+  },
   modeToggleAnchor: {
     position: 'absolute',
   },
@@ -706,6 +743,19 @@ const createStyles = (scheme: Scheme) =>
       borderRadius: VIEWPORT_RADIUS - 1,
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    // Same fill as the canvas (`viewport`), so the band reads as the panel's
+    // header strip; a hairline marks where the diagram slides under it.
+    mask: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      backgroundColor: scheme.isDark ? scheme.surfaceRaised : scheme.surfaceMuted,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: scheme.border,
+      borderTopLeftRadius: VIEWPORT_RADIUS - 1,
+      borderTopRightRadius: VIEWPORT_RADIUS - 1,
     },
   });
 

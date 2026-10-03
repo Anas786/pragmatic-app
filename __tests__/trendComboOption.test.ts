@@ -32,6 +32,7 @@ import renderer, { act, ReactTestRenderer } from 'react-test-renderer';
 import { Dimensions, StyleProp, StyleSheet, Text, ViewStyle } from 'react-native';
 import {
   buildTrendComboOption,
+  TREND_ANIMATION_MAX_POINTS,
   TrendComboBuildResult,
 } from '../src/components/screens/Authenticated/SiteDetail/components/Trends/echartsOption';
 import {
@@ -174,6 +175,56 @@ describe('buildTrendComboOption — shared axis assignment', () => {
       yAxis(detailed)[0].axisLabel.fontSize,
     );
     expect(yAxis(compact).length).toBe(yAxis(detailed).length);
+  });
+});
+
+describe('buildTrendComboOption — animation (presentation only)', () => {
+  // Lucky Cement 24H: ~9 series of minute buckets (1,440 rows).
+  const minuteRows = (n: number, params: string[]): TrendDataRow[] =>
+    Array.from({ length: n }, (_, i) => {
+      const row: TrendDataRow = { time: i * 60_000 };
+      params.forEach((p, k) => {
+        row[p] = 100 + i + k;
+      });
+      return row;
+    });
+  const params = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9'];
+  const nine = params.map(p => agg(p, 'area'));
+  const anim = (r: TrendComboBuildResult) => (r.option as any).animation;
+
+  it('keeps the intro animation on a small inline chart', () => {
+    const small = buildTrendComboOption(minuteRows(24, params), nine, 86_400_000, THEME);
+    expect(anim(small)).toBe(true);
+  });
+
+  it('skips it inline once buckets × series exceed TREND_ANIMATION_MAX_POINTS', () => {
+    const atLimit = Math.floor(TREND_ANIMATION_MAX_POINTS / nine.length);
+    expect(
+      anim(buildTrendComboOption(minuteRows(atLimit, params), nine, 86_400_000, THEME)),
+    ).toBe(true);
+    expect(
+      anim(buildTrendComboOption(minuteRows(atLimit + 1, params), nine, 86_400_000, THEME)),
+    ).toBe(false);
+    expect(
+      anim(buildTrendComboOption(minuteRows(1440, params), nine, 86_400_000, THEME)),
+    ).toBe(false);
+  });
+
+  it('never animates full screen, whatever the size', () => {
+    const tiny = buildTrendComboOption(minuteRows(3, ['p1']), [agg('p1', 'bar')], 1000, THEME, {
+      detailed: true,
+    });
+    expect(anim(tiny)).toBe(false);
+  });
+
+  it('draws exactly the same values with or without it', () => {
+    const rows = minuteRows(1440, params);
+    const compact = buildTrendComboOption(rows, nine, 86_400_000, THEME);
+    const detailed = buildTrendComboOption(rows, nine, 86_400_000, THEME, { detailed: true });
+    const data = (r: TrendComboBuildResult) => (r.option as any).series.map((s: any) => s.data);
+    expect(data(compact)).toEqual(data(detailed));
+    expect(data(compact)[0][0]).toBe(100);
+    expect(data(compact)[8][1439]).toBe(100 + 1439 + 8);
   });
 });
 

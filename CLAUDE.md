@@ -418,6 +418,48 @@ the same "x min ago" for up to 10–15 min.
   window, so the config / report-mapping prefetches sent alongside keep the
   CDN. Without it the first paint showed the CDN copy (seen: "13 min ago"
   while origin had 3 min). Same-site re-tap within staleTime sends nothing.
+- **Site data never goes backwards** (Oct 2026, seen on Android, Lucky
+  Cement Live tab: "Updated 7 min ago" → "23 min ago", tile ages 3 → 22
+  min). Automatic fetches keep the CDN, so after a user refresh / site
+  open brought origin data, a later automatic refetch (staleTime 3 min <
+  s-maxage 15 min, focus, resume) could get an OLDER CloudFront copy and
+  overwrite it. `/data/all` therefore swaps responses in through
+  `structuralSharing: keepNewerSiteData` (useSiteData.ts — pass it from
+  EVERY fetcher of that key; the prefetch in `useSwitchActiveSite` does):
+  - a response sent past the CDN (`_r` on the final request →
+    `getSiteAllData` tags it `markFromOrigin`) is the origin's current
+    state → always replaces (a user refresh shows exactly what origin has);
+  - otherwise, if `isOlderSiteSnapshot(next, cached)` (siteDetailModel.ts,
+    like with like only: `live.metadata.last_update` when BOTH payloads
+    have one and they differ, else the newest live `update_at` of both —
+    the sync stamp and the readings are different clocks) → the cached
+    object is kept (same reference). The query still settles as a SUCCESS
+    (no error strip) and `dataUpdatedAt` moves on, which keeps Live tile
+    ages right;
+  - …but only while a CDN copy CAN predate the cache: within
+    `SITE_DATA_CDN_WINDOW_MS` (2 × s-maxage = 30 min — two CloudFront tiers)
+    of when the cached object was accepted (`keepNewerSnapshot`,
+    freshFetch.ts, records it). Past that every CDN copy was fetched after
+    it, so a cached wrong (e.g. future) stamp can't freeze the values for
+    longer, while a real big jump (a site uploading hours of backlog) is
+    still protected inside the window. No magnitude cap on purpose. The
+    phone clock only measures that elapsed time (a clock set back → no
+    guard); server stamps are never compared with it;
+  - no common timestamp → normal replacement (never invent an order).
+  - **Trends too** (`keepNewerTrendData`, useTrendData.ts): preset URLs
+    never change (`now() - INTERVAL N HOUR`), staleTime 2 min vs s-maxage
+    30 min, so a remount/focus refetch could drop the newest buckets. Older
+    = earlier newest row `time`; window 60 min; `getTrendData` tags origin
+    responses and the hook's `{ ...rows, windowMs }` spread carries the tag.
+    `keepPreviousData` placeholders are another key's data and never take
+    part. Tests: `__tests__/trendDataMonotonic.test.ts`.
+  - NOT applied to `/config/site` (no timestamp in the payload, and its
+    30 min staleTime > s-maxage 15 min means an automatic refetch can't get
+    a copy older than the cache) nor the site list (no list-level stamp —
+    rows carry their own; resume refresh only past 5 min vs `max-age=60`;
+    per-row merging would fabricate a snapshot) nor reports (`max-age=0`).
+    Re-check if a staleTime or Cache-Control changes. Tests:
+    `__tests__/siteDataMonotonic.test.ts`.
 - If the age doesn't drop after a refresh, the SITE hasn't synced: origin's
   `live.metadata.last_update` is the truth (Lucky Cement sat at 20:04 for
   25+ min on 2026-10-01 even with a cache-busting request).
@@ -459,6 +501,8 @@ Performance Report, Inverter Table) share the same filter UX:
 - **Default Custom range** = the full cap: `today - (cap − 1)` → `today` (`DEFAULT_CUSTOM_RANGE_DAYS = REPORT_CUSTOM_MAX_DAYS − 1`; Trends seeds `daysAgo(TREND_CUSTOM_MAX_RANGE)`).
 - **Chart value labels**: every ECharts Y-axis (Trends + Reports) and the Trends tooltip use ONE formatter, `Y_AXIS_LABEL_FORMATTER` / `COMPACT_VALUE_FN_SRC` in `chartConfig.ts` — a JS **source string** evaluated inside the WebView (`enableParseStringFunction`), so it must stay self-contained (no closures over RN values). K/M/B/T with ≤3 significant digits, float noise stripped, `4e31`-style beyond T. Unit-tested by evaluating the string (`__tests__/chartValueFormatter.test.ts`).
 - **Trend charts use ONE shared scale in both the card and fullscreen** (bars on a left axis; a right axis only when bars and lines are mixed). Per-series axes were removed on purpose: per-series scales drew a 48K bar and a 750M bar at the same height, misrepresenting relative magnitude (and made fullscreen diverge from the card). `detailed` (fullscreen) changes density only — axis assignment must never branch on it.
+- **Trend chart animation is presentation-only and off when large** (Oct 2026, Android perf pass): `option.animation` is always set — `false` in full screen (`detailed`) and inline once buckets × series > `TREND_ANIMATION_MAX_POINTS` (2000; Lucky 24H = 9 × 1,440). The intro animation re-rastered the whole canvas every frame (seconds on a slow GPU). Values never change with it (`trendComboOption` test).
+- **Full-screen chart first-paint watchdog** (`ChartFullscreenModal`): the chart subscribes to echarts' `finished` via ONE stable `eventActions` map (the library writes the event list into its injected script), logs `display('chart fullscreen paint', {ms})`, and remounts its WebView ONCE if nothing painted within `FULLSCREEN_CHART_PAINT_TIMEOUT_MS` (45 s) — a never-painting fullscreen WebView was seen once on an emulator (cause unproven; if it shows up on a device, the structural fix is to stop rotating the native WebView and rotate inside the page instead). echarts fires `finished` after EVERY idle render (tooltip moves, dataZoom drags), so the patched library posts it only ONCE per chart (§19). Tests: `__tests__/chartFullscreenPaint.test.tsx` (watchdog, library mocked) and `__tests__/echartsFinishedEvent.test.tsx` (the real patched library + the shipped echarts 5.4.2: subscribed before the first setOption, `onMessage` → `eventActions.finished`, exactly once).
 - **Device garbage is SHOWN, never hidden** (user rule, Oct 2026 — "hide kuch nahi karna… show karna ha ka device sa aya ha garbage", and "follow the same" as the web): every finite reading is plotted at its TRUE value on the shared scale (Trends card + fullscreen, Reports chart), exactly like the web portal's Analysis chart, even when one value (Lucky Cement "Wind Energy Day" ≈ −1.2e35) flattens the others. Value axes have no forced min/max; when any reading is negative every series shares the left axis (no mismatched zeros). `SUSPECT_READING_ABS` = 1e15 (`src/utils/units.ts`, re-exported by chartConfig.ts) is DETECTION ONLY: it words one note per chart — "N readings look invalid — shown exactly as sent by the device" (inline: drawn inside the chart, pre-wrapped by `layoutTrendNote`, card height unchanged; full screen: the `warning` prop; screen-reader summary includes it; Reports' Energy-over-time card too, via `countInvalidReportReadings`). The tooltip shows such a value exactly (`toExponential()`); axis ticks use compact e-notation ("-1.2e35"), with a guard against echarts' float-noise ticks past 2^53. Only null / blank / non-numeric / NaN / ±Infinity is a gap ("—"). **Never reintroduce a magnitude filter, clamp or gap.** Everywhere else (Cards, SLD, Live, Dashboard chips, Reports text) such a value prints in the same e-notation via `formatScientific` (`formatSig3` / `formatQuantity` / `formatCompact` / `formatCardValue`), in the backend's own unit, never a 30–50-digit string and never "—". Tests: `__tests__/suspectReadings.test.ts`, `trendComboOption`, `echartsAxisTicks`.
 
 Each card holds its own `startDate`, `endDate`, `selectedMonth: MonthSelection`,
@@ -816,6 +860,16 @@ respect:
   resolved with the PRIOR call's value — chart Export saved the chart's
   previous zoom / legend state, always one render behind. The patch adds
   `delete latestResult.current[functionName]` before the `postMessage`.
+  The same patch (Oct 2026 perf pass) also: derives the font / extension /
+  event-list values with `useMemo` (they were state set in mount effects →
+  every chart rendered 2–3× on mount), memoises the page `source` and the
+  injected script, serialises + embeds the option ONCE (was twice), builds
+  the ~1 MB world-map literal only when `option.geo` exists, makes the
+  event list always an array (the old `"[]"` string subscribed to the events
+  "[" and "]"), and unsubscribes a `finished` listener after its first
+  message (echarts re-fires `finished` on every idle render → ~60 bridge
+  messages/s while a chart is touched). Verified by applying it to a
+  pristine 1.9.3 tarball; regenerated with `npx patch-package`.
   ⚠️ 1.9.3 is the latest published version and upstream is unfixed: if
   the dep is ever bumped, the patch will fail to apply — re-make it with
   `npx patch-package react-native-echarts-pro` rather than deleting it.
@@ -839,6 +893,27 @@ respect:
   Animated.View. The dot grid is ONE SkPath. Manual device pass recommended
   after touching SLD transform code (inline + fullscreen, pinch + pan,
   +/- at min/max while locked).
+- **SLD flow clock — gated + 30 fps, never `useClock()`** (Oct 2026,
+  Android perf pass). Every clock write re-records the Skia picture on the
+  UI thread and, on Android (RN Skia 1.x TextureView), uploads + swaps on
+  the main thread and re-composites the whole window — `useClock()` did
+  that every vsync while the SLD was merely mounted (off-screen, idle).
+  `DiagramSkiaLayer` now runs its own `useFrameCallback` clock
+  (`components/sldFlowClock.ts`, worklets, `sldFlowClock.test.ts`): it only
+  ticks while the host's `animate` shared value is true, at most 30×/s
+  (time-based motion, same speed), never with reduced motion (static dashes,
+  no particles) or when no edge flows. The loop itself is paused, not just
+  the writes (`components/useSldFlowLoop.ts`, `sldFlowLoop.test.tsx`):
+  `setActive(flowing && gateOpen)` (guarded by `isActive` — §20.3), the
+  gate reaching JS through a `useAnimatedReaction` → `runOnJS` only when it
+  flips. On a Pixel-7a-sized screen the Lucky Cement panel is never fully
+  off-screen, so the gate mostly matters on small phones / large text. The inline host gets `animate` from `useBodyViewportVisibility`
+  (`SiteDetail/bodyViewport.ts`): SiteDetail's body ScrollView publishes
+  scroll offset / height / content-size changes into a re-render-free
+  store, the panel `measureLayout`s itself against the scroll content
+  (`getInnerViewRef`) and flips the shared value only when it enters or
+  leaves the viewport — no React commit. Full screen omits `animate`
+  (always on). Tests: `bodyViewport.test.tsx`.
 - **SLD phone layout (Oct 2026, user: "boxes are small, not readable")** —
   the backend canvas (desktop-wide, Lucky ≈ 1810×850 units) fitted a phone
   at ≈ 0.2 → 2–3pt text. Now `selectSldGraph → buildSldGrouping →
@@ -868,6 +943,16 @@ respect:
     (Poppins widths measured from the TTFs, 2% margin) and, when even 12
     can't fit, switches to the compact form with the unit rescaled
     ("1,186,687.53 MW" → "1.19 TW") — a value is never truncated.
+  - **Card icons = MaterialIcons glyphs in theme ink, never the GIFs**
+    (Oct 2026): the GIF artwork has fixed colours (white turbine, navy
+    solar/genset) and vanished on its well — "Wind · 6" was a white
+    turbine on pale cyan in light mode. `sldNodeIcon` (`src/utils/sldIcon.ts`,
+    direct import): `classifySldNode` source → `energyPalette` well tint +
+    `scheme.energyInk` glyph; hub (logo), WHR (no palette token), SVG/switch
+    gear, unknown → brand well + `brandText` glyph. The card's top bar /
+    border / wash / edges keep the backend `icon.color`. Glyph/well ≥ 3:1
+    in both themes (over the dark accent wash too) and every glyph name in
+    the font: `tokenContrast.test.ts`.
   - Inline: `computeSldFit` fills the WIDTH (cap `SLD_MAX_FIT_SCALE` = 1),
     centres a diagram that fits, centres a taller one on the hub (`focus`),
     clamped so no empty band shows; zoom-out floor 0.9 × overview, max
@@ -931,8 +1016,17 @@ respect:
     layout box: Fabric hit-tests stop at the parent's bounds, so `hitSlop`
     can't reach past the container — `sldModeToggleMetrics` sizes the pill
     itself to a ≥44pt target. The fit (`computeSldFit`) keeps a strip free
-    for it only when needed, so the pill never covers a card at open/re-fit
-    (after the user pans it may, by design).
+    for it only when needed, and a reserved strip is a real **mask band**
+    (`fit.mask`, painted by SLDViewport over the diagram, under the pill;
+    canvas fill + hairline): a diagram taller than the view must cover its
+    fit area, so centred on the hub its upper rows ran up into the strip —
+    the pill covered SG-CI-PV-06 (Lucky Units full screen, Oct 2026). Row
+    gaps (16/40) are narrower than the 44pt pill, so no translation clears it
+    with the hub in view; the band hides those rows instead, and with the
+    card rects (`cards`) the hub-centred fit is nudged (≤ half a card, hub
+    row kept in view) so the band's edge falls between rows. The pill never
+    covers a visible card, at open or after a pan. Tests:
+    `sldViewportFit.test.ts` ("never covers a card at open").
   - **Fullscreen = PORTRAIT, no rotation of any kind** (the phone layout is
     portrait-shaped; the old 90° JS rotation, `rotateInsets`,
     `SLD_FULLSCREEN_ROTATION_DEG` and the pan remap are gone). Device
@@ -955,8 +1049,7 @@ respect:
 - **Android release**: R8 + `shrinkResources` ON (`proguard-rules.pro` has
   per-library keep rules), vector-icons ships only `MaterialIcons.ttf`.
   Release smoke-tested 2026-10-01 (sign-in, charts, SLD, GIFs, splash) — it
-  caught one R8 crash, see §21. ⚠️ Release still signs with the **debug keystore** —
-  must fix before store submission.
+  caught one R8 crash, see §21. Play signing: see §21 "Play release".
 - **Removed deps** (zero imports): lodash, @reduxjs/toolkit, i18next,
   @react-navigation/bottom-tabs, react-native-otp-entry,
   react-native-sticky-range-slider, @react-native-community/geolocation,
@@ -1182,6 +1275,35 @@ Android 15 emulator, no crashes):
   size, "Don't keep activities", or process restore — crashed on launch with
   "Unable to instantiate fragment com.swmansion.rnscreens…". Keep it when
   re-syncing MainActivity with the RN template (the template omits it).
+
+- **Play release (Oct 2026)** — `./gradlew bundleRelease` →
+  `android/app/build/outputs/bundle/release/app-release.aab`, signed with the
+  Play **upload key** (Play App Signing holds the real signing key). The
+  keystore is `pes-upload-key.jks` in the repo root, **git-ignored (`*.jks`) —
+  this GitHub repo is PUBLIC, never commit it** or any password. Gradle reads
+  `PES_UPLOAD_STORE_FILE`, `PES_UPLOAD_KEY_ALIAS`, `PES_UPLOAD_STORE_PASSWORD`,
+  `PES_UPLOAD_KEY_PASSWORD` from `~/.gradle/gradle.properties` (backup notes +
+  public certificate in `~/Documents/PES-Android-Signing/`). Without them
+  release builds fall back to the debug key (emulator tests) and
+  `bundleRelease` fails on purpose. Release bundles carry native debug symbols
+  (`debugSymbolLevel 'SYMBOL_TABLE'`) and the R8 mapping. **Bump `versionCode`
+  for every upload** — 1 (1.0.3) is live/in review on Play since 2026-10-03, so
+  the next upload needs 2+.
+- **16 KB page size (Play requirement, targetSdk ≥ 35)**: the root
+  `android/build.gradle` adds `-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON` to
+  every `com.android.library` CMake build — reanimated 3.16.7, screens 4.5.0
+  and skia 1.12.4 don't pass it themselves, so their 64-bit `.so` files were
+  linked with 4 KB pages (Play rejects that). RN core / the app's
+  `libappmodules` get it from the RN gradle plugin. Check every 64-bit
+  `base/lib/*/*.so` in the `.aab` has ELF `PT_LOAD p_align` = 0x4000 after
+  adding or bumping a native library.
+- **Permissions (Play-minimal)**: INTERNET, VIBRATE (haptics fallback),
+  ACCESS_NETWORK_STATE (netinfo → online/offline), androidx's internal
+  DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION. `ACCESS_WIFI_STATE` (netinfo) is
+  removed with `tools:node="remove"` — netinfo guards every Wi-Fi call. No
+  dangerous/sensitive permission → no Play permission declarations. Chart
+  export uses the share sheet (no storage permission). Re-check the merged
+  manifest when adding a native library.
 
 **Keep `android/` in step with the installed `react-native` version** when
 upgrading — compare against `@react-native-community/template@<rn-version>`.

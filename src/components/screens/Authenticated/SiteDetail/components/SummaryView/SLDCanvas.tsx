@@ -9,13 +9,19 @@ import {
   rect as skRect,
   rrect as skRRect,
   Skia,
-  useClock,
   type SkPath,
 } from '@shopify/react-native-skia';
-import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
+import {
+  useDerivedValue,
+  useReducedMotion,
+  useSharedValue,
+  type FrameInfo,
+  type SharedValue,
+} from 'react-native-reanimated';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import { AppText } from 'src/components/common';
-import { GifImage, resolveLottieIcon } from 'src/assets/gif';
 import { useScheme, useThemedStyles, Scheme } from 'src/theme';
+import { sldNodeIcon } from 'src/utils/sldIcon';
 import {
   buildEdgeGeometry,
   buildOrthogonalEdgeGeometry,
@@ -31,6 +37,13 @@ import {
   sldValueDisplay,
 } from 'src/utils';
 import { SLDNode, SLDValueResolver, SLDGraph } from 'src/types';
+import {
+  SLD_DASH_INTERVALS,
+  sldDashPhase,
+  sldFlowShouldTick,
+  sldParticleProgress,
+} from '../sldFlowClock';
+import { useSldFlowLoop } from '../useSldFlowLoop';
 
 /* ─────────── canvas constants (graph-space units) ─────────── */
 
@@ -49,12 +62,12 @@ const H = SLD_PHONE_HUB;
 
 /* Flow-animation tuning — mirrors the web SLD:
  *   - dashes: `stroke-dasharray: 7,6`, offset drifts ~ -40px / 1.1s ≈ 36 px/s
+ *     (SLD_DASH_* in ../sldFlowClock)
  *   - particle: a small dot riding the path over ~4.8–5.6s, looping
- * All of it runs on Skia's render thread (a `useClock`-driven shared value),
- * so there are ZERO per-frame Fabric commits — which is exactly why the old
- * react-native-svg + Reanimated dash crashed and this doesn't. */
-const DASH_INTERVALS = [7, 6];
-const DASH_SPEED = 36; // px/s
+ * All of it is driven from the UI thread by ONE gated, 30 fps clock shared
+ * value (see `DiagramSkiaLayerBase` + ../sldFlowClock), so there are ZERO
+ * per-frame Fabric commits — which is exactly why the old react-native-svg
+ * + Reanimated dash crashed and this doesn't. */
 const PARTICLE_RADIUS = 3;
 const PARTICLE_SAMPLES = 48;
 const PARTICLE_BASE_PERIOD = 4.8; // s
@@ -226,19 +239,21 @@ const FlowEdge: FC<{
   edge: SkEdge;
   dashPhase: SharedValue<number>;
   clock: SharedValue<number>;
-}> = ({ edge, dashPhase, clock }) => {
+  /** False with reduced motion: a parked dot reads as a stray mark. */
+  particle: boolean;
+}> = ({ edge, dashPhase, clock, particle }) => {
   const { points, period, offset, color, skPath, skArrow } = edge;
   const n = points.length / 2;
 
   const cx = useDerivedValue(() => {
     if (n < 2) return 0;
-    const t = (clock.value / 1000 / period + offset) % 1;
+    const t = sldParticleProgress(clock.value, period, offset);
     const idx = Math.min(n - 1, Math.max(0, Math.floor(t * (n - 1))));
     return points[idx * 2];
   });
   const cy = useDerivedValue(() => {
     if (n < 2) return 0;
-    const t = (clock.value / 1000 / period + offset) % 1;
+    const t = sldParticleProgress(clock.value, period, offset);
     const idx = Math.min(n - 1, Math.max(0, Math.floor(t * (n - 1))));
     return points[idx * 2 + 1];
   });
@@ -246,10 +261,12 @@ const FlowEdge: FC<{
   return (
     <Group>
       <SkiaPath path={skPath} style="stroke" strokeWidth={2.5} strokeCap="round" color={color}>
-        <DashPathEffect intervals={DASH_INTERVALS} phase={dashPhase} />
+        <DashPathEffect intervals={SLD_DASH_INTERVALS} phase={dashPhase} />
       </SkiaPath>
       {skArrow ? <SkiaPath path={skArrow} color={color} /> : null}
-      {n > 1 ? <SkiaCircle cx={cx} cy={cy} r={PARTICLE_RADIUS} color={color} /> : null}
+      {particle && n > 1 ? (
+        <SkiaCircle cx={cx} cy={cy} r={PARTICLE_RADIUS} color={color} />
+      ) : null}
     </Group>
   );
 };
@@ -265,13 +282,16 @@ interface NodeCardProps {
 const SourceNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
   const scheme = useScheme();
   const themed = useThemedStyles(createCanvasStyles);
-  const icon = resolveLottieIcon(node.data.icon.name);
+  // Glyph + well: energy-source ink on a source tint, else brand — legible
+  // in both themes (the old fixed-colour GIFs vanished on pale wells).
+  const icon = useMemo(() => sldNodeIcon(node, scheme, scheme.isDark), [node, scheme]);
   const accent = edgeColorForScheme(node.data.icon.color || scheme.brand, scheme.isDark);
 
   // On a light surface an accent wash + accent border read as a washed-out
   // tint (esp. for bright yellows on white), so light theme keeps a clean
   // white card with a neutral border and lets the colour live in the top bar
-  // + icon well. Dark theme keeps the richer accent wash + border.
+  // (+ the source-coloured icon well). Dark theme keeps the richer accent
+  // wash + border.
   // minHeight = the layout's reserved height (`sldPhoneCardHeight`, every
   // line box below is fixed), so the card fills its slot exactly; a
   // sub-point overrun grows it downward instead of clipping a row.
@@ -302,9 +322,9 @@ const SourceNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
       <View pointerEvents="none" style={[styles.accentBar, { backgroundColor: accent }]} />
 
       <View style={styles.cardHeaderRow}>
-        <View
-          style={[styles.iconWell, { backgroundColor: accent + (scheme.isDark ? '24' : '2E') }]}>
-          {icon ? <GifImage source={icon.path} size={C.icon} /> : null}
+        <View style={[styles.iconWell, { backgroundColor: icon.well }]}>
+          {/* Fixed geometry (the canvas is scaled as a whole): no OS font scaling. */}
+          <Icon name={icon.glyph} size={C.icon} color={icon.ink} allowFontScaling={false} />
         </View>
         {/* Up to two lines: unit names ("PV-SG-CI-01", "Captive Plant")
             must stay distinguishable, so they wrap before they ellipsize. */}
@@ -379,7 +399,8 @@ SourceNodeCard.displayName = 'SourceNodeCard';
 const LogoNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
   const scheme = useScheme();
   const themed = useThemedStyles(createCanvasStyles);
-  const icon = resolveLottieIcon(node.data.icon.name);
+  // The plant: always the brand well + brandText glyph.
+  const icon = useMemo(() => sldNodeIcon(node, scheme, scheme.isDark), [node, scheme]);
   const primary = node.data.keys[0];
   const hubValue = primary
     ? sldValueDisplay(resolve(primary.param), primary.unit, primary.label, 'hub')
@@ -404,9 +425,8 @@ const LogoNodeCard: FC<NodeCardProps> = memo(({ node, rect, resolve }) => {
 
   return (
     <View style={logoStyle}>
-      <View
-        style={[styles.hubIconWell, { backgroundColor: accent + (scheme.isDark ? '24' : '2E') }]}>
-        {icon ? <GifImage source={icon.path} size={H.icon} /> : null}
+      <View style={[styles.hubIconWell, { backgroundColor: icon.well }]}>
+        <Icon name={icon.glyph} size={H.icon} color={icon.ink} allowFontScaling={false} />
       </View>
       <View style={styles.hubText}>
         <AppText
@@ -480,6 +500,14 @@ interface DiagramSkiaLayerProps extends DiagramLayerBaseProps {
    *  it inside the canvas, since native `overflow: hidden` doesn't reliably
    *  clip the transformed layers on every platform. 0 = square (fullscreen). */
   clipRadius?: number;
+  /**
+   * Flow-animation gate, read on the UI thread: while false the flow clock
+   * stands still, so nothing is re-recorded or re-composited. The inline
+   * host clears it while its panel is scrolled out of the SiteDetail body;
+   * omitted = always on (full screen). Reduced motion stops the clock
+   * regardless. A shared value, so a flip never causes a React commit.
+   */
+  animate?: SharedValue<boolean>;
 }
 
 /**
@@ -502,6 +530,7 @@ const DiagramSkiaLayerBase: FC<DiagramSkiaLayerProps> = ({
   translateY,
   scale,
   clipRadius = 0,
+  animate,
 }) => {
   const { width, height } = bounds;
 
@@ -612,9 +641,37 @@ const DiagramSkiaLayerBase: FC<DiagramSkiaLayerProps> = ({
     return m;
   }, [offX, offY, cx, cy]);
 
-  // Skia clock → animated dash offset, shared by every flow edge.
-  const clock = useClock();
-  const dashPhase = useDerivedValue(() => -(clock.value / 1000) * DASH_SPEED);
+  // Flow clock → animated dash offset + particles, shared by every flow
+  // edge. NOT Skia's `useClock()`: that wrote a new value on every vsync for
+  // as long as the diagram was mounted (scrolled off-screen, idle, 90/120 Hz),
+  // and each write re-records the picture on the UI thread and — on Android
+  // — re-composites the whole window. This clock only runs while `animate`
+  // allows it, at most 30 times a second (../sldFlowClock); the motion is
+  // time-based, so its speed is unchanged. With reduced motion, or when no
+  // edge is flowing, it never runs: static dashes, no particles.
+  const reduceMotion = useReducedMotion();
+  const hasFlow = useMemo(() => skEdges.some(e => e.animated), [skEdges]);
+  const flowing = hasFlow && !reduceMotion;
+  const clock = useSharedValue(0);
+  const lastTick = useSharedValue(Number.NEGATIVE_INFINITY);
+  // Referentially stable (only stable shared values in its deps):
+  // `useFrameCallback` re-registers whenever its callback changes.
+  const tickFlow = useCallback(
+    (info: FrameInfo) => {
+      'worklet';
+      // A closed gate also pauses the loop itself (useSldFlowLoop), a JS
+      // round trip later; until then no tick may land while it is closed.
+      if (animate !== undefined && !animate.value) return;
+      if (!sldFlowShouldTick(info.timestamp, lastTick.value)) return;
+      lastTick.value = info.timestamp;
+      clock.value = info.timestamp;
+    },
+    [animate, clock, lastTick],
+  );
+  // The loop runs only while an edge flows AND the gate is open — a closed
+  // gate pauses the UI-thread loop (no wake per vsync), not just the writes.
+  useSldFlowLoop(tickFlow, flowing, animate);
+  const dashPhase = useDerivedValue(() => sldDashPhase(clock.value));
 
   // Clip in canvas space (OUTSIDE the pan/zoom matrix) so edges/dots can
   // never draw past the viewport's rounded frame.
@@ -631,7 +688,13 @@ const DiagramSkiaLayerBase: FC<DiagramSkiaLayerProps> = ({
             <SkiaPath path={dotGrid} color={dotColor} opacity={DOT_OPACITY} />
             {skEdges.map(e =>
               e.animated ? (
-                <FlowEdge key={e.id} edge={e} dashPhase={dashPhase} clock={clock} />
+                <FlowEdge
+                  key={e.id}
+                  edge={e}
+                  dashPhase={dashPhase}
+                  clock={clock}
+                  particle={!reduceMotion}
+                />
               ) : (
                 <IdleEdge key={e.id} edge={e} />
               ),
