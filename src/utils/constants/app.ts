@@ -24,6 +24,6 @@ export const ASSETS_CDN = stripTrailingSlash(
  * (project.pbxproj) and Android versionName / versionCode
  * (android/app/build.gradle). Never hard-code a version string in a screen.
  */
-export const APP_VERSION = '1.0.2';
+export const APP_VERSION = '1.0.3';
 export const APP_BUILD = '1';
 export const APP_VERSION_LABEL = `Version ${APP_VERSION} (${APP_BUILD})`;

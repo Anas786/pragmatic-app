@@ -19,8 +19,10 @@ export const SUPPORT_EMAIL = 'info@pragmaticeng.com';
 
 export const WEBSITE_URL = 'https://pragmaticeng.com/';
 
-/** No public privacy-policy page yet — screens hide the link while null. */
-export const PRIVACY_POLICY_URL: string | null = null;
+/** Public privacy policy (also the Play / App Store listing URL). Screens hide
+ * the link while null. */
+export const PRIVACY_POLICY_URL: string | null =
+  'https://pragmaticeng.com/privacy-policy/';
 
 /** "Last updated" stamp shown on Terms and Conditions. */
 export const LEGAL_UPDATED_AT = 'February 2026';

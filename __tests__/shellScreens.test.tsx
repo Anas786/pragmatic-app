@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals
 import type { Mock } from 'jest-mock';
 import React from 'react';
 import renderer, { ReactTestInstance } from 'react-test-renderer';
-import { Alert, Text, TextInput } from 'react-native';
+import { Alert, Linking, Text, TextInput } from 'react-native';
 import { AuthError } from 'aws-amplify/auth';
 import { LocaleDirContext } from '@react-navigation/native';
 import type { DrawerContentComponentProps } from '@react-navigation/drawer';
@@ -20,6 +20,7 @@ import { DARK_SCHEME } from '../src/theme';
 import { useThemeStore } from '../src/hooks/useThemeStore';
 import { useUserStore } from '../src/hooks/useUserStore';
 import { APP_VERSION_LABEL } from '../src/utils/constants/app';
+import { PRIVACY_POLICY_URL } from '../src/utils/constants/company';
 import { jwt } from './fixtures/cognitoSession';
 
 /* ───────────────────────── mocks ───────────────────────── */
@@ -244,12 +245,16 @@ describe('drawer content', () => {
     tree.unmount();
   });
 
-  it('ends with Sign out and the version label; no privacy row without a URL', () => {
+  it('ends with Sign out and the version label; the privacy row opens the hosted policy', () => {
+    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
     useUserStore.setState({ user: USER });
     const tree = renderDrawer();
     expect(tappable(tree.root, 'Sign out')).toBeTruthy();
     expect(allText(tree.root)).toContain(APP_VERSION_LABEL);
-    expect(tree.root.findAll(n => n.props.accessibilityLabel === 'Privacy policy')).toHaveLength(0);
+    expect(PRIVACY_POLICY_URL).toBe('https://pragmaticeng.com/privacy-policy/');
+    press(tree.root, 'Privacy policy');
+    expect(openURL).toHaveBeenCalledWith(PRIVACY_POLICY_URL);
+    openURL.mockRestore();
     tree.unmount();
   });
 });

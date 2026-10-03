@@ -1,8 +1,14 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:tools="http://schemas.android.com/tools">
   <uses-permission android:name="android.permission.INTERNET" />
   <!-- Short vibration feedback on taps (src/utils/haptics.ts). Without this
        declared, Vibrator.vibrate() throws SecurityException at runtime. -->
   <uses-permission android:name="android.permission.VIBRATE" />
+  <!-- ACCESS_NETWORK_STATE comes from @react-native-community/netinfo (online
+       / offline detection for React Query + Amplify) and is kept. Its
+       ACCESS_WIFI_STATE is removed: the app never reads Wi-Fi details, and
+       netinfo checks the permission before every Wi-Fi call. -->
+  <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" tools:node="remove" />
 
   <application
     android:name=".MainApplication"

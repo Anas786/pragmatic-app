@@ -19,3 +19,15 @@ buildscript {
 }
 
 apply plugin: "com.facebook.react.rootproject"
+
+// Google Play requires 16 KB page-size support for apps targeting Android 15+.
+// RN core and the app's own CMake build already pass this flag, but the
+// installed reanimated / screens / skia versions don't, so their 64-bit .so
+// files were linked with 4 KB pages. Add it to every native library build
+// (no-op for libraries without CMake). Check with the ELF p_align of
+// base/lib/arm64-v8a/*.so in the .aab (must be 0x4000).
+subprojects {
+    plugins.withId("com.android.library") {
+        android.defaultConfig.externalNativeBuild.cmake.arguments("-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON")
+    }
+}

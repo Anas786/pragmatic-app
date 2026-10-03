@@ -33,6 +33,11 @@ local.properties
 .cxx/
 *.keystore
 !debug.keystore
+# Play upload key (pes-upload-key.jks) lives in the repo root for convenience but
+# must NEVER be committed — this repository is public. Passwords stay in
+# ~/.gradle/gradle.properties.
+*.jks
+*.p12
 .kotlin/
 
 # node.js
