@@ -605,6 +605,14 @@ const normalizeSldEdge = (raw: unknown): SLDEdge | null => {
 };
 
 const sldGraphCache = new WeakMap<object, SLDGraph | null>();
+/**
+ * The same graph per `sldV2` OBJECT: a refetched config whose diagram React
+ * Query kept (structural sharing keeps an unchanged subtree's reference —
+ * only cards / trends / params changed) reads to the SAME graph, so the
+ * grouping, phone-layout and 3D caches keyed by graph reference all hit and
+ * nothing re-lays out (nor does the 3D twin's Grouped diagram change).
+ */
+const sldGraphBySld = new WeakMap<object, SLDGraph | null>();
 
 /**
  * Read + normalize `siteConfig.siteComponents.sldV2` into a typed
@@ -614,26 +622,39 @@ const sldGraphCache = new WeakMap<object, SLDGraph | null>();
  * state). The renderer is value-source-agnostic, so the only remaining step
  * is feeding it {@link makeLiveResolver}.
  *
- * Cached per config reference: React Query hands every consumer (the
- * Summary section, the inline diagram, the full-screen route) the same
- * config object, so they share ONE graph — and through it the grouping and
- * phone-layout caches, which are keyed by graph reference. Treat the result
- * as read-only.
+ * Cached per config reference AND per `sldV2` reference: React Query hands
+ * every consumer (the Summary section, the inline diagram, the full-screen
+ * route) the same config object, so they share ONE graph — and through it
+ * the grouping and phone-layout caches, which are keyed by graph
+ * reference; a config refetch that keeps the `sldV2` object keeps the
+ * graph too. Treat the result as read-only.
  */
 export const selectSldGraph = (config: unknown): SLDGraph | null => {
   if (!config || typeof config !== 'object') return null;
   if (sldGraphCache.has(config)) return sldGraphCache.get(config) ?? null;
-  const graph = readSldGraph(config);
+  const sld = sldV2Of(config);
+  let graph: SLDGraph | null;
+  if (sld === null) {
+    graph = null;
+  } else if (sldGraphBySld.has(sld)) {
+    graph = sldGraphBySld.get(sld) ?? null;
+  } else {
+    graph = readSldGraph(sld);
+    sldGraphBySld.set(sld, graph);
+  }
   sldGraphCache.set(config, graph);
   return graph;
 };
 
-const readSldGraph = (config: object): SLDGraph | null => {
+/** `config.siteComponents.sldV2` when it is an object, else null. */
+const sldV2Of = (config: object): object | null => {
   const components = (config as Record<string, unknown>).siteComponents;
   if (!components || typeof components !== 'object') return null;
   const sld = (components as Record<string, unknown>).sldV2;
-  if (!sld || typeof sld !== 'object') return null;
+  return sld && typeof sld === 'object' ? sld : null;
+};
 
+const readSldGraph = (sld: object): SLDGraph | null => {
   const rawNodes = (sld as Record<string, unknown>).nodes;
   const rawEdges = (sld as Record<string, unknown>).edges;
   const nodes = (Array.isArray(rawNodes) ? rawNodes : [])

@@ -12,17 +12,28 @@
  * Deliberately framework-agnostic about *where* it lives: it takes the
  * viewport `width`/`height`, a `fullscreen` flag, the safe-area insets and
  * the hub to centre, and owns everything else (shared values, gestures, the
- * flowing-dash layer — its clock gated by the host's `animate` — fit math,
- * controls). Both hosts are portrait and
- * unrotated: the phone layout is a tall diagram, so the old 90°-rotated
- * landscape fullscreen (and its pan remap) is gone.
+ * flowing-dash layer — its clock gated by the host's `animate` and by the
+ * motion gate — fit math, controls). Both hosts are portrait and
+ * unrotated: the phone layout is a tall diagram. (The 3D view is not drawn
+ * here — it is the web twin, `SldTwin/`, hosted by SLDDiagram /
+ * SLDFullscreenScreen.)
  *
- * Overlays: the zoom / routing / fullscreen / lock column (bottom-left)
- * auto-fades after a short idle and ignores taps while hidden; the
- * Grouped ⇄ Units pill (top-right) is ALWAYS visible and tappable, and the
- * initial fit keeps the diagram clear of it (see `computeSldFit`): when the
- * fit reserves a top strip for it, that strip is a band painted over the
- * diagram (`fit.mask`), so no card is ever drawn under the pill.
+ * Motion (`useSldMotion`, ./sldMotion.ts): the flow only animates while the
+ * site's data is LIVE, Reduce Motion is off and the user hasn't paused it
+ * (the Pause / Play control, WCAG 2.2.2). When something other than the
+ * user's Pause stops it, that control is a disabled "animation off" state
+ * whose spoken label says why.
+ *
+ * Overlays: the zoom / routing / motion / fullscreen / lock column
+ * (bottom-left) auto-fades after a short idle and ignores taps while
+ * hidden — and wraps into a second column rather than grow under the
+ * top-left pill. In the 2D FULL SCREEN the Grouped ⇄ Units pill
+ * (top-right) and the Diagram | 3D pill (top-left) are ALWAYS visible and
+ * tappable, and the initial fit keeps the diagram clear of both (see
+ * `computeSldFit`): when the fit reserves a top strip for them, that strip
+ * is a band painted over the diagram (`fit.mask`), so no card is ever
+ * drawn under a pill. Inline there are no pills over the diagram (both
+ * switches head the panel, `SldViewHeader`), so no strip either.
  *
  * IMPORTANT: this must never be rendered inside a core React Native `<Modal>`.
  * A Modal is a separate Fabric surface, and Reanimated's commit/mount hooks
@@ -49,15 +60,23 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Scheme, useScheme, useThemedStyles } from 'src/theme';
+import { Scheme, space, useScheme, useThemedStyles } from 'src/theme';
 import { normalizeWidth, resolveNodeRects, SLDBounds, SLDPoint } from 'src/utils';
 import { SLDGraph, SLDValueResolver } from 'src/types';
-import type { SldViewMode } from 'src/hooks';
-import ControlButtons, { SLD_MODE_TOGGLE_BOX, SldModeToggle } from './ControlButtons';
+import type { SldView, SldViewMode } from 'src/hooks';
+import { useSldViewMode } from 'src/hooks/useSldViewMode';
+import ControlButtons, {
+  SLD_MODE_TOGGLE_BOX,
+  SLD_VIEW_TOGGLE_BOX,
+  SldModeToggle,
+  SldViewToggle,
+} from './ControlButtons';
 import { DiagramNodeLayer, DiagramSkiaLayer } from './SummaryView/SLDCanvas';
+import { useSldMotion } from './sldMotion';
 import {
   computeSldFit,
   sldClampTranslate,
+  sldControlColumnMaxHeight,
   SldInsets,
   sldZoomLimits,
   sldZoomTo,
@@ -106,17 +125,26 @@ interface SLDViewportProps {
   onClose?: () => void;
   /**
    * Safe-area insets in THIS viewport's frame (the full-screen route passes
-   * the device insets). The initial fit, the controls and the mode pill all
+   * the device insets). The initial fit, the controls and the pills all
    * stay inside them. Omitted inline (the viewport sits inside the page).
    */
   safeInsets?: SldInsets;
   /**
-   * Grouped / Units toggle state. Omit to hide the toggle (e.g. when no
-   * energy type has ≥2 units, so grouping would change nothing). The parent
-   * owns the mode and remounts this viewport (keyed by mode) to re-fit.
+   * Grouped / Units pill (top-right) — the 2D FULL SCREEN passes both. Omit
+   * to hide it: inline (the switch heads the panel, `SldViewHeader`, and
+   * the fit then reserves no strip for it) and whenever no energy type has
+   * ≥2 units. The parent owns the mode and remounts this viewport (keyed by
+   * mode) to re-fit.
    */
   groupMode?: SldViewMode;
   onGroupModeChange?: (mode: SldViewMode) => void;
+  /**
+   * Diagram | 3D pill (top-left) — the 2D FULL SCREEN passes both (choosing
+   * 3D turns that screen sideways into the web twin). Omitted inline: the
+   * inline switch heads the panel (`SldViewHeader`), outside this viewport.
+   */
+  view?: SldView;
+  onViewChange?: (view: SldView) => void;
   /**
    * Pan lock + orthogonal routing are OWNED BY THE HOST: the host remounts
    * this viewport on every Grouped ⇄ Units switch (to re-fit), and the
@@ -133,6 +161,8 @@ interface SLDViewportProps {
    * Owned by the host, so it survives the keyed Grouped ⇄ Units remount.
    */
   animate?: SharedValue<boolean>;
+  /** The site's "last data" stamp — the motion gate (live data only). */
+  lastUpdate?: number | null;
 }
 
 const noop = () => {};
@@ -150,11 +180,14 @@ const SLDViewport: FC<SLDViewportProps> = ({
   safeInsets,
   groupMode,
   onGroupModeChange,
+  view,
+  onViewChange,
   locked: isLocked,
   onLockedChange,
   orthogonal,
   onOrthogonalChange,
   animate,
+  lastUpdate,
 }) => {
   const scheme = useScheme();
   const themed = useThemedStyles(createStyles);
@@ -164,6 +197,13 @@ const SLDViewport: FC<SLDViewportProps> = ({
   const insetBottom = safeInsets?.bottom ?? 0;
   const insetLeft = safeInsets?.left ?? 0;
   const showModeToggle = groupMode !== undefined && onGroupModeChange !== undefined;
+  const showViewToggle = view !== undefined && onViewChange !== undefined;
+
+  // Motion gate (live data, Reduce Motion, the user's Pause) — recomputed
+  // on the shared 30 s freshness tick, never per frame.
+  const motionPaused = useSldViewMode(s => s.motionPaused);
+  const setMotionPaused = useSldViewMode(s => s.setMotionPaused);
+  const { motion, motionOff } = useSldMotion(lastUpdate, motionPaused);
 
   // Fit math. Both hosts open with the diagram's WIDTH filling the safe area
   // (capped at 1 graph unit per point — the phone layout is designed for
@@ -171,8 +211,8 @@ const SLDViewport: FC<SLDViewportProps> = ({
   // centred; a taller one opens centred on the hub and is panned for the
   // rest. The fit area is the content box (inside the inline border) minus
   // the safe-area insets, and the diagram is kept clear of the persistent
-  // mode pill — a top strip is reserved for it when the plain fit would
-  // reach under it. The zoom-out floor is the whole-diagram overview.
+  // top pills — a top strip is reserved for them when the plain fit would
+  // reach under one. The zoom-out floor is the whole-diagram overview.
   //
   // Zoom (buttons AND pinch) pivots on the VIEWPORT centre — the translation
   // scales with the zoom — and whenever the view comes to rest (a button
@@ -212,6 +252,7 @@ const SLDViewport: FC<SLDViewportProps> = ({
       contentHeight: contentH,
       insets: { top: insetTop, right: insetRight, bottom: insetBottom, left: insetLeft },
       overlay: showModeToggle ? SLD_MODE_TOGGLE_BOX : undefined,
+      overlayLeft: showViewToggle ? SLD_VIEW_TOGGLE_BOX : undefined,
       maxScale: SLD_MAX_FIT_SCALE,
       focusY,
       cards: cardRects,
@@ -240,6 +281,7 @@ const SLDViewport: FC<SLDViewportProps> = ({
     insetBottom,
     insetLeft,
     showModeToggle,
+    showViewToggle,
     focusY,
     cardRects,
   ]);
@@ -605,6 +647,11 @@ const SLDViewport: FC<SLDViewportProps> = ({
     [onLockedChange, isLocked],
   );
 
+  const handleToggleMotion = useCallback(
+    () => setMotionPaused(!motionPaused),
+    [setMotionPaused, motionPaused],
+  );
+
   const viewportStyle = useMemo(
     () =>
       StyleSheet.flatten([
@@ -623,7 +670,7 @@ const SLDViewport: FC<SLDViewportProps> = ({
     [panZoomStyle, bounds.width, bounds.height],
   );
 
-  // The band reserved under the pill (`fit.mask`): it hides whatever the
+  // The band reserved under the pills (`fit.mask`): it hides whatever the
   // diagram puts there — the upper rows of a diagram taller than the view
   // at open, anything panned / zoomed up later. 0 when no strip is reserved.
   const maskStyle = useMemo(
@@ -631,11 +678,11 @@ const SLDViewport: FC<SLDViewportProps> = ({
     [themed.mask, fullscreen, maskHeight],
   );
 
-  // Top-right of the safe area — exactly where SLD_MODE_TOGGLE_BOX tells the
-  // fit math the pill sits.
+  // Top-right / top-left of the safe area — exactly where the pill boxes
+  // tell the fit math the pills sit.
   const modeToggleAnchorStyle = useMemo(
     () => [
-      styles.modeToggleAnchor,
+      styles.toggleAnchor,
       {
         top: insetTop + SLD_MODE_TOGGLE_BOX.edge,
         right: insetRight + SLD_MODE_TOGGLE_BOX.edge,
@@ -643,6 +690,24 @@ const SLDViewport: FC<SLDViewportProps> = ({
     ],
     [insetTop, insetRight],
   );
+  const viewToggleAnchorStyle = useMemo(
+    () => [
+      styles.toggleAnchor,
+      {
+        top: insetTop + SLD_VIEW_TOGGLE_BOX.edge,
+        left: insetLeft + SLD_VIEW_TOGGLE_BOX.edge,
+      },
+    ],
+    [insetTop, insetLeft],
+  );
+
+  // The controls never grow up under the top-left pill (they wrap instead).
+  const controlsMaxHeight = sldControlColumnMaxHeight({
+    viewHeight: viewH,
+    insets: { top: insetTop, right: insetRight, bottom: insetBottom, left: insetLeft },
+    edge: space.lg,
+    pill: showViewToggle ? SLD_VIEW_TOGGLE_BOX : undefined,
+  });
 
   return (
     <GestureDetector gesture={gesture}>
@@ -659,6 +724,7 @@ const SLDViewport: FC<SLDViewportProps> = ({
           scale={scale}
           clipRadius={fullscreen ? 0 : VIEWPORT_RADIUS - 1}
           animate={animate}
+          motionAllowed={motion}
         />
         {/* Explicit clipping wrapper: the viewport's own overflow:'hidden'
             doesn't reliably clip the Reanimated-transformed frame on every
@@ -683,16 +749,25 @@ const SLDViewport: FC<SLDViewportProps> = ({
             onToggleLock={handleToggleLock}
             onFullscreen={fullscreen ? onClose ?? noop : onFullscreen ?? noop}
             isLocked={isLocked}
+            motionPaused={motionPaused}
+            onToggleMotion={handleToggleMotion}
+            motionOffLabel={motionOff?.spoken ?? null}
             currentZoom={currentZoom}
             minZoom={minScale}
             maxZoom={maxScale}
             insetLeft={insetLeft}
             insetBottom={insetBottom}
+            maxHeight={controlsMaxHeight}
           />
         </Animated.View>
-        {/* Grouped ⇄ Units: OUTSIDE the fading overlay — always visible and
-            tappable, so Units mode stays discoverable. Plain View, no
-            animated props. */}
+        {/* The pills: OUTSIDE the fading overlay — always visible and
+            tappable, so Units mode and the 3D twin stay discoverable. Plain
+            Views, no animated props. */}
+        {showViewToggle ? (
+          <View pointerEvents="box-none" style={viewToggleAnchorStyle}>
+            <SldViewToggle view={view} onChange={onViewChange} />
+          </View>
+        ) : null}
         {showModeToggle ? (
           <View pointerEvents="box-none" style={modeToggleAnchorStyle}>
             <SldModeToggle mode={groupMode} onChange={onGroupModeChange} />
@@ -720,7 +795,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 0,
     borderTopRightRadius: 0,
   },
-  modeToggleAnchor: {
+  toggleAnchor: {
     position: 'absolute',
   },
 });

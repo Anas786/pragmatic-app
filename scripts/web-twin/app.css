@@ -1,0 +1,71 @@
+/*
+ * PES app adaptations of the web twin page. build.mjs appends this AFTER the
+ * vendored web CSS (whose bytes are never edited), so equal-specificity rules
+ * here win. Only host plumbing lives here — the twin itself must look exactly
+ * like the web.
+ */
+
+/* The web's theme effect sets this at runtime for its default brand colour
+   #4ADE80; the scene reads it from body (getComputedStyle → --brand-rgb). */
+:root {
+  --brand-rgb: 74, 222, 128;
+}
+
+/* The page is exactly the WebView: no margins, no page scroll. The web's
+   MUI baseline font and text-size-adjust (no iOS text inflation when the
+   full screen is laid out wide). */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+body {
+  background: var(--bg-0);
+  color: var(--ink-1);
+  font-family: Inter, system-ui, sans-serif;
+}
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+/* The bridge mounts the twin bare, inside an element carrying the web host's
+   `.spf-panel` class ONLY for its colour tokens (--ink-*, --line*, … differ
+   from body's, so without it every label and line would differ from the
+   web). The panel's own frame (border, radius, bg-1 fill) is removed. */
+.spf-panel.pes-twin-scope {
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: var(--bg-0);
+}
+
+/* The app draws the title, the "Diagram | 3D" switch and the full-screen
+   button; the twin's toolbar (title, subtitle, browser Fullscreen — a no-op
+   in WKWebView — and Wall view) is hidden. */
+.pes-twin-scope .sld-page.sld-embed .sld-toolbar {
+  display: none;
+}
+
+/* The canvas fills the WebView (the web: clamp(600px, 78vh, 920px)); the
+   app sizes the WebView. */
+.pes-twin-scope .sld-page.sld-embed .sld-canvas {
+  height: 100vh;
+}
+
+/* Every gesture on the 3D goes to the twin — inline too (user, 2026-10-10:
+   "scroll up and down still scroll screen"): a vertical drag tilts the model
+   instead of the web's coarse-pointer `touch-action: pan-y` page scroll. The
+   app holds its page scroll still while a finger is on the 3D (natively, on
+   RN's touch-down, and on bridge.js "gesture ownership" claims) and keeps
+   page visible around the inline card to scroll by. (0,3,1) beats the
+   vendored `.sld-page:not(.sld-fs) .tw-canvas`. */
+html.pes-host-fullscreen .sld-page .tw-canvas,
+html.pes-host-inline .sld-page .tw-canvas {
+  touch-action: none !important;
+}

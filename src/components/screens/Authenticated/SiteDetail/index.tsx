@@ -74,7 +74,11 @@ import {
   siteDetailPhase,
   siteHeaderA11yLabel,
 } from './siteDetailModel';
-import { PullToRefreshGateContext, usePullToRefreshGate } from './pullToRefreshGate';
+import {
+  BodyScrollGateContext,
+  PullToRefreshGateContext,
+  usePullToRefreshGate,
+} from './pullToRefreshGate';
 import { SiteRefreshContext } from './siteRefresh';
 import { BodyViewportContext, createBodyViewportStore } from './bodyViewport';
 
@@ -283,13 +287,20 @@ const SiteDetail: FC = () => {
   // remount the whole body: Android disables it (`enabled`), iOS stops the
   // top overscroll that a pull needs (`bounces`).
   const { acquire: acquirePullBlock, blocked: pullBlocked } = usePullToRefreshGate();
+  // A child that owns a gesture the scroll view would also follow (the
+  // inline 3D twin while a finger is on it) holds the body scroll still.
+  const { acquire: acquireScrollBlock, blocked: scrollBlocked } = usePullToRefreshGate();
 
   const refreshControl = useMemo(
     () => (
       <RefreshControl
         refreshing={refreshSource === 'pull'}
         onRefresh={handlePullRefresh}
-        enabled={!pullBlocked}
+        // Never switched off mid-refresh: Android's SwipeRefreshLayout
+        // `setEnabled(false)` resets — hides — the spinner for the rest of
+        // that refresh (a touch on the 3D holds the gate). A refreshing
+        // layout never intercepts a new pull anyway.
+        enabled={!pullBlocked || refreshSource === 'pull'}
         tintColor={scheme.brand}
         colors={[scheme.brand]}
         progressBackgroundColor={scheme.surfaceRaised}
@@ -352,11 +363,13 @@ const SiteDetail: FC = () => {
         />
         <ContentFade>
           <PullToRefreshGateContext.Provider value={acquirePullBlock}>
-            <SiteRefreshContext.Provider value={handleHeaderRefresh}>
-              <BodyViewportContext.Provider value={bodyViewport.store}>
-                <ViewsContent tab={renderedTab} />
-              </BodyViewportContext.Provider>
-            </SiteRefreshContext.Provider>
+            <BodyScrollGateContext.Provider value={acquireScrollBlock}>
+              <SiteRefreshContext.Provider value={handleHeaderRefresh}>
+                <BodyViewportContext.Provider value={bodyViewport.store}>
+                  <ViewsContent tab={renderedTab} />
+                </BodyViewportContext.Provider>
+              </SiteRefreshContext.Provider>
+            </BodyScrollGateContext.Provider>
           </PullToRefreshGateContext.Provider>
         </ContentFade>
       </>
@@ -409,6 +422,7 @@ const SiteDetail: FC = () => {
         // finished loading) → viewport consumers re-measure themselves.
         onContentSizeChange={bodyViewport.notify}
         scrollEventThrottle={32}
+        scrollEnabled={!scrollBlocked}
         bounces={!pullBlocked}
         refreshControl={refreshControl}>
         {body}

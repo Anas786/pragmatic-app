@@ -275,7 +275,8 @@ src/
 │           │       ├── PerformanceReportCard.tsx ← period hero + Sources card + stacked bar (v4, §8)
 │           │       ├── InverterTableCard.tsx     ← fleet hero + compact InverterRows (v4, §8)
 │           │       ├── TrendAnalysisCard.tsx     (line chart, gifted-charts)
-│           │       ├── SLDDiagram.tsx
+│           │       ├── SLDDiagram.tsx / SLDFullscreenScreen.tsx / SLDViewport.tsx  (energy-flow hosts + the Diagram's pan/zoom surface, §19 / §23)
+│           │       ├── SldTwin/                 ← "3D" = the web portal's own twin in a WebView (§23)
 │           │       ├── GradientRangeBar.tsx      ← v2: Surface elevation, semantic gradient
 │           │       └── …
 │           └── Profile, AboutUs, ContactUs, TermsAndConditions
@@ -902,7 +903,12 @@ respect:
   (`components/sldFlowClock.ts`, worklets, `sldFlowClock.test.ts`): it only
   ticks while the host's `animate` shared value is true, at most 30×/s
   (time-based motion, same speed), never with reduced motion (static dashes,
-  no particles) or when no edge flows. The loop itself is paused, not just
+  no particles) or when no edge flows — nor while the site's data isn't LIVE
+  or the user paused it (`motionAllowed` from `useSldMotion`,
+  `components/sldMotion.ts`, `sldMotion.test.ts`: the Pause / Play button in
+  the controls column, WCAG 2.2.2; when Reduce Motion or stale data stops
+  the flow it is a disabled "animation off" state whose spoken label says
+  why, never a Pause that does nothing). The loop itself is paused, not just
   the writes (`components/useSldFlowLoop.ts`, `sldFlowLoop.test.tsx`):
   `setActive(flowing && gateOpen)` (guarded by `isActive` — §20.3), the
   gate reaching JS through a `useAnimatedReaction` → `runOnJS` only when it
@@ -956,13 +962,16 @@ respect:
   - Inline: `computeSldFit` fills the WIDTH (cap `SLD_MAX_FIT_SCALE` = 1),
     centres a diagram that fits, centres a taller one on the hub (`focus`),
     clamped so no empty band shows; zoom-out floor 0.9 × overview, max
-    max(3 × fit, 2). Panel height = content × scale + pill strip, clamped to
+    max(3 × fit, 2). Panel height = content × scale, clamped to
     [320, 0.85 × window] (`sldInlineHeight`; skeleton / not-yet-loaded use
-    `SLD_INLINE_DEFAULT_HEIGHT`). Opens locked (page scroll wins).
+    `SLD_INLINE_DEFAULT_HEIGHT`) — no pill strip inline any more: Grouped |
+    Units heads the panel (§23.4), so the inline fit reserves no strip /
+    mask band. Opens locked (page scroll wins).
   - Zoom (+/- and pinch) pivots on the VIEWPORT centre; pan/pinch end
     settles the translate into the fit area (`sldClampTranslate`, a
     worklet).
-- **SLD grouping** (Grouped / Units toggle, `src/utils/sldGroup.ts`):
+- **SLD grouping** (Grouped / Units toggle, `src/utils/sldGroup.ts`; ONE
+  mode for the Diagram AND the 3D twin — §23.8):
   - Grouped (default) collapses leaf source units into ONE box per energy
     type — "Solar · 9" with totalled values. Pure transform: downstream
     (bounds, `resolveNodeRects`, both layers) runs on the grouped graph.
@@ -1005,18 +1014,28 @@ respect:
     flowing); `isEdgeAnimated` checks `edge.data.animation` first.
   - Shared wiring: `useSldModel(siteId)` (SiteDetail/components) for BOTH the
     inline diagram and the fullscreen route; the mode lives in the
-    non-persisted `useSldViewMode` zustand store. `SLDViewport` is keyed by
-    mode so a switch remounts + re-fits; its lock + orthogonal-routing state
+    `useSldViewMode` zustand store (mode + Pause in memory; only the
+    Diagram | 3D `view` is persisted). `SLDViewport` is keyed by mode so a
+    switch remounts + re-fits; its lock + orthogonal-routing state
     is lifted to the parents (controlled props) so it survives the remount.
-    The toggle is its own `SldModeToggle` (ControlButtons.tsx), pinned to the
+    Where the toggle lives: inline, in the header row ABOVE the panel for
+    both views (`SldViewHeader`, §23.4 — no pill over the inline diagram);
+    sideways 3D, on the rail (§23.4); the 2D FULL SCREEN keeps its own
+    `SldModeToggle` (ControlButtons.tsx), pinned to the
     top-right of the safe area and **always visible** — only the zoom / lock /
     fullscreen column auto-fades (users never found Units mode behind the
-    fade). Hidden when no type has ≥2 units; segments labelled with their
+    fade). Hidden everywhere when no type has ≥2 units; segments labelled with their
     visible text (WCAG 2.5.3). Its footprint `SLD_MODE_TOGGLE_BOX` is the real
     layout box: Fabric hit-tests stop at the parent's bounds, so `hitSlop`
     can't reach past the container — `sldModeToggleMetrics` sizes the pill
-    itself to a ≥44pt target. The fit (`computeSldFit`) keeps a strip free
-    for it only when needed, and a reserved strip is a real **mask band**
+    itself to a ≥ touch.min target (44 iOS / 48 Android — both 2D full-screen
+    pills share `TOGGLE`, like the inline header and the rail). The 2D full screen also shows the top-LEFT
+    "Diagram | 3D" pill (`SldViewToggle`, `SLD_VIEW_TOGGLE_BOX`,
+    `overlayLeft`); the controls column never grows up under it — it wraps
+    into a second column (`sldControlColumnLayout` /
+    `sldControlColumnMaxHeight`, every button ≥ touch.min). The fit
+    (`computeSldFit`) keeps a strip free for the pills only when needed, and
+    a reserved strip is a real **mask band**
     (`fit.mask`, painted by SLDViewport over the diagram, under the pill;
     canvas fill + hairline): a diagram taller than the view must cover its
     fit area, so centred on the hub its upper rows ran up into the strip —
@@ -1027,7 +1046,8 @@ respect:
     row kept in view) so the band's edge falls between rows. The pill never
     covers a visible card, at open or after a pan. Tests:
     `sldViewportFit.test.ts` ("never covers a card at open").
-  - **Fullscreen = PORTRAIT, no rotation of any kind** (the phone layout is
+  - **The Diagram's fullscreen = PORTRAIT, no rotation of any kind** (the
+    3D twin's is sideways by a transform, §23; the phone layout is
     portrait-shaped; the old 90° JS rotation, `rotateInsets`,
     `SLD_FULLSCREEN_ROTATION_DEG` and the pan remap are gone). Device
     safe-area insets are used directly; fit-width, centred on the hub,
@@ -1036,6 +1056,9 @@ respect:
   - Tests: `__tests__/sldGroup.test.ts` (incl. route-clearance mutation check,
     WHR cases), `__tests__/sldViewportFit.test.ts` (inset mapping, fit,
     44pt touch target).
+- **SLD "3D" = the web portal's own twin** (Oct 2026) — the DEFAULT view,
+  inline + full screen (sideways); the Diagram above is one tap away
+  ("Diagram | 3D", persisted). The Skia point-cloud 3D is gone. **§23**.
 - **Routes import screens directly** — never import screens from the
   `src/components` root barrel (it drags the whole Authenticated tree into the
   splash render; Metro can't defer `export *` re-exports).
@@ -1412,3 +1435,531 @@ live outside the repo; this section is the durable summary.
 - **Trend**: one heading per section (`trendCaption` drops a subHeading that
   repeats it), a window label like "30 Sep 14:35 – 1 Oct 14:35", legend
   height measured (`trendChartLayout`), previous data kept while refetching.
+
+---
+
+## 23. SLD "3D" = the web portal's own twin (Oct 2026) — `SiteDetail/components/SldTwin/` + `scripts/web-twin/`
+
+The energy flow has ONE switch, **"Diagram | 3D"** (Diagram first, like the
+web), opening on **3D** (the choice is persisted, `useSldViewMode.view`):
+
+- **3D** = the web portal's OWN compiled 3D twin — the same JavaScript and
+  CSS bytes the website serves — in a `react-native-webview`, fed by RN. It
+  brings its own tools (fit, zoom, **Plan view** = the web's top-down view,
+  tags), HUD ("5.82 MW producing now", status chips) and readings card on
+  tap.
+- **Diagram** = the app's phone 2D diagram (§19): Pause, phone layout.
+
+Both views share ONE **"Grouped | Units"** mode (default Grouped, in
+memory — §23.8): grouped, the twin draws one model per energy-type group,
+exactly the Diagram's groups and totals.
+
+User decisions 2026-10-09 (plan `.omc/plans/sld-web-twin.md`, all the
+recommended options): the Skia point-cloud 3D was rejected ("SLD does not
+look attractive. Try to copy exactly the browser one.") and is REMOVED — no
+`SLD3D/`, no `src/utils/sld3d/`, no `scheme.sld3d`. Only the vendored
+bytes are exactly the web; a readable port of the twin (the research
+spec's Option B) is the fallback only if the fixed in-page behaviour or the
+re-sync cost becomes a problem. Never a native GL re-implementation.
+
+### 23.1 The page — `scripts/web-twin/` (dev-time only; its README is the manual)
+
+- `vendor.mjs` crawls the public `/_next/static` files of web build
+  `V8bQ6PlHPUKSpJxgVf8cc`, finds the dependency closure of turbopack module
+  **748776** (the twin) + 681912 (`react-dom/client`) — 28 modules: React
+  19.3, react-redux 9, the SLD model library, three.js r186 + addons — and
+  writes `vendor/manifest.json` (md5 + bytes of every file). It fails on a
+  missing module, a lazy import (it would load over the network), an md5
+  change under the same build, or an ambiguous match.
+- `build.mjs` inlines the 8 chunks (turbopack runtime LAST, the Next.js
+  bootstrap never runs), the 3 web CSS files, Inter (OFL, data URIs —
+  EVERY subset Google serves, as the web loads them: the twin's group tags
+  draw a greek Σ; 219 KB of woff2), `app.css` and `bridge.js` into ONE page
+  → `SldTwin/twinHtml.generated.js` (`TWIN_HTML`, `TWIN_BUILD_ID`,
+  `TWIN_MANIFEST`, `TWIN_THEME_PLACEHOLDER`; ≈ 2.0 MB, ASCII,
+  deterministic) + the hand-written `.d.ts`. The page opens with the
+  third-party notices as an HTML comment (`THIRD_PARTY_NOTICES.txt` — the
+  MIT texts of three.js, React / react-dom / scheduler /
+  use-sync-external-store, react-redux, Next.js — + the Inter OFL): the
+  chunks carry no licence comments, so the notices ship inside every copy.
+  Its `<body>` class is the placeholder `__PES_TWIN_THEME__` (exactly once;
+  the app fills it). `build.mjs --check` fails when the committed module is
+  stale. **Never edit the generated module or the vendored bytes** — app
+  changes go in `bridge.js` / `app.css`. `vendor.mjs --fonts-only`
+  re-fetches only Inter.
+- The chunks / CSS are NOT committed (`scripts/web-twin/.gitignore`): every
+  byte is already in the generated module; `vendor.mjs --from-generated`
+  restores `vendor/` offline (md5-checked). The manifest and the Inter font
+  (+ `OFL.txt`) are committed. The repo is public: the vendored files are
+  the website's public, unauthenticated client bundles.
+- `smoke.mjs` renders the GENERATED page in headless Chrome (isolated
+  profile, SwiftShader) with `fixtures/lucky.json` (`fixture.mjs`, from
+  `src/data/mock/sld.ts`) and asserts the web's own output: "5.82 MW
+  producing now", the status chips, 20 tags, theme flip, Plan view, the
+  visibility shim, a live update to 6.97 MW, the phone touch hint, real
+  CDP touches (the page claims the app's scroll at touch-down and releases
+  on lift — one pair per drag —, never for a HUD control or in the full
+  screen), Σ
+  drawn with Inter, ZERO network requests, 0 JS exceptions; a third run serves
+  the LIGHT page as the app does and checks it is light before `init`,
+  that a twin mounted hidden runs ~0 frames until `visible`, and that an
+  uncaught error after mount is only a `warn`. It kills only the Chrome it
+  started, by PID. (SwiftShader timings say nothing about a phone GPU.)
+- Offline by construction: no request of any kind. Never load the twin
+  from the live site (Apple 2.5.2: no downloaded executable code).
+
+### 23.2 Message contract — `SldTwin/protocol.ts` ⇄ `scripts/web-twin/bridge.js` (change together)
+
+- **RN → page**: `injectJavaScript("window.__pesTwinReceive(<json>);true;")`
+  (`encodeTwinCommand`: escapes U+2028/9 and `</`, returns null instead of
+  throwing) — the same on iOS and Android:
+  - `init {sld, live, theme, siteName, host, visible}` — after `ready`, and
+    only once the diagram is loaded AND `/data/all` has answered (never a
+    half-loaded site); again after a re-`ready` (reloaded page). A site
+    whose `/data/all` settles without `live.data` (`live: null` — the API
+    allows it — or a failed first fetch) gets `EMPTY_LIVE` (`{}`): the web's
+    store starts as `{}` too, so the twin draws every reading "—" instead of
+    a panel that never fills (`useSldTwinInputs`; `live` is null only while
+    the query is `pending`);
+  - then only what changed, by reference: `live`, `sld`, `theme`,
+    `visible`. A query that goes back to empty never overwrites the page.
+  - `sld` = the RAW `siteComponents.sldV2` (the twin parses it itself;
+    `selectSldGraph` drops fields it reads), `live` = `/protected/data/all`
+    → `live.data` (`useSldTwinInputs`; React Query keeps both references
+    across equal refetches) — in **Units**. In **Grouped** both are the
+    adapter's (§23.8); a mode switch is just another `sld` + `live` pair for
+    the running page (never a reload / WebView remount).
+- **page → RN**: `window.ReactNativeWebView.postMessage(JSON)`, read by
+  `parseTwinEvent` (never throws; unknown / garbled / > 64 KB → ignored):
+  - `ready {build, react}`, `mounted {ms}`, `entered {ms}` (intro done) —
+    logged with `display()` (first-frame evidence);
+  - `error {where, message}` → `display()` + `onFail` once (the WebView is
+    dropped). Only what the twin can't run through: a boot failure,
+    React's root `onUncaughtError`, an uncaught window error / rejection
+    BEFORE the twin is up or once `#root` renders nothing;
+  - `exit` — the twin's own WebGL fallback "Show the diagram";
+  - `gesture {active}` — inline only: a finger landed on the 3D canvas /
+    the last one lifted → `onGesture` (the host holds the page scroll,
+    §23.3 "Gesture ownership");
+  - `warn {where, message}` → `display()`, never fatal: ResizeObserver loop
+    notices, recovered React errors, a malformed app message, and uncaught
+    window errors / rejections while the twin is up (a throw in a pointer
+    handler — the web keeps running on it, so does the app). Noise must
+    never use `error` (every `error` costs the site its 3D for the
+    session).
+
+### 23.3 Page-side adaptations (bridge.js / app.css only)
+
+- Mounted BARE: no web toolbar (title / Fullscreen / Wall), no Diagram | 3D
+  switch, no "Streaming" tag — RN draws the switch, the full-screen button
+  and the honest freshness. The twin sits in an element with the web's
+  `.spf-panel` class ONLY for its colour tokens (app.css removes that
+  panel's frame); the canvas keeps the web's 1 px border at a 12 px radius.
+- The canvas fills the WebView. **Every gesture on the 3D is the twin's,
+  inline too**: `touch-action: none` in both hosts (app.css) — a vertical
+  drag tilts the model, unlike the web's coarse-pointer `pan-y` (user,
+  2026-10-10).
+- **Gesture ownership (inline)** — user reports 2026-10-10: "when moving 3d
+  sld it scrolls down the screen too", then (after only turns / pinches
+  were claimed) "scroll up and down still scroll screen": the app's native
+  scroll view under the WebView followed every drag on the 3D. Layers, from
+  the earliest:
+  1. **Native, synchronous** (no JS round trip — a JS hold lands a frame or
+     more after touch-down, and a brisk swipe passes the scroll view's
+     start threshold before that):
+     - **Android**: the inline WebView has `nestedScrollEnabled`
+       (SldTwinView) → RNCWebView calls `requestDisallowInterceptTouchEvent
+       (true)` on the UI thread from the first touch, so the body
+       `ReactScrollView` never intercepts a drag that starts on the 3D
+       (before: it took over after ~8 dp, sent JS a touchcancel — both JS
+       holds released — and scrolled the whole drag while the twin got a
+       cancel). NOT for pull-to-refresh: `ReactSwipeRefreshLayout` ignores
+       the request, so at scroll 0 a downward drag on the 3D can still start
+       a pull until the JS hold's `enabled={false}` lands (residual race,
+       pull only).
+     - **iOS**: `SldTwinPanel` (SLDDiagram) wraps the panel in a
+       gesture-handler `Pan` with NO callbacks, `minDistance(
+       SLD_TWIN_IOS_SCROLL_GUARD_PT)` (6 — above a tap's jitter, below the
+       scroll view's ~10 pt start), `cancelsTouchesInView(false)`,
+       `shouldCancelWhenOutside(false)`: once active it fails the body
+       UIScrollView's own pan (no simultaneous recognition), natively; the
+       page keeps every touch (WebKit's touch-events recognizer can't be
+       prevented — the twin kept turning while the page scrolled before).
+       NEVER on Android: an active gesture-handler pan there makes the RNGH
+       root intercept and the WebView gets a cancel. **Device check pending**
+       (fast vertical / diagonal flicks, pinch, tag + tool taps with a real
+       finger's jitter).
+  2. **RN touch-down** (`holdTouch`): `SldTwinPanel`'s `onTouchStart` holds
+     the body scroll + pull-to-refresh for ANY touch in the panel (canvas,
+     tool, mix / legend, readings card, loading skeleton) until the last of THIS
+     panel's touches ends — tracked by `changedTouches` identifier, never
+     the screen-wide `touches` count (a finger elsewhere that lifts last
+     sends its touchend to ITS target: the page stayed stuck). A cancel or
+     no finger left anywhere clears the set.
+  3. **The page's claim** (`holdPage`): the bridge ("gesture ownership")
+     claims the moment a touch pointer lands on the twin's CANVAS (never a
+     tool button / the mix / the legend / the readings card; the tags are
+     pointer-events:none labels, so a finger on one IS a canvas touch) —
+     `{type:'gesture', active:true}` —, and
+     `active:false` when the last finger lifts (also on `blur` / a hidden
+     page) → `onGesture`.
+  2 and 3 are INDEPENDENT `useBodyScrollHold()`s (the gates are ref-counted):
+  neither can release the other's. Both drive `BodyScrollGateContext` /
+  `PullToRefreshGateContext` (`SiteDetail/pullToRefreshGate.ts`) →
+  SiteDetail's ScrollView `scrollEnabled` and `bounces` / RefreshControl
+  `enabled` — which stays on while a pull refresh is running
+  (`!pullBlocked || refreshSource === 'pull'`: Android's
+  `setEnabled(false)` resets — hides — the spinner, and a refreshing layout
+  never intercepts a new pull anyway). Because nothing on the 3D scrolls the
+  page, the inline card never fills the body viewport (§23.4 card height).
+  Full screen never claims (no page scroll; no guard, no
+  `nestedScrollEnabled`). Verified on the iOS simulator with the JS holds
+  (vertical, diagonal and pinch gestures leave the page still; mouse-speed
+  drags); the native layers are not yet device-checked.
+- A `document.hidden` / `visibilityState` shim + `visibilitychange` driven
+  by `visible`: the twin pauses itself (its IntersectionObserver cannot see
+  RN scrolling). The twin starts every scene build (mount, a new `sld`)
+  with its loop ON and reads `document.hidden` only in its listener, so the
+  bridge's `MountProbe` replays a hidden page to it after every commit
+  (a passive effect — children's run first): a twin mounted below the fold
+  (`init` with `visible:false`) or rebuilt off screen runs no frames.
+- The page boots in the app's theme: `SldTwinView` fills the `<body>`
+  class placeholder with the theme the WebView is created in (one string
+  per theme per session) and bridge.js boots from that class — the light
+  card never paints dark first. Later flips are `theme` messages (no
+  reload).
+- `--brand-rgb` = the web default; Inter inlined; body background = the
+  web's `--bg-0` (#0B0F14 / #F6F8FB — the `webTwin` tokens; keep them equal
+  on every re-sync).
+- Live values follow the web hook (ported in bridge.js): numbers to 2
+  decimals, 0 at ≥ 1000, "—" when missing; flow = the node's `animation`
+  rule read the way the web's mathjs reads `${name} ${op} ${value}`: the six
+  comparisons with spaces allowed, a right-hand side mathjs can't read as a
+  number ('', ' ', 'abc', '1,000', '10kW') → idle, true / false / NaN /
+  Infinity / null and signs as mathjs, mathjs's tolerance (relTol 1e-12,
+  absTol 1e-15) — a differential run against the web's own mathjs found no
+  difference in 15,288 comparison rules (`__tests__/sldTwinBridge.test.ts`
+  pins them). Not mirrored (no SLD rule uses them): hex, constants like
+  `pi`, parentheses, arithmetic / logic "operators". liveValues keeps its
+  identity until `sld` / `live` change (the web memoises it; the twin
+  samples its readings sparkline on every new object — a theme flip must
+  not add a point). Site expressions (`explve…`) and group formulas are NOT
+  evaluated — the app has no expression evaluator either.
+- The bridge never throws past itself; an `init` that arrives before the
+  modules finished loading mounts as soon as they have.
+
+### 23.4 RN host rules
+
+- **`SldTwinView`** (`siteId`, `host: 'inline' | 'fullscreen'`, `mode` —
+  the hosts pass `useSldModel`'s EFFECTIVE mode —, `visible`, `style`,
+  `onExit`, `onFail`, `onGesture` — always paired: a page that goes away
+  mid-gesture (unmount, reload, crash, failure) reports `false`; the inline
+  host passes `useBodyScrollHold()`) requires the generated module on first
+  RENDER — never at import (the splash never parses 2 MB); hosts import
+  `SldTwin/SldTwinView` directly. The site name comes from the SiteDetail
+  route's params, found in the navigation stack by site id.
+- **WebView props** (all mandatory): `source={{ html, baseUrl: 'about:blank' }}`
+  (an empty `baseUrl` becomes a `file://` URL on iOS and fails the
+  whitelist); `originWhitelist={['about:*']}` + `onShouldStartLoadWithRequest`
+  allowing only `about:blank` / `about:srcdoc` (note: react-native-webview
+  hands a URL that fails the whitelist to `Linking.openURL` BEFORE that
+  callback — the twin never navigates); `setSupportMultipleWindows={false}`;
+  no scroll / bounce / overscroll / zoom controls; inline,
+  `nestedScrollEnabled` (Android; §23.3 "Gesture ownership");
+  `webviewDebuggingEnabled={__DEV__}`; painted with the twin's background
+  (no white flash); `autoManageStatusBarEnabled={false}` with no later
+  spread (`chartWebViewSettings.test.ts`, §19); the DEFAULT
+  `androidLayerType` — never `'software'` (it disables WebGL).
+- A dead web content process (iOS `onContentProcessDidTerminate`) /
+  renderer (Android `onRenderProcessGone`) remounts the WebView by key, its
+  page in the theme of now. Only a crash LOOP → `onFail`: 2
+  (`TWIN_MAX_CRASHES`) deaths in a row of pages that never `entered`, each
+  within 30 s (`TWIN_CRASH_WINDOW_MS`) of its page's start; a page that
+  entered or ran longer was a routine kill (iOS reclaims a backgrounded
+  WebView's process) and the count starts again. A load error → `onFail`.
+- A `Skeleton` covers the panel (touch-through, "Loading the 3D view")
+  until the page posts `mounted` — the Summary placeholder's skeleton
+  carries straight on — and again after a remount.
+- **Inline** (`SLDDiagram`, Summary "Energy flow"): a header row ABOVE the
+  panel for BOTH views (`SldViewHeader`, ControlButtons.tsx):
+  `[Diagram | 3D] [Grouped | Units] … [full screen]` — the view pill
+  (hidden once the twin failed for the site), the mode pill (only when
+  something groups — `canGroup`) and, in 3D only, a soft `IconButton` with
+  the `screen-rotation` glyph and `SLD_SIDEWAYS_FULLSCREEN_HINT`; the row
+  hides when neither pill shows. Geometry = `sldViewHeaderGeometry` /
+  `useSldViewHeaderGeometry` (one source for the row AND its skeleton):
+  every pill container and segment ≥ `touch.min`; each pill sized to its
+  widest BOLD label at the size it renders (the width-scaled 11 pt, AppText's
+  11 pt floor, × `useWindowDimensions().fontScale` capped at 1.3) + 4 pt a
+  side (`sldHeaderPillMetrics`) — labels never `adjustsFontSizeToFit`, never
+  cut. When the pills + the button don't fit one line (a 360 pt Android
+  phone at 48 pt targets; a 375 pt iPhone with large text) Grouped | Units
+  WRAPS to a second line under Diagram | 3D inside the left cluster, the
+  button staying on line 1 (`sldViewHeaderLayout`, a fixed row height, no
+  onLayout). The full-screen slot is reserved in BOTH views, so Diagram ⇄
+  3D never re-flows the row. 3D body = `SldTwinView host="inline"`,
+  `SLD_INLINE_WIDTH` × `useSldTwinInlineHeight()` (`sldTwinInlineHeight(
+  window, bodyViewport)`: the web's phone rule `clamp(600px, 78vh, 920px)`
+  in window points — a TALL card — CAPPED so `SLD_TWIN_SCROLL_RESERVE`
+  (160 pt) of SiteDetail's body viewport stays free, floor
+  `SLD_TWIN_INLINE_FLOOR` (360) — but never closer than `SLD_TWIN_MIN_FREE`
+  (88) to the viewport's height, which beats the floor (a 280 pt split-screen
+  body gets a 192 pt card, not a 360 pt one covering it): every drag on the
+  3D moves the model, so a card filling the viewport would leave nothing to
+  scroll by (the clamp gave 682 pt in a ≈ 690 pt viewport on a 402 × 874
+  iPhone). Before the body is
+  laid out — and in tests — `SLD_TWIN_INLINE_HEIGHT` (the clamp alone);
+  the viewport height comes from `useBodyViewportHeight` (bodyViewport.ts,
+  re-renders on resize only)), clipped to `radius.md` (12, the web canvas's
+  own corner — the Summary placeholder's skeleton uses it too in 3D, so the
+  300 ms swap keeps its corners).
+  `visible` = `useBodyViewportVisibility` (mirrored into state ONLY on change,
+  inside `SldTwinPanel`, so a scroll re-renders that panel alone) AND
+  `useIsFocused`: under the full-screen route an inline twin that was up
+  stays MOUNTED but paused — and none is CREATED there (`twinLatched` in
+  SLDDiagram: "Diagram" then "3D" inside the full screen would otherwise
+  start a second hidden page — two parses, two three.js scenes, two WebGL
+  contexts; one renderer process on Android): a static box in the twin's
+  colour until the screen is focused again. The Summary placeholder =
+  `SldViewHeaderSkeleton` (the same row, wrapped or not, a skeleton per
+  pill + the 3D button) + the panel at the same height (no 300 ms jump).
+  Diagram body = the 2D `SLDViewport` as §19 (controls, Pause) WITHOUT its
+  in-panel Grouped | Units pill (it heads the panel), so the inline fit and
+  `sldInlineHeight` reserve no strip / mask band for it (the 2D FULL SCREEN
+  keeps its in-panel pills and their strip).
+- **Full screen** (`SLDFullscreenScreen`, a navigation screen): 3D = the
+  twin (`host="fullscreen"`, `visible` = focused) SIDEWAYS — a long × short
+  container turned +90° about its centre by a TRANSFORM
+  (`sldLandscapeContainer`; the ChartFullscreenModal pattern) and
+  `sldLandscapeGeometry` (sldViewportFit.ts): the portrait insets turned
+  (island → content LEFT, home indicator → RIGHT), the twin in the safe area
+  left of the always-visible `SldTwinRail`, top → bottom: Close; a round
+  "Diagram" button (glyph + caption; the rail is as wide as the caption at
+  its largest, `SLD_TWIN_RAIL`) that turns the screen back UPRIGHT into the
+  Diagram full screen, whose top-left "Diagram | 3D" pill turns it sideways
+  again; and, when something groups, **Group | Units** — two vertically
+  stacked segments in a pill a round button wide (`sldRailMetrics`: the
+  round button is ≥ touch.min + the pill's padding + border, so each
+  segment is ≥ touch.min wide AND tall; `sldRailStackHeight` fits a 360 pt
+  short edge, tested 360–440). Its labels are "Group" / "Units" (same mode,
+  same hints as the header), their OS text scaling capped where bold "Group"
+  still fits the segment (`sldRailLabelFit` → `SLD_TWIN_RAIL_LABEL_FIT`;
+  only a tablet's width-scaled font is shrunk, to an exact size) — never
+  `adjustsFontSizeToFit` in the turned view. No Pause / Recentre in 3D (the
+  twin has its own Fit and Plan view). The first sideways entry per session shows "↻ Turn
+  your phone to the left" in portrait (announced, faded on the UI thread).
+  The rail's Close is outside the twin's ErrorBoundary. A window already
+  wider than tall (Android tablets / foldables / split screen) is laid out
+  sideways WITHOUT a turn. The screen's background is the twin's, so the
+  bands under the island and beside the rail read as its own.
+- **Never a `<Modal>`, never an OS orientation change** (§19's crash
+  class). The turn is one static matrix on one view; the WebView maps
+  touches into its turned coordinates natively (UIKit / Android) — device
+  check pending.
+- **Fallbacks** (`useSldModel`): `onFail` → `fallBackTo2D()` marks the SITE
+  for the session (a module Set, `useSyncExternalStore`): effective view
+  `2d`, `can3D` false (the switch hides), the stored choice stays `3d`, so
+  other sites still open in 3D. `onExit` → `setView('2d')` (persisted).
+
+### 23.5 Honesty split
+
+- **3D = web semantics, unchanged**: it animates whatever the data's age,
+  a negative battery reads "Charging" with reversed comets, "Updated …" and
+  "… producing now" are the web's wording. The app's ONLY honest freshness
+  for it is the Energy-flow section header's status (`SldLiveTag`,
+  `headerLastUpdate` — the SiteDetail header's stamp): a brand "Live" tag
+  while live, otherwise the shared `FreshnessStatus` ("Delayed · 35 min
+  ago", "Offline · last data 28 Sep") — never nothing beside a twin that
+  animates stale data. The web's always-on "Streaming" tag is never shown.
+  (The sideways full screen has no freshness of its own.)
+- **Diagram = the app's rules**: motion only while the data is LIVE, Reduce
+  Motion and the user's Pause respected (`useSldMotion`, §19).
+
+### 23.6 Re-sync after a web deploy
+
+Module ids and chunk names change with every web build; the vendored page
+keeps working forever, it just stops tracking the web. To follow a new
+build (details: `scripts/web-twin/README.md`):
+
+1. Find the build id and the two turbopack runtime chunks (`main`, `_app`)
+   from the site's HTML (View Source — `vendor.mjs` may only fetch
+   `/_next/static` files, not pages).
+2. `node scripts/web-twin/vendor.mjs --build <id> --html-runtimes a.js,b.js`
+   (detects the five modules bridge.js needs by source signature; override
+   with `--twin`, `--react`, `--jsx`, `--reactDomClient`, `--reactRedux`).
+3. `node scripts/web-twin/build.mjs`, then `node scripts/web-twin/smoke.mjs`
+   (update its assertions only if the web changed its wording on purpose).
+4. Device check; commit the manifest, the generated module and any bridge /
+   app.css change together. Re-check the `webTwin` tokens against `--bg-0`.
+
+What can change silently on the web side: the twin's prop contract, the
+redux key `site.unprocessedLiveParameters`, the `liveValues` rules (ported
+in bridge.js), the CSS classes app.css relies on (`.sld-toolbar`,
+`.sld-canvas`, `.tw-canvas`, `.spf-panel`), its strings. After a fresh
+clone: `node scripts/web-twin/vendor.mjs --from-generated`.
+
+### 23.7 Tests and known gaps
+
+- Tests: `sldTwinProtocol` (contract incl. `warn`, encoding, navigation
+  gate), `sldTwinInputs` (incl. `EMPTY_LIVE` / pending), `sldTwinView`
+  (init / sync, no-live and failed-fetch init, the themed page, the
+  loading skeleton, exit / fail / warn, crash remount + the crash-loop
+  rule, the WebView props), `sldTwinBridge` (bridge.js's liveValues port,
+  run as shipped: the mathjs-verified flow rules, formatting, identity),
+  `sldHosts` (switch order + default + persistence, the inline and
+  full-screen hosts with the real model, exit / fail, no twin created under
+  the full screen; Grouped | Units: header order in both views, the shared
+  mode across views, `mode` handed to the twin inline + sideways, forced
+  units when nothing groups, the wrapped row + its skeleton, the rail's
+  Close → Diagram → Group | Units, no in-panel pill inline), `environment`
+  (placeholder heights + header skeletons incl. no-group / failed-twin
+  rows, the stale-site status, the sideways escapes, the turn hint),
+  `sldViewportFit` (twin height, turned container + geometry, rail + its
+  Group | Units fit at 360–440, header pills + wrap at 360–440 × text
+  scales, inline 2D without the strip vs the 2D full screen with it),
+  `sldMotion`, `sldViewMode` (default grouped, one mode for both views),
+  `chartWebViewSettings`, plus the adapter's own suites `sldTwinGrouped` and
+  `sldTwinFlowRule` (§23.8). The page-scroll holds (§23.3): `sldHosts`
+  ("inline 3D in SiteDetail's body": the capped card in the real providers,
+  one finger / a pinch / a finger elsewhere lifting last / a cancel / the
+  two holds' independence / unmount, the iOS guard's config, none on
+  Android), `bodyScrollGate`, `sldTwinGesture`, the `gesture` cases of
+  `sldTwinProtocol` / `sldTwinView` (+ `nestedScrollEnabled` inline only),
+  `sldViewportFit` (the cap, the short-viewport gutter) and the smoke's CDP
+  touches (claim at touch-down, one pair per drag, none for a HUD control or in the
+  full screen).
+- Not yet verified on a device: first-frame time and memory in WKWebView /
+  Android System WebView (shader compile; two WebGL contexts while the full
+  screen is over the paused inline twin), the iOS `about:blank` load, the
+  inline vertical-scroll vs sideways-turn split, tap → readings card and
+  pan direction in the turned container. **Android is untested** (only
+  after the user approves iOS).
+- No timeout waiting for `ready` / `mounted`: a page that never answers
+  stays the loading skeleton (no fallback).
+- The crash-loop rule counts per mounted twin (the counter restarts on a
+  remount — a tab switch, a new full-screen route — and the inline and
+  full-screen twins count separately); a loop (2 deaths in a row, none
+  entered, each < 30 s after its page started) switches that site to the
+  Diagram for the rest of the session.
+- Site expressions (`explve…`) / group formulas are unsupported (as in the
+  app).
+- Licences: the MIT notices (three.js, React / react-dom / scheduler /
+  use-sync-external-store, react-redux, Next.js) and the Inter OFL ship
+  INSIDE the page as an HTML comment (`scripts/web-twin/THIRD_PARTY_NOTICES.txt`
+  + `vendor/fonts/OFL.txt`, via build.mjs). The app has no licences screen;
+  add one there if the store review or the company asks for in-app
+  attribution.
+
+### 23.8 Grouped | Units in 3D (Oct 2026)
+
+User request 2026-10-09, after approving the twin: "Do grouped and Units
+for 3D too." Decisions:
+
+- **ONE mode for both views** — the existing `useSldViewMode.mode`
+  (`DEFAULT_SLD_MODE` = `'grouped'`, in memory, never persisted): switching
+  it in 3D switches the Diagram and vice versa. When nothing groups
+  (`canGroup` false) every Grouped | Units control hides and the effective
+  mode is `'units'` (what the hosts hand `SldTwinView`).
+- **Placement**: inline, the header row above the panel for BOTH views
+  (§23.4, wraps on narrow phones); sideways 3D, the rail (Close → Diagram →
+  Group | Units, §23.4); the 2D full screen keeps its top-right pill.
+- **Units = exactly the old 3D**: the RAW `sldV2` + `live.data`, the same
+  objects (byte-for-byte what the twin got before).
+- **Grouped = the same twin fed the app's OWN grouping** (adapter:
+  `SldTwin/twinGrouped.ts` — `buildTwinGroupedSld` / `buildTwinGroupedLive`
+  / `twinDataFor`; page side: `scripts/web-twin/bridge.js` "grouped looks";
+  wired through `useSldTwinInputs(siteId, mode)`), so 2D and 3D group
+  identically. Each group of `buildSldGrouping` (Lucky: "Solar · 9", "Wind ·
+  6") becomes ONE regular sldV2 node — NOT the web's own group schema
+  (`aggregation` / `groupMembers`), which the twin would draw as a plain
+  junction cabinet: id / position = the grouping's group node, heading =
+  the group label, icon = the twin's icon for the type (`TWIN_GROUP_ICON`;
+  WHR keeps its members' icon so the twin's title rule picks the steam
+  variant) in the members' majority BACKEND colour (`data.color` +
+  `icon.color`; the group → target cables take the members' majority
+  backend cable colour, read the twin's way: `style.stroke` ‖
+  `markerEnd.color` ‖ `color`) — NOT the Diagram card's palette colour, so
+  a Grouped ⇄ Units switch never recolours the 3D (mix bar, pad rings,
+  comets; with the palette, Lucky's wind went orange → cyan and matched
+  Generators). Members with no colour → the group node / cable has none
+  either (never a palette fallback: the twin's own no-colour path, as for
+  those members in Units). Majority ties go to the FIRST member
+  (`twinMajority`, like the bridge's `majorityLook`). The Diagram's group
+  cards keep their palette colours. `edgesConnect: 'source'`, keys =
+  the Diagram group card's rows (≤ `SLD_GROUP_MAX_ROWS`, same labels /
+  units) reading SYNTHETIC params `live.<id>.value`, and an `animation`
+  rule `live.<flow id>.value != 0` where the flow id's value counts the
+  members the twin draws RUNNING in Units, by the twin's OWN rule
+  (`SldTwin/twinFlowRule.ts`, a port of bridge.js's liveValues rule,
+  differential-tested against the shipped section in `sldTwinFlowRule`:
+  a member's `animation` read the web's way — the reading rounded to 2
+  decimals, operator `!=` / value 0 when absent —, or, with NO rule,
+  "live" = a numeric reading). So a group runs ⟺ one of its units runs in
+  Units, and "… producing now" / the mix are the same in both modes
+  (`sldTwinGrouped` checks it with the shipped bridge). NOT the Diagram's
+  `isEdgeAnimated` (it drops incomplete rules, ignores rule-less "live"
+  units and doesn't round): the 2D Diagram and the 3D may disagree on those
+  edge cases, Grouped and Units in 3D never. When NO member has a rule the
+  group gets none either (the twin calls it "live", like its units) and
+  each group → target cable carries the twin's per-edge mode of the
+  members' cables to THAT target ('flow' unless every one is `idle`) — the
+  twin has only a node-level rule, so a rule would flow every cable of the
+  group. (Mixed rule / no-rule members with differing per-target modes
+  collapse to the node rule — no site seen.) The flow id
+  is WORDED ("Wind units flowing") because the twin's readings card prints
+  it ("Energy shows on its cable while Wind units flowing ≠ 0."); key ids
+  are `pesgrp<g>k<k>`. Members
+  and every edge touching them are removed; the grouping's group → target
+  edges replace them; every other node / edge is the SAME raw object, in
+  order. The live envelope = the real `live.data` PLUS one
+  `{ value: number | 'NA', update_at }` per synthetic param — the numbers
+  the Diagram's group card shows (`makeGroupedResolver`: sums in the
+  majority unit, the PF fold, means), stamped with the newest member
+  `update_at`. Structure is memoised per (raw sldV2, grouping) — config
+  only; the envelope per (grouped sld, live) — a live tick resends only
+  `live`. `selectSldGraph` caches per `sldV2` OBJECT as well as per config,
+  so a config refetch that keeps the diagram (React Query structural
+  sharing; only cards / trends changed) yields the same graph → grouping →
+  grouped `sld` / `live`: nothing is sent and the twin does NOT remount
+  (camera, selection, intro kept) — the Diagram's layout caches hit too.
+- **Same 3D model as the members**: RN puts the RAW member nodes on the
+  group node (`data.pesGroupMembers`, `TWIN_GROUP_MEMBERS_KEY`); before the
+  twin sees the diagram the bridge resolves each member with the web's OWN
+  `lookOf`, takes the majority { kind, look } and pins the group node to it
+  (the lightest change that makes `lookOf(group)` agree), then deletes
+  `pesGroupMembers`. Lucky: Wind · 6 = the members' wind/directDrive,
+  Solar · 9 the members' solarLg/fixed, WHR stays the steam genset. The
+  web's `lookOf` lives in module 277932 and `fromSldV2` in 91710: manifest
+  roles `sldLook` / `sldModel` (`vendor.mjs` finds them by the export they
+  register; optional — missing = a `warn`, the group keeps its own
+  icon/title).
+- **One model per group** (the twin draws one model per node): the tag and
+  the readings card carry "Wind · 6" and the totals.
+- A mode switch sends the running page `sld` + `live` (into Grouped the
+  data first, back to Units the diagram first — the page never holds a
+  diagram without the readings it names); no page reload, no WebView
+  remount. **But every NEW diagram mounts a NEW twin inside the page**
+  (bridge.js keys it by a diagram `generation` — a mode switch, a config
+  refetch that changes `sldV2`, a second `init`): the twin rebuilds its
+  scene in place by `forceContextLoss()` on its renderer and a new one on
+  the SAME canvas, whose context then stays lost ("3D isn't available
+  here"); the web never hits it because it remounts per site. The store,
+  theme and visibility carry over; camera, selection and Plan view start
+  fresh and the short intro replays.
+- Tests: `sldTwinGrouped` (the adapter, incl. the backend-colour rule —
+  the twin's cable-colour order, no palette fallback, first-member ties —
+  and Grouped ⇄ Units running the same units through the shipped bridge:
+  rule-less, incomplete-rule, sub-0.005, mixed, per-target cables),
+  `sldTwinFlowRule` (the port vs bridge.js over 9,338 rules + key shapes),
+  `sldTwinGroupedBridge` (grouped looks against the web's own `lookOf`),
+  the `mode` cases of `sldTwinInputs` / `sldTwinView`, the smoke's grouped
+  runs (`fixtures/lucky-grouped.json` = the adapter's output; regenerate
+  with `SLD_TWIN_WRITE_FIXTURES=1 npx jest sldTwinGrouped`), the UI side in
+  `sldHosts`, `sldViewportFit`, `sldViewMode`, `environment` (§23.7), and
+  the inline gesture hold: `sldTwinGesture` (the bridge's claim-at-touch-down
+  ownership, run as shipped, + app.css `touch-action: none` inline),
+  `bodyScrollGate`, the `gesture` cases of `sldTwinProtocol` /
+  `sldTwinView`, the panel's RN touch hold + iOS guard in `sldHosts`, the
+  card cap in `sldViewportFit` ("never fills the body viewport", the
+  short-viewport gutter), the `sldTwinInputs` config-refetch case (the
+  diagram kept → nothing sent).

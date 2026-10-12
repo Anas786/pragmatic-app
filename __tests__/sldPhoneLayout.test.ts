@@ -695,6 +695,10 @@ describe('determinism + memo contract', () => {
     const next = selectSldGraph({ siteComponents: { sldV2: clone(sldGraphMock) } })!;
     expect(next).not.toBe(a);
     expect(next).toEqual(a);
+    // …unless it kept the diagram object (React Query's structural sharing
+    // when only cards / trends changed): the SAME graph, so nothing re-lays out.
+    const kept = { ...config, siteComponents: { ...config.siteComponents, cards: [] } };
+    expect(selectSldGraph(kept)).toBe(a);
     // No diagram → null, cached too.
     const none = { siteComponents: {} };
     expect(selectSldGraph(none)).toBeNull();

@@ -18,9 +18,10 @@
  *  │ 30.3K t│ │ 68.4M t│ │ 162M   │
  *  └────────┘ └────────┘ └────────┘
  *
- *  Energy flow                       ● Live
- *  ┌─────────────────────────────────────────┐
- *  │  [SLD diagram]                          │
+ *  Energy flow          ● Live  (or ○ Delayed · 35 min ago)
+ *  [ Diagram | 3D ] [ Grouped | Units ]   ↻   (Grouped | Units on a 2nd
+ *  ┌─────────────────────────────────────────┐  line on narrow phones /
+ *  │  [3D web twin, or the SLD diagram]      │  large text; ↻ = 3D only)
  *  └─────────────────────────────────────────┘
  *
  * Data (unchanged — every figure matches the web portal, rules O1–O3):
@@ -31,10 +32,14 @@
  *     (from the backend; nothing is shown when it is missing).
  *   - CO₂ / coal / trees are the same p24-based figures the web shows,
  *     "since commissioning"; product owns their factors (O2).
- *   - The LIVE / DELAYED badge and the Energy-flow Live tag read the site's
+ *   - The LIVE / DELAYED badge and the Energy-flow status read the site's
  *     `live.metadata.last_update` via siteDetailModel's `headerLastUpdate` —
  *     the SAME function the SiteDetail header uses, so the two can never
- *     disagree, and the stamp the web portal shows (O6).
+ *     disagree, and the stamp the web portal shows (O6). The Energy-flow
+ *     status ('Live', else "Delayed · …" / "Offline · …") is the app's
+ *     honest freshness for the energy flow: the 3D view is the web portal's
+ *     own twin and animates exactly like the web, whatever the data's age
+ *     (CLAUDE.md §23).
  */
 
 import React, { FC, ReactNode, memo, useMemo } from 'react';
@@ -44,6 +49,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import {
   AppText,
   createBox,
+  FreshnessStatus,
   GlassChip,
   HeroGradientCard,
   HeroStatusBadge,
@@ -254,14 +260,20 @@ const LiveDot: FC = () => {
 LiveDot.displayName = 'LiveDot';
 
 /**
- * 'Live' tag beside the Energy-flow title — shown only while the data is
- * live by the shared freshness model. A static dot: the hero badge is the
- * screen's one pulsing element. Subscribes to the 30 s `useNow` tick on
- * its own, so the Summary tree doesn't re-render on the tick.
+ * The Energy-flow title's freshness — the app's honest status for the
+ * diagram, and the ONLY one beside the 3D twin (which animates whatever the
+ * data's age, like the web): a brand 'Live' tag while the data is live by
+ * the shared freshness model, otherwise the shared `FreshnessStatus`
+ * ("Delayed · 35 min ago", "Offline · last data 28 Sep"). Static dots: the
+ * hero badge is the screen's one pulsing element. Subscribes to the 30 s
+ * `useNow` tick on its own, so the Summary tree doesn't re-render on the
+ * tick.
  */
 const SldLiveTag: FC<{ lastUpdate: number | null }> = memo(({ lastUpdate }) => {
   const now = useNow();
-  if (dataFreshness(lastUpdate, now).level !== 'live') return null;
+  if (dataFreshness(lastUpdate, now).level !== 'live') {
+    return <FreshnessStatus lastUpdate={lastUpdate} testID="sld-freshness" />;
+  }
   return (
     <LiveTag accessible accessibilityLabel="Live data">
       <LiveDot />
@@ -283,7 +295,8 @@ const SummaryView: FC = () => {
   const { data: siteConfig } = useSiteConfig(siteId);
   const ready = useInteractionReady();
 
-  // SLDDiagram (Skia canvas + gesture handlers + node cards) must land in a
+  // SLDDiagram (the 3D twin's WebView, or the Diagram's Skia canvas +
+  // gesture handlers + node cards) must land in a
   // LATER commit than the hero/env tree. InteractionManager.runAfterInteractions
   // fired on the next tick here — native-stack transitions and the tab-chip
   // morph register no JS interaction handles — so the "deferred" mount
@@ -442,11 +455,11 @@ const SummaryView: FC = () => {
         treesPlanted={treesPlanted}
       />
 
-      {/* ── Energy Flow Diagram (SLD) ──
-          The SLDDiagram already renders its own framed viewport
-          (background + hairline + radius), so wrapping it in another
-          Surface produced a visible double-card. Section heading sits
-          as plain text above the diagram instead. */}
+      {/* ── Energy flow (SLD: 3D twin or Diagram) ──
+          The SLDDiagram already renders its own framed panel (and the
+          Diagram | 3D row above it), so wrapping it in another Surface
+          produced a visible double-card. Section heading sits as plain
+          text above the diagram instead. */}
       <Animated.View
         entering={FadeInDown.duration(duration.fast)
           .delay(90)
@@ -466,8 +479,9 @@ const SummaryView: FC = () => {
         ) : showDiagram && diagramState === 'ready' ? (
           <SLDDiagram />
         ) : (
-          // Sized to the diagram's own (phone-layout) height once the config
-          // is known, so the 300 ms swap lands without a jump.
+          // Sized to the panel's own height (the 3D twin's tall card, or
+          // the Diagram's phone layout) once the config is known, so the
+          // 300 ms swap lands without a jump.
           <SLDDiagramPlaceholder siteId={siteId} />
         )}
       </Animated.View>

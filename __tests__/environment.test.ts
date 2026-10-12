@@ -17,7 +17,7 @@ import renderer, {
   ReactTestInstance,
   ReactTestRenderer,
 } from 'react-test-renderer';
-import { Text, View } from 'react-native';
+import { Dimensions, Text, View } from 'react-native';
 import * as Reanimated from 'react-native-reanimated';
 import LottieView from 'lottie-react-native';
 
@@ -33,11 +33,32 @@ const mockState: {
 };
 
 /**
- * SLD fullscreen (SC-4) fakes: the viewport is a plain View — or throws on
- * render — and the model hands back a one-node graph. Summary never mounts
- * either (its 300 ms deferred diagram mount stays pending in Jest).
+ * SLD fullscreen (SC-4) fakes: the Diagram viewport and the 3D twin are
+ * plain Views — or throw on render — and the model hands back a one-node
+ * graph. Summary never mounts either (its 300 ms deferred diagram mount
+ * stays pending in Jest).
  */
-const mockSld: { throwOnRender: boolean } = { throwOnRender: false };
+const mockSld: {
+  throwOnRender: boolean;
+  twinThrows: boolean;
+  /** The model's Diagram | 3D view. */
+  view: '2d' | '3d';
+  can3D: boolean;
+  /** Something groups (the Grouped | Units switch shows). */
+  canGroup: boolean;
+  /** The props the (mocked) viewport last rendered with. */
+  lastProps: Record<string, unknown> | null;
+  /** The props the (mocked) twin last rendered with. */
+  twinProps: Record<string, unknown> | null;
+} = {
+  throwOnRender: false,
+  twinThrows: false,
+  view: '2d',
+  can3D: true,
+  canGroup: true,
+  lastProps: null,
+  twinProps: null,
+};
 
 jest.mock('@react-navigation/native', () => {
   const actual = jest.requireActual('@react-navigation/native') as object;
@@ -83,9 +104,28 @@ jest.mock(
     const ReactActual = jest.requireActual<typeof import('react')>('react');
     return {
       __esModule: true,
-      default: () => {
+      default: (props: Record<string, unknown>) => {
+        mockSld.lastProps = props;
         if (mockSld.throwOnRender) throw new Error('malformed SLD payload');
         return ReactActual.createElement(MockView, { testID: 'sld-viewport' });
+      },
+    };
+  },
+);
+
+jest.mock(
+  '../src/components/screens/Authenticated/SiteDetail/components/SldTwin/SldTwinView',
+  () => {
+    const { View: MockView } = jest.requireActual<
+      typeof import('react-native')
+    >('react-native');
+    const ReactActual = jest.requireActual<typeof import('react')>('react');
+    return {
+      __esModule: true,
+      default: (props: Record<string, unknown>) => {
+        mockSld.twinProps = props;
+        if (mockSld.twinThrows) throw new Error('twin failed to render');
+        return ReactActual.createElement(MockView, { testID: 'sld-twin' });
       },
     };
   },
@@ -98,19 +138,30 @@ jest.mock(
       graph: { nodes: [{ id: 'n1' }], edges: [] },
       bounds: { minX: -12, minY: -12, width: 360, height: 605 },
       focus: { x: 180, y: 370 },
-      mode: 'grouped',
-      setMode: () => undefined,
-      canGroup: true,
     };
+    // The view is read at call time so a test can switch a host to 3D.
+    const withView = () => ({
+      ...layout,
+      mode: mockSld.canGroup ? 'grouped' : 'units',
+      setMode: () => undefined,
+      canGroup: mockSld.canGroup,
+      view: mockSld.view,
+      can3D: mockSld.can3D,
+      setView: () => undefined,
+      fallBackTo2D: () => undefined,
+    });
     return {
-      useSldLayout: () => ({ ...layout, groups: [] }),
-      useSldModel: () => ({ ...layout, resolve: () => undefined }),
+      useSldLayout: () => ({ ...withView(), groups: [] }),
+      useSldModel: () => ({ ...withView(), resolve: () => undefined }),
     };
   },
 );
 
 import SummaryView from '../src/components/screens/Authenticated/SiteDetail/components/SummaryView';
-import SLDFullscreenScreen from '../src/components/screens/Authenticated/SiteDetail/components/SLDFullscreenScreen';
+import SLDFullscreenScreen, {
+  resetSldTurnHintForTests,
+  SLD_TURN_HINT_TEXT,
+} from '../src/components/screens/Authenticated/SiteDetail/components/SLDFullscreenScreen';
 import { HeroStatusBadge } from '../src/components/common/HeroRow';
 import PulseDot from '../src/components/common/PulseDot';
 import Skeleton from '../src/components/common/Skeleton';
@@ -118,9 +169,14 @@ import {
   SLD_INLINE_MAX_HEIGHT,
   SLD_INLINE_MIN_HEIGHT,
   SLD_INLINE_WIDTH,
+  SLD_TWIN_INLINE_HEIGHT,
   SLDDiagramPlaceholder,
   sldInlineHeight,
 } from '../src/components/screens/Authenticated/SiteDetail/components/SLDDiagram';
+import {
+  sldViewHeaderGeometry,
+  type SldViewHeaderGeometry,
+} from '../src/components/screens/Authenticated/SiteDetail/components/ControlButtons';
 
 /* ─────────── fixtures ─────────── */
 
@@ -159,6 +215,12 @@ afterEach(() => {
   tree = undefined;
   mockState.routeLastUpdate = undefined;
   mockSld.throwOnRender = false;
+  mockSld.twinThrows = false;
+  mockSld.view = '2d';
+  mockSld.can3D = true;
+  mockSld.canGroup = true;
+  mockSld.lastProps = null;
+  mockSld.twinProps = null;
   jest.restoreAllMocks();
 });
 
@@ -395,6 +457,33 @@ describe('Energy-flow section', () => {
     },
   });
 
+  /** The header the mounted block draws for this device (same width, same OS text scale). */
+  const headerFor = (withView: boolean, withGroup: boolean): SldViewHeaderGeometry =>
+    sldViewHeaderGeometry({
+      width: SLD_INLINE_WIDTH,
+      fontScale: Dimensions.get('window').fontScale,
+      withView,
+      withGroup,
+    });
+
+  /** The placeholder's skeletons: the header row's (if any) and the panel. */
+  const placeholderParts = (root: ReactTestInstance) => {
+    const placeholder = root.findByType(SLDDiagramPlaceholder);
+    const all = placeholder.findAllByType(Skeleton);
+    const panel = all.filter(sk => sk.props.width === SLD_INLINE_WIDTH);
+    expect(panel).toHaveLength(1);
+    // (memo components: matched by their props, not their type)
+    const rows = placeholder.findAll(
+      n => typeof n.type !== 'string' && n.props.geometry !== undefined && 'withButton' in n.props,
+    );
+    return {
+      panel: panel[0],
+      header: all.filter(sk => sk.props.width !== SLD_INLINE_WIDTH),
+      geometry: rows.length ? (rows[0].props.geometry as SldViewHeaderGeometry) : null,
+    };
+  };
+  const sizes = (skeletons: ReactTestInstance[]) => skeletons.map(sk => [sk.props.width, sk.props.height]);
+
   it('diagram + live site stamp → Live tag and a same-size placeholder', () => {
     const root = renderSummary(
       withDiagram(),
@@ -404,18 +493,67 @@ describe('Energy-flow section', () => {
     expect(texts).toContain('Live');
     expect(a11yLabels(root)).toContain('Live data');
     expect(texts).not.toContain('No energy-flow diagram for this site');
-    // Deferred mount pending → the placeholder already has the viewport's
-    // geometry: the inline width and the DIAGRAM's own height (the panel
-    // follows its phone layout), so the 300 ms swap doesn't jump.
-    const skeleton = root.findByType(SLDDiagramPlaceholder).findByType(Skeleton);
-    expect(skeleton.props.width).toBe(SLD_INLINE_WIDTH);
-    const height = sldInlineHeight({ minX: -12, minY: -12, width: 360, height: 605 }, true);
-    expect(skeleton.props.height).toBe(height);
+    // Deferred mount pending → the placeholder already has the block's
+    // geometry: the header row (Diagram | 3D AND Grouped | Units, sized like
+    // the real pills), the inline width and the DIAGRAM's own height (the
+    // panel follows its phone layout — no strip for an in-panel pill any
+    // more: Grouped | Units heads the panel), so the 300 ms swap doesn't jump.
+    const { panel, header, geometry } = placeholderParts(root);
+    const height = sldInlineHeight({ minX: -12, minY: -12, width: 360, height: 605 });
+    expect(panel.props.height).toBe(height);
     expect(height).toBeGreaterThanOrEqual(SLD_INLINE_MIN_HEIGHT);
     expect(height).toBeLessThanOrEqual(SLD_INLINE_MAX_HEIGHT);
+    const expected = headerFor(true, true);
+    expect(geometry).toEqual(expected);
+    // Diagram: no full-screen button in the row (the column has it).
+    expect(sizes(header)).toEqual([
+      [expected.view?.width, expected.view?.height],
+      [expected.group?.width, expected.group?.height],
+    ]);
   });
 
-  it('diagram + stale site stamp → no Live tag (same stamp as the badge)', () => {
+  it('3D: the placeholder is the twin’s TALL card (the web’s clamp(600, 78 % of the window, 920))', () => {
+    mockSld.view = '3d';
+    const root = renderSummary(withDiagram(), luckyLive({ metaLastUpdate: Date.now() - MIN }));
+    const { panel, header, geometry } = placeholderParts(root);
+    // The same height SLDDiagram gives the twin — no 300 ms jump.
+    expect(panel.props.height).toBe(SLD_TWIN_INLINE_HEIGHT);
+    expect(SLD_TWIN_INLINE_HEIGHT).toBeGreaterThanOrEqual(600);
+    expect(SLD_TWIN_INLINE_HEIGHT).toBeLessThanOrEqual(920);
+    // Both switches + the sideways full-screen button.
+    expect(geometry).toEqual(headerFor(true, true));
+    expect(header).toHaveLength(3);
+  });
+
+  it('twin failed this session: no Diagram | 3D in the placeholder — Grouped | Units only', () => {
+    mockSld.can3D = false;
+    const root = renderSummary(withDiagram(), luckyLive({ metaLastUpdate: Date.now() - MIN }));
+    const { header, geometry } = placeholderParts(root);
+    const expected = headerFor(false, true);
+    expect(geometry).toEqual(expected);
+    expect(expected.view).toBeNull();
+    expect(sizes(header)).toEqual([[expected.group?.width, expected.group?.height]]);
+  });
+
+  it('nothing to group and no 3D: no header row at all', () => {
+    mockSld.can3D = false;
+    mockSld.canGroup = false;
+    const root = renderSummary(withDiagram(), luckyLive({ metaLastUpdate: Date.now() - MIN }));
+    const { header, geometry } = placeholderParts(root);
+    expect(geometry).toBeNull();
+    expect(header).toHaveLength(0);
+  });
+
+  it('nothing to group: the placeholder row holds Diagram | 3D only', () => {
+    mockSld.canGroup = false;
+    const root = renderSummary(withDiagram(), luckyLive({ metaLastUpdate: Date.now() - MIN }));
+    const { header, geometry } = placeholderParts(root);
+    expect(geometry).toEqual(headerFor(true, false));
+    expect(geometry?.group).toBeNull();
+    expect(header).toHaveLength(1);
+  });
+
+  it('diagram + stale site stamp → no Live tag but the honest status (same stamp as the badge)', () => {
     const now = Date.now();
     const root = renderSummary(
       withDiagram(),
@@ -424,6 +562,13 @@ describe('Energy-flow section', () => {
     );
     expect(textsOf(root)).not.toContain('Live');
     expect(a11yLabels(root)).not.toContain('Live data');
+    // The 3D twin animates whatever the age (like the web): beside it the
+    // section still says how old the data is.
+    const status = root.findAll(n => n.props.testID === 'sld-freshness' && typeof n.type !== 'string');
+    expect(status.length).toBeGreaterThan(0);
+    expect(status[0].props.lastUpdate).toBe(now - 41 * MIN);
+    // (the shared `useNow` clock may lag this test's Date.now() by a tick)
+    expect(textsOf(status[0])).toEqual([expect.stringMatching(/^Delayed · 4[01] min ago$/)]);
   });
 });
 
@@ -467,5 +612,88 @@ describe('SLD fullscreen — Close escape over the error fallback', () => {
     });
     expect(root.findAll(n => n.props.testID === 'sld-viewport')).toHaveLength(0);
     expect(closeButtons(root).length).toBeGreaterThan(0);
+  });
+});
+
+/* ─────────── SLD full screen: the 3D twin sideways, the Diagram upright ─────────── */
+
+describe('SLD full screen — the sideways twin and its escapes', () => {
+  const closeButtons = (root: ReactTestInstance) =>
+    root.findAll(
+      n => typeof n.type !== 'string' && n.props.accessibilityLabel === 'Close',
+    );
+  const renderFullscreen = () => {
+    act(() => {
+      tree = renderer.create(React.createElement(SLDFullscreenScreen));
+    });
+    return (tree as ReactTestRenderer).root;
+  };
+  /** The turned container: a View whose style rotates it by `deg`. */
+  const isTurned = (n: ReactTestInstance, deg: string) => {
+    if (n.type !== View) return false;
+    const flat = ([] as unknown[]).concat(n.props.style).flat(3) as Array<{ transform?: Array<{ rotate?: string }> } | null>;
+    return flat.some(st => !!st && Array.isArray(st.transform) && st.transform.some(t => t.rotate === deg));
+  };
+  const insideTurned = (n: ReactTestInstance) => {
+    for (let p: ReactTestInstance | null = n.parent; p; p = p.parent) if (isTurned(p, '90deg')) return true;
+    return false;
+  };
+
+  it('3D: the twin (host fullscreen) inside the turned container — no Diagram viewport', () => {
+    mockSld.view = '3d';
+    const root = renderFullscreen();
+    const twin = root.findAll(n => n.props.testID === 'sld-twin');
+    expect(twin.length).toBeGreaterThan(0);
+    expect(insideTurned(twin[0])).toBe(true);
+    expect(mockSld.twinProps?.host).toBe('fullscreen');
+    expect(mockSld.twinProps?.visible).toBe(true);
+    expect(root.findAll(n => n.props.testID === 'sld-viewport')).toHaveLength(0);
+    // The rail's Close is always there (outside the twin), turned with it.
+    const close = closeButtons(root);
+    expect(close.length).toBeGreaterThan(0);
+    expect(close.every(insideTurned)).toBe(true);
+  });
+
+  it('3D: a twin that throws while rendering still leaves the rail’s Close (in the turned frame)', () => {
+    jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    mockSld.view = '3d';
+    mockSld.twinThrows = true;
+    const root = renderFullscreen();
+    expect(root.findAll(n => n.props.testID === 'sld-twin')).toHaveLength(0);
+    const close = closeButtons(root);
+    expect(close.length).toBeGreaterThan(0);
+    expect(close.every(insideTurned)).toBe(true);
+  });
+
+  it('2D: the fallback Close stays in the portrait frame', () => {
+    jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    mockSld.view = '2d';
+    mockSld.throwOnRender = true;
+    const root = renderFullscreen();
+    const close = closeButtons(root);
+    expect(close.length).toBeGreaterThan(0);
+    expect(close.some(insideTurned)).toBe(false);
+  });
+
+  it('sideways: "Turn your phone to the left" shows (and is announced) once per session', () => {
+    resetSldTurnHintForTests();
+    const { AccessibilityInfo } = jest.requireActual<typeof import('react-native')>('react-native');
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
+    mockSld.view = '3d';
+    let root = renderFullscreen();
+    expect(textsOf(root)).toContain(SLD_TURN_HINT_TEXT);
+    expect(announce).toHaveBeenCalledWith(expect.stringContaining(SLD_TURN_HINT_TEXT));
+    // Portrait-readable: outside the turned container.
+    const hint = root.findAll(n => n.type === Text && n.props.children === SLD_TURN_HINT_TEXT)[0];
+    expect(insideTurned(hint)).toBe(false);
+    act(() => tree?.unmount());
+    root = renderFullscreen();
+    expect(textsOf(root)).not.toContain(SLD_TURN_HINT_TEXT);
+    // The upright Diagram never shows it.
+    act(() => tree?.unmount());
+    resetSldTurnHintForTests();
+    mockSld.view = '2d';
+    root = renderFullscreen();
+    expect(textsOf(root)).not.toContain(SLD_TURN_HINT_TEXT);
   });
 });

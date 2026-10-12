@@ -44,6 +44,7 @@ import {
   sldParticleProgress,
 } from '../sldFlowClock';
 import { useSldFlowLoop } from '../useSldFlowLoop';
+import { useSldViewMatrix } from '../sldViewMatrix';
 
 /* ─────────── canvas constants (graph-space units) ─────────── */
 
@@ -508,6 +509,15 @@ interface DiagramSkiaLayerProps extends DiagramLayerBaseProps {
    * regardless. A shared value, so a flip never causes a React commit.
    */
   animate?: SharedValue<boolean>;
+  /**
+   * Motion allowed by the host (default true): false while the site's data
+   * isn't live (freshness), Reduce Motion is on or the user paused it
+   * (`useSldMotion`, ../sldMotion.ts), so the flow animation never claims
+   * "flowing right now" on a stale snapshot. Static flowing dashes + arrows
+   * stay (the state is still shown); only the clock and the particles
+   * stop. A plain prop: it changes on the freshness tick, never per frame.
+   */
+  motionAllowed?: boolean;
 }
 
 /**
@@ -531,6 +541,7 @@ const DiagramSkiaLayerBase: FC<DiagramSkiaLayerProps> = ({
   scale,
   clipRadius = 0,
   animate,
+  motionAllowed = true,
 }) => {
   const { width, height } = bounds;
 
@@ -616,30 +627,10 @@ const DiagramSkiaLayerBase: FC<DiagramSkiaLayerProps> = ({
   }, []);
 
   // Replicates the RN node-card layer's transform chain exactly, folded into
-  // ONE SkMatrix per frame:
-  //   p' = frameOffset + C + T + s·(p − C)
-  // i.e. the centre-layout offset of the bounds frame inside the viewport,
-  // then RN's centre-origin [translate, scale] semantics.
-  //
-  // ⚠️ Must stay a single `matrix` prop. The previous implementation animated
-  // a `transform` ARRAY (rebuilt per frame by a derived value) on a Group
-  // with an `origin` — RN Skia 1.x's composite-prop interop races between
-  // the UI and render threads at pinch frequency and crashes on device. A
-  // matrix host object is the library's blessed animated-transform path
-  // (its own gesture examples use it).
-  const offX = frame ? (frame.w - width) / 2 : 0;
-  const offY = frame ? (frame.h - height) / 2 : 0;
-  const cx = width / 2;
-  const cy = height / 2;
-  const viewMatrix = useDerivedValue(() => {
-    const m = Skia.Matrix();
-    // Ops pre-concatenate: the first call applies LAST to a point, so this
-    // reads bottom-up — un-centre, scale, then offset + centre + pan.
-    m.translate(offX + cx + translateX.value, offY + cy + translateY.value);
-    m.scale(scale.value, scale.value);
-    m.translate(-cx, -cy);
-    return m;
-  }, [offX, offY, cx, cy]);
+  // ONE SkMatrix per frame (`p' = frameOffset + C + T + s·(p − C)`,
+  // ../sldViewMatrix). ⚠️ Must stay a single `matrix` prop (see the hook for
+  // why).
+  const viewMatrix = useSldViewMatrix(width, height, frame, translateX, translateY, scale);
 
   // Flow clock → animated dash offset + particles, shared by every flow
   // edge. NOT Skia's `useClock()`: that wrote a new value on every vsync for
@@ -647,11 +638,14 @@ const DiagramSkiaLayerBase: FC<DiagramSkiaLayerProps> = ({
   // and each write re-records the picture on the UI thread and — on Android
   // — re-composites the whole window. This clock only runs while `animate`
   // allows it, at most 30 times a second (../sldFlowClock); the motion is
-  // time-based, so its speed is unchanged. With reduced motion, or when no
-  // edge is flowing, it never runs: static dashes, no particles.
+  // time-based, so its speed is unchanged. With reduced motion, when no edge
+  // is flowing, or when the host disallows motion (the site's data isn't
+  // live, or the user's Pause), it never runs: static dashes, no particles
+  // (a parked dot reads as a stray mark).
   const reduceMotion = useReducedMotion();
   const hasFlow = useMemo(() => skEdges.some(e => e.animated), [skEdges]);
-  const flowing = hasFlow && !reduceMotion;
+  const particles = !reduceMotion && motionAllowed;
+  const flowing = hasFlow && particles;
   const clock = useSharedValue(0);
   const lastTick = useSharedValue(Number.NEGATIVE_INFINITY);
   // Referentially stable (only stable shared values in its deps):
@@ -693,7 +687,7 @@ const DiagramSkiaLayerBase: FC<DiagramSkiaLayerProps> = ({
                   edge={e}
                   dashPhase={dashPhase}
                   clock={clock}
-                  particle={!reduceMotion}
+                  particle={particles}
                 />
               ) : (
                 <IdleEdge key={e.id} edge={e} />

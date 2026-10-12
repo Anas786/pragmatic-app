@@ -575,6 +575,17 @@ export const splashPalette = {
   barTo: brandMark.barTo,
 } as const;
 
+/**
+ * The SLD 3D web twin's page background — `--bg-0` of the vendored web
+ * portal CSS (`body` / `body.light`). Its WebView is painted with it
+ * natively, so the page never flashes another colour while it loads; keep
+ * equal to the vendored value (re-check on every re-sync).
+ */
+export const webTwin = {
+  bgDark: '#0B0F14',
+  bgLight: '#F6F8FB',
+} as const;
+
 /* ─────────── 8. Z-index scale ─────────── */
 
 export const zIndex = {

@@ -1,8 +1,13 @@
 /**
  * SLD viewport geometry — the width-filling initial fit (`computeSldFit`)
  * that centres a tall diagram on its hub and keeps a fitting one inside the
- * safe area and clear of the persistent mode pill, the inline panel's
- * content-driven height (`sldPanelHeight`), and the pill's touch target.
+ * safe area and clear of the persistent pills, the inline panel's
+ * content-driven height (`sldPanelHeight`), the pills' touch targets, the
+ * inline header row (both switches above the panel, wrapping on narrow
+ * phones — `sldHeaderPillMetrics` / `sldViewHeaderLayout`), the controls
+ * column, and the 3D twin's geometry: its tall inline card
+ * (`sldTwinInlineHeight`) and the sideways full screen (the turned
+ * container, `sldLandscapeGeometry`, the rail with its Group | Units pill).
  */
 import { it, expect, describe } from '@jest/globals';
 import {
@@ -12,6 +17,9 @@ import {
   SLD_MIN_TOUCH_TARGET,
   SLD_NO_INSETS,
   SLD_ZOOM_STEP,
+  sldControlColumnLayout,
+  sldControlColumnMaxHeight,
+  sldControlColumnMetrics,
   SldFit,
   SldFitInput,
   SldInsets,
@@ -22,8 +30,29 @@ import {
   SldViewTransform,
   sldZoomLimits,
   sldZoomTo,
+  SLD_LANDSCAPE_ROTATION_DEG,
+  SLD_RAIL_GAP,
+  sldLandscapeContainer,
+  sldLandscapeGeometry,
+  sldRailMetrics,
+  sldTwinInlineHeight,
+  SLD_TWIN_INLINE_FLOOR,
+  SLD_TWIN_MIN_FREE,
+  SLD_TWIN_SCROLL_RESERVE,
+  SLD_HEADER_LABEL_PAD,
+  sldHeaderPillMetrics,
+  sldViewHeaderLayout,
+  sldRailLabelFit,
+  sldRailPillHeight,
+  sldRailSegmentInner,
+  sldRailStackHeight,
 } from '../src/components/screens/Authenticated/SiteDetail/components/sldViewportFit';
-import { buildSldPhoneLayout, SLD_PHONE_CARD, SldPhoneLayout } from '../src/utils/sldPhoneLayout';
+import {
+  buildSldPhoneLayout,
+  estimateSldTextWidth,
+  SLD_PHONE_CARD,
+  SldPhoneLayout,
+} from '../src/utils/sldPhoneLayout';
 import { buildSldGrouping } from '../src/utils/sldGroup';
 import { isLogoNode, resolveNodeRects } from '../src/utils/sld';
 import { sldGraphMock } from '../src/data/mock/sld';
@@ -116,6 +145,83 @@ describe('sldModeToggleMetrics (Grouped/Units pill touch target)', () => {
     }
     const three = sldModeToggleMetrics(normalizeAt(393), 3);
     expect(three.width).toBeCloseTo(3 * three.segmentWidth + 2 * three.gap + 2 * (three.padding + 1), 12);
+  });
+
+  it('the inline header’s Diagram | 3D switch reaches touch.min (48 on Android) the same way', () => {
+    for (const touchMin of [44, 48]) {
+      for (const w of [...PHONES, ...TABLETS]) {
+        const m = sldModeToggleMetrics(normalizeAt(w), 2, touchMin);
+        const chrome = m.padding + m.border;
+        expect([w, touchMin, m.slop <= chrome + EPS]).toEqual([w, touchMin, true]);
+        const effectiveHeight = Math.min(m.segmentHeight + 2 * m.slop, m.height);
+        expect([w, touchMin, effectiveHeight >= touchMin - EPS]).toEqual([w, touchMin, true]);
+        expect([w, touchMin, m.segmentWidth >= touchMin]).toEqual([w, touchMin, true]);
+      }
+    }
+    // The default stays the 44 pt top pills' geometry.
+    expect(sldModeToggleMetrics(normalizeAt(393), 2, SLD_MIN_TOUCH_TARGET)).toEqual(REF_TOGGLE);
+  });
+});
+
+describe('the controls column never reaches under the Diagram | 3D pill', () => {
+  // The column sits bottom-left (space.lg = 16 from the edges), the
+  // Diagram | 3D pill top-left (16 in, gap 8) and is drawn OVER it: a
+  // 6-button column on a 320 pt panel reached up to 27 pt under the pill on
+  // a 440 pt phone, so the top of Zoom-in switched the view.
+  const WIDTHS = [360, 375, 390, 393, 402, 412, 430, 440];
+  const EDGE = 16;
+  const pillAt = (w: number): SldOverlayBox => {
+    const m = sldModeToggleMetrics(normalizeAt(w), 2);
+    return { width: m.width, height: m.height, edge: EDGE, gap: 8 };
+  };
+
+  it('column top ≥ pill bottom + gap — a 320 pt panel, 5 / 6 buttons, iOS / Android targets', () => {
+    for (const w of WIDTHS) {
+      for (const touchMin of [44, 48]) {
+        for (const count of [5, 6]) {
+          const viewHeight = 320 - 2; // inside the 1 pt border
+          const pill = pillAt(w);
+          const m = sldControlColumnMetrics(normalizeAt(w), touchMin);
+          const maxHeight = sldControlColumnMaxHeight({ viewHeight, edge: EDGE, pill });
+          const lay = sldControlColumnLayout(count, m, maxHeight);
+          const top = viewHeight - EDGE - lay.height;
+          const keepOut = pill.edge + pill.height + pill.gap;
+          expect([w, touchMin, count, top >= keepOut - EPS]).toEqual([w, touchMin, count, true]);
+          // Still inside the panel's width (beside the pill row, never over it).
+          expect([w, lay.width <= w - 2 * EDGE]).toEqual([w, true]);
+        }
+      }
+    }
+  });
+
+  it('full screen with safe-area insets: the same keep-out', () => {
+    const insets: SldInsets = { top: 59, right: 0, bottom: 34, left: 0 };
+    for (const w of WIDTHS) {
+      const pill = pillAt(w);
+      const m = sldControlColumnMetrics(normalizeAt(w), 44);
+      const viewHeight = 480;
+      const maxHeight = sldControlColumnMaxHeight({ viewHeight, insets, edge: EDGE, pill });
+      const lay = sldControlColumnLayout(6, m, maxHeight);
+      const top = viewHeight - insets.bottom - EDGE - lay.height;
+      expect([w, top >= insets.top + pill.edge + pill.height + pill.gap - EPS]).toEqual([w, true]);
+    }
+  });
+
+  it('one column whenever it fits; every button a real touch target', () => {
+    for (const touchMin of [44, 48]) {
+      const m = sldControlColumnMetrics(normalizeAt(393), touchMin);
+      expect(m.button).toBeGreaterThanOrEqual(touchMin);
+      const tall = sldControlColumnLayout(6, m, 800);
+      expect([tall.columns, tall.rows]).toEqual([1, 6]);
+      const short = sldControlColumnLayout(6, m, 200);
+      expect(short.columns).toBeGreaterThan(1);
+      expect(short.height).toBeLessThanOrEqual(200);
+      expect(short.columns * short.rows).toBeGreaterThanOrEqual(6);
+      // Nothing fits: one row (never a column through the pill).
+      expect(sldControlColumnLayout(6, m, 10).rows).toBe(1);
+    }
+    // No pill: only the safe area's top edge bounds it.
+    expect(sldControlColumnMaxHeight({ viewHeight: 400, edge: EDGE })).toBe(400 - 2 * EDGE);
   });
 });
 
@@ -264,6 +370,90 @@ describe('computeSldFit — fill the width', () => {
       }
     }
     expect(checked).toBeGreaterThan(40);
+  });
+});
+
+describe('computeSldFit — the Diagram | 3D pill (top-LEFT) too', () => {
+  // The left pill alone (nothing to group → no Grouped/Units pill) must
+  // reserve the strip just like the right one did.
+  it('reserves the strip when only the LEFT pill would be covered', () => {
+    const input = {
+      viewWidth: INLINE_W,
+      viewHeight: GROUPED.bounds.height * (INLINE_W / 360) + STRIP,
+      contentWidth: GROUPED.bounds.width,
+      contentHeight: GROUPED.bounds.height,
+    };
+    const fit = computeSldFit({ ...input, overlayLeft: PILL });
+    expect(fit.reserve).toBe('top');
+    expect(fit.mask).toBe(STRIP);
+    expect(fit.scale).toBe(computeSldFit(input).scale);
+    // A diagram clear of both pills keeps its plain fit: a sliver centred
+    // in the strip's free middle (between the two ~146 pt pills)…
+    const narrow = { ...input, viewHeight: 400, contentWidth: 16, contentHeight: 300, maxScale: 1 };
+    expect(computeSldFit({ ...narrow, overlayLeft: PILL })).toEqual(computeSldFit(narrow));
+    expect(computeSldFit({ ...narrow, overlay: PILL })).toEqual(computeSldFit(narrow));
+    expect(computeSldFit({ ...narrow, overlay: PILL, overlayLeft: PILL })).toEqual(computeSldFit(narrow));
+  });
+
+  it('adding the left pill never changes an existing 2D fit (same strip)', () => {
+    for (const [label, l] of FIXTURES) {
+      const { input } = inlinePanel(l);
+      const right = computeSldFit(input);
+      const both = computeSldFit({ ...input, overlayLeft: PILL });
+      expect([label, both]).toEqual([label, right]);
+    }
+  });
+
+  it('never fits a diagram that fits under EITHER pill', () => {
+    const views = [
+      { viewWidth: INLINE_W, viewHeight: 724 },
+      PORTRAIT,
+      { viewWidth: 320, viewHeight: 568 },
+      { viewWidth: 820, viewHeight: 1180 },
+    ];
+    const insetSets: SldInsets[] = [SLD_NO_INSETS, IPHONE_17_PRO, { top: 30, right: 10, bottom: 5, left: 20 }];
+    const contents = [
+      [GROUPED.bounds.width, GROUPED.bounds.height],
+      [360, 200],
+      [160, 160],
+      [392, 520],
+    ];
+    let checked = 0;
+    for (const view of views) {
+      for (const insets of insetSets) {
+        for (const [contentWidth, contentHeight] of contents) {
+          const input = { ...view, contentWidth, contentHeight, insets, overlay: PILL, overlayLeft: PILL };
+          const fit = computeSldFit(input);
+          const b = box(input, fit);
+          const label = JSON.stringify({ view, insets, contentWidth, contentHeight });
+          const availH = view.viewHeight - insets.top - insets.bottom - STRIP;
+          if (b.h > availH + EPS) continue;
+          checked += 1;
+          const right = view.viewWidth - insets.right - PILL.edge - PILL.width;
+          const left = insets.left + PILL.edge;
+          const top = insets.top + PILL.edge;
+          const below = b.y >= top + PILL.height + PILL.gap - EPS;
+          const clearRight = b.x + b.w <= right - PILL.gap + EPS || below;
+          const clearLeft = b.x >= left + PILL.width + PILL.gap - EPS || below;
+          expect([label, clearRight, clearLeft]).toEqual([label, true, true]);
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(30);
+  });
+
+  it('the panel reserves one strip for both pills', () => {
+    const base = {
+      viewWidth: INLINE_W,
+      contentWidth: GROUPED.bounds.width,
+      contentHeight: GROUPED.bounds.height,
+      minHeight: 320,
+      maxHeight: 724,
+    };
+    const both = sldPanelHeight({ ...base, overlay: PILL, overlayLeft: PILL });
+    expect(both).toBe(sldPanelHeight({ ...base, overlay: PILL }));
+    expect(both).toBe(sldPanelHeight({ ...base, overlayLeft: PILL }));
+    expect(both).toBe(Math.ceil(GROUPED.bounds.height * (INLINE_W / 360) + STRIP));
   });
 });
 
@@ -741,3 +931,427 @@ describe('the Grouped/Units pill never covers a card at open (hub-focused fits)'
 
 /** The hub a layout centres on: the logo node (every fixture has one). */
 const hubId = (l: SldPhoneLayout): string => l.graph.nodes.find(isLogoNode)!.id;
+
+/* ─────────── 3D: the web twin ─────────── */
+
+describe('sldTwinInlineHeight — the web’s clamp(600px, 78vh, 920px), in window points', () => {
+  it('78 % of the window between 600 and 920 pt, whole points', () => {
+    // Phones: 667 (SE) … 956 (Pro Max) → the floor, then 78 %.
+    expect(sldTwinInlineHeight(667)).toBe(600);
+    expect(sldTwinInlineHeight(740)).toBe(600);
+    expect(sldTwinInlineHeight(812)).toBe(633);
+    expect(sldTwinInlineHeight(844)).toBe(658);
+    expect(sldTwinInlineHeight(956)).toBe(746);
+    // Tablets: the cap.
+    expect(sldTwinInlineHeight(1194)).toBe(920);
+    expect(sldTwinInlineHeight(1366)).toBe(920);
+    for (const h of [0, -5, Number.NaN, 500, 768, 900, 1180, 2000]) {
+      const v = sldTwinInlineHeight(h);
+      expect([h, Number.isInteger(v) && v >= 600 && v <= 920]).toEqual([h, true]);
+    }
+  });
+
+  it('never fills the body viewport: page stays in view to scroll by (every drag on the 3D moves the model)', () => {
+    // iPhone 17 Pro (874 pt window, ≈ 690 pt body viewport): the web's clamp
+    // (682) left 8 pt — now capped to leave SLD_TWIN_SCROLL_RESERVE.
+    expect(sldTwinInlineHeight(874)).toBe(682);
+    expect(sldTwinInlineHeight(874, 690)).toBe(690 - SLD_TWIN_SCROLL_RESERVE);
+    // A tall viewport (tablet): the web's own clamp still decides.
+    expect(sldTwinInlineHeight(1194, 1100)).toBe(920);
+    // A short one (SE + large text): never below the floor.
+    expect(sldTwinInlineHeight(667, 470)).toBe(SLD_TWIN_INLINE_FLOOR);
+    // Not laid out yet (0 / garbage): the web's clamp alone.
+    expect(sldTwinInlineHeight(874, 0)).toBe(682);
+    expect(sldTwinInlineHeight(874, Number.NaN)).toBe(682);
+    for (const viewport of [520, 600, 690, 760, 840]) {
+      for (const win of [667, 812, 874, 932]) {
+        const v = sldTwinInlineHeight(win, viewport);
+        const free = viewport - v;
+        expect([win, viewport, Number.isInteger(v), v <= sldTwinInlineHeight(win)]).toEqual([
+          win,
+          viewport,
+          true,
+          true,
+        ]);
+        // Either the full reserve is free, or the card sits at its floor.
+        expect([win, viewport, free >= SLD_TWIN_SCROLL_RESERVE || v === SLD_TWIN_INLINE_FLOOR]).toEqual(
+          [win, viewport, true],
+        );
+      }
+    }
+  });
+
+  it('a short viewport (split screen / pop-up window): page ALWAYS stays free — the gutter beats the floor', () => {
+    // 400 dp split-screen half minus header + tabs ≈ 280 pt of body: the
+    // 360 pt floor would cover it all.
+    expect(sldTwinInlineHeight(400, 280)).toBe(280 - SLD_TWIN_MIN_FREE);
+    expect(sldTwinInlineHeight(667, 360)).toBe(360 - SLD_TWIN_MIN_FREE);
+    // The floor still holds while the gutter fits beside it.
+    expect(sldTwinInlineHeight(667, SLD_TWIN_INLINE_FLOOR + SLD_TWIN_MIN_FREE)).toBe(SLD_TWIN_INLINE_FLOOR);
+    expect(sldTwinInlineHeight(667, 470)).toBe(SLD_TWIN_INLINE_FLOOR);
+    // Degenerate viewports never give a negative card.
+    expect(sldTwinInlineHeight(400, 40)).toBe(0);
+    for (const viewport of [120, 200, 280, 320, 360, 400, 448, 470, 520, 690]) {
+      const v = sldTwinInlineHeight(812, viewport);
+      expect([viewport, Number.isInteger(v), v >= 0, viewport - v >= SLD_TWIN_MIN_FREE]).toEqual([
+        viewport,
+        true,
+        true,
+        true,
+      ]);
+    }
+  });
+});
+
+/** Phones (portrait windows + their safe-area insets). */
+const DEVICES: { label: string; w: number; h: number; top: number; bottom: number }[] = [
+  { label: 'iPhone 13 mini (375×812)', w: 375, h: 812, top: 50, bottom: 34 },
+  { label: 'iPhone 15 (390×844)', w: 390, h: 844, top: 47, bottom: 34 },
+  { label: 'iPhone 15 Pro Max (430×932)', w: 430, h: 932, top: 59, bottom: 34 },
+  { label: 'Android 360×740', w: 360, h: 740, top: 24, bottom: 0 },
+];
+
+/** RN `rotate: θ` turns CLOCKWISE on screen (y down): R·d = (cos·dx − sin·dy, sin·dx + cos·dy). */
+const turn = (deg: number, [x, y]: [number, number]): [number, number] => {
+  const a = (deg * Math.PI) / 180;
+  return [Math.cos(a) * x - Math.sin(a) * y, Math.sin(a) * x + Math.cos(a) * y];
+};
+
+const RAIL = sldRailMetrics(44, 50);
+
+describe('the sideways full screen — turned by TRANSFORM, never an OS rotation', () => {
+  it('the container is long × short, centred on the window, and covers it exactly once turned', () => {
+    for (const d of DEVICES) {
+      const c = sldLandscapeContainer(d.w, d.h);
+      expect(c.rotation).toBe(SLD_LANDSCAPE_ROTATION_DEG);
+      expect([c.width, c.height]).toEqual([d.h, d.w]);
+      // Centre on the window centre (RN turns about the view's centre).
+      expect(c.left + c.width / 2).toBeCloseTo(d.w / 2, 9);
+      expect(c.top + c.height / 2).toBeCloseTo(d.h / 2, 9);
+      // The turned box's corners land on the window's corners.
+      const cx = d.w / 2;
+      const cy = d.h / 2;
+      const corners = [
+        [c.left, c.top],
+        [c.left + c.width, c.top],
+        [c.left, c.top + c.height],
+        [c.left + c.width, c.top + c.height],
+      ].map(([x, y]) => {
+        const [rx, ry] = turn(c.rotation, [x - cx, y - cy]);
+        // `+ 0`: −0 → 0.
+        return [Math.round((rx + cx) * 1e6) / 1e6 + 0, Math.round((ry + cy) * 1e6) / 1e6 + 0];
+      });
+      const xs = corners.map(p => p[0]).sort((a, b) => a - b);
+      const ys = corners.map(p => p[1]).sort((a, b) => a - b);
+      expect([xs[0], xs[3], ys[0], ys[3]]).toEqual([0, d.w, 0, d.h]);
+    }
+  });
+
+  it('the insets are the portrait ones turned: the island on the LEFT, the home indicator on the RIGHT', () => {
+    for (const d of DEVICES) {
+      const geo = sldLandscapeGeometry(
+        { width: d.w, height: d.h },
+        { top: d.top, bottom: d.bottom, left: 3, right: 5 },
+        RAIL.width,
+      );
+      expect([geo.width, geo.height, geo.rotation]).toEqual([d.h, d.w, 90]);
+      // Content edge directions on screen after the +90° turn:
+      //   content left (−x) → up (portrait TOP); right (+x) → down (BOTTOM);
+      //   content top (−y) → right (portrait RIGHT); bottom (+y) → left (LEFT).
+      const dir = (v: [number, number]) => turn(90, v).map(c => Math.round(c) + 0);
+      expect(dir([-1, 0])).toEqual([0, -1]);
+      expect(dir([1, 0])).toEqual([0, 1]);
+      expect(dir([0, -1])).toEqual([1, 0]);
+      expect(dir([0, 1])).toEqual([-1, 0]);
+      expect(geo.insets).toEqual({ left: d.top, right: d.bottom, top: 5, bottom: 3 });
+    }
+  });
+
+  it('the twin fills the safe area left of the rail; the rail stands clear of the home indicator', () => {
+    for (const d of DEVICES) {
+      const geo = sldLandscapeGeometry(
+        { width: d.w, height: d.h },
+        { top: d.top, bottom: d.bottom, left: 0, right: 0 },
+        RAIL.width,
+      );
+      const label = d.label;
+      expect([label, geo.area.x]).toEqual([label, geo.insets.left]);
+      expect([label, geo.area.x + geo.area.w]).toEqual([label, geo.rail.x]);
+      expect([label, geo.area.y, geo.area.h]).toEqual([label, geo.insets.top, geo.height - geo.insets.top - geo.insets.bottom]);
+      expect([label, geo.rail.w]).toEqual([label, RAIL.width]);
+      expect([label, geo.rail.x + geo.rail.w + SLD_RAIL_GAP]).toEqual([label, geo.width - geo.insets.right]);
+      // The twin keeps most of the long edge.
+      expect([label, geo.area.w > geo.width * 0.75]).toEqual([label, true]);
+    }
+  });
+
+  it('a window already WIDER than tall (Android tablet / foldable / split screen) is not turned', () => {
+    const c = sldLandscapeContainer(1280, 800);
+    expect(c).toEqual({ width: 1280, height: 800, left: 0, top: 0, rotation: 0 });
+    const insets = { top: 24, bottom: 16, left: 40, right: 8 };
+    const geo = sldLandscapeGeometry({ width: 1280, height: 800 }, insets, RAIL.width);
+    expect([geo.width, geo.height, geo.rotation]).toEqual([1280, 800, 0]);
+    // Its own insets, unmapped (nothing is turned).
+    expect(geo.insets).toEqual(insets);
+    expect(geo.rail.x + geo.rail.w).toBeLessThanOrEqual(1280 - insets.right);
+    expect(geo.area.x).toBe(insets.left);
+    // Every window: the geometry describes exactly the box the container lays out.
+    for (const [w, h] of [
+      ...DEVICES.map(d => [d.w, d.h] as [number, number]),
+      [1280, 800],
+      [884, 1104],
+      [1104, 884],
+      [600, 600],
+    ] as [number, number][]) {
+      const container = sldLandscapeContainer(w, h);
+      const g = sldLandscapeGeometry({ width: w, height: h }, null, RAIL.width);
+      expect([w, h, container.width, container.height, container.rotation]).toEqual([
+        w,
+        h,
+        g.width,
+        g.height,
+        g.rotation,
+      ]);
+    }
+  });
+
+  it('the rail: round buttons ≥ touch.min (iOS 44, Android 48), wide enough for its caption', () => {
+    for (const touchMin of [44, 48]) {
+      const m = sldRailMetrics(touchMin);
+      expect(m.button).toBeGreaterThanOrEqual(touchMin);
+      expect(m.width).toBeGreaterThanOrEqual(m.button);
+      expect(m.gap).toBeGreaterThan(0);
+    }
+    // A caption wider than the button widens the rail (+ 8 pt), never the reverse.
+    expect(sldRailMetrics(44, 80).width).toBe(88);
+    expect(sldRailMetrics(44, 10).width).toBe(sldRailMetrics(44).width);
+    // Close + "Diagram" (button + caption) fit the shortest rail (a 360 pt phone's short edge).
+    const small = sldLandscapeGeometry({ width: 360, height: 740 }, { top: 24, bottom: 0, left: 0, right: 0 }, RAIL.width);
+    const m = sldRailMetrics(48, 50);
+    expect(2 * m.button + m.gap + 4 + 18).toBeLessThan(small.rail.h);
+  });
+});
+
+/* ─────────── inline: the header row above the panel ─────────── */
+
+/** AppText's rendered size for `fontSize` 11 on a `w`-pt phone at OS scale `os` (floor 11, cap 1.3). */
+const headerLabelPt = (w: number, os: number) => Math.max(11, Math.round((11 * w) / 393)) * Math.min(1.3, os);
+const widestBold = (labels: string[], pt: number) => Math.max(...labels.map(l => estimateSldTextWidth(l, pt, true)));
+const VIEW_LABELS = ['Diagram', '3D'];
+const GROUP_LABELS = ['Grouped', 'Units'];
+const HEADER_GAP = 8;
+
+/** The header row on a `w`-pt phone, composed like `sldViewHeaderGeometry`. */
+const headerAt = (w: number, touchMin: number, os: number, withView = true, withGroup = true) => {
+  const normalize = normalizeAt(w);
+  const pt = headerLabelPt(w, os);
+  const view = withView ? sldHeaderPillMetrics(normalize, touchMin, widestBold(VIEW_LABELS, pt)) : undefined;
+  const group = withGroup ? sldHeaderPillMetrics(normalize, touchMin, widestBold(GROUP_LABELS, pt)) : undefined;
+  const width = w - 32; // the SiteDetail gutter, both sides
+  const button = withView ? touchMin : 0;
+  const layout = sldViewHeaderLayout({ width, gap: HEADER_GAP, viewPill: view, groupPill: group, button });
+  return { pt, view, group, width, button, layout };
+};
+
+describe('the inline header row: [Diagram | 3D] [Grouped | Units] … [full screen]', () => {
+  const WIDTHS = [360, 375, 390, 393, 402, 412, 430, 440];
+  const SCALES = [0.85, 1, 1.15, 1.3, 2];
+
+  it('every segment is a real target, every label fits its segment unshrunk, nothing overflows', () => {
+    for (const w of WIDTHS) {
+      for (const touchMin of [44, 48]) {
+        for (const os of SCALES) {
+          const { pt, view, group, width, button, layout } = headerAt(w, touchMin, os);
+          const label = `${w}pt · ${touchMin} · ×${os}`;
+          for (const [pill, labels] of [
+            [view!, VIEW_LABELS],
+            [group!, GROUP_LABELS],
+          ] as const) {
+            expect([label, pill.segmentWidth >= touchMin, pill.height >= touchMin - EPS]).toEqual([label, true, true]);
+            const effective = Math.min(pill.segmentHeight + 2 * pill.slop, pill.height);
+            expect([label, effective >= touchMin - EPS]).toEqual([label, true]);
+            // The widest label (bold — the selected segment) + its padding.
+            expect([label, widestBold(labels, pt) + 2 * SLD_HEADER_LABEL_PAD <= pill.segmentWidth + EPS]).toEqual([
+              label,
+              true,
+            ]);
+          }
+          if (layout.wrapped) {
+            // Line 1: Diagram | 3D … the button; line 2: Grouped | Units.
+            expect([label, view!.width + HEADER_GAP + button <= width + EPS]).toEqual([label, true]);
+            expect([label, group!.width <= width + EPS]).toEqual([label, true]);
+            expect([label, layout.height]).toEqual([label, Math.max(view!.height, button) + HEADER_GAP + group!.height]);
+          } else {
+            expect([label, view!.width + HEADER_GAP + group!.width + HEADER_GAP + button <= width + EPS]).toEqual([
+              label,
+              true,
+            ]);
+            expect([label, layout.height]).toEqual([label, Math.max(view!.height, group!.height, button)]);
+          }
+        }
+      }
+    }
+  });
+
+  it('wraps exactly when one line would overflow: 360 pt Android, 375 pt with large text', () => {
+    // 360 pt Android (48 pt targets): the two pills + the button overflow at
+    // the default text size — Grouped | Units drops to a second line.
+    expect(headerAt(360, 48, 1).layout.wrapped).toBe(true);
+    // Common iPhones at the default size: one line.
+    for (const w of [375, 390, 393, 402, 430, 440]) {
+      expect([w, headerAt(w, 44, 1).layout.wrapped]).toEqual([w, false]);
+    }
+    // A 375 pt iPhone at the largest scaled text: two lines.
+    expect(headerAt(375, 44, 1.3).layout.wrapped).toBe(true);
+    // Larger text than AppText's cap is measured AT the cap (the labels never grow past it).
+    expect(headerAt(375, 44, 3)).toEqual(headerAt(375, 44, 1.3));
+  });
+
+  it('larger text widens the pills (never shrinks the label)', () => {
+    const small = headerAt(393, 44, 1);
+    const large = headerAt(393, 44, 1.3);
+    expect(large.group!.segmentWidth).toBeGreaterThan(small.group!.segmentWidth);
+    expect(large.view!.segmentWidth).toBeGreaterThan(small.view!.segmentWidth);
+    // At the default size the pills keep the top pills' geometry (68 pt segments).
+    expect(small.group!.width).toBeCloseTo(sldModeToggleMetrics(normalizeAt(393), 2, 44).width, 9);
+  });
+
+  it('one switch only: never wraps — Diagram | 3D alone, or Grouped | Units alone (twin failed)', () => {
+    for (const w of WIDTHS) {
+      const noGroup = headerAt(w, 48, 1.3, true, false);
+      expect([w, noGroup.layout.wrapped, noGroup.layout.height]).toEqual([w, false, Math.max(noGroup.view!.height, 48)]);
+      expect([w, noGroup.view!.width + HEADER_GAP + 48 <= noGroup.width]).toEqual([w, true]);
+      const noView = headerAt(w, 48, 1.3, false, true);
+      expect([w, noView.layout.wrapped, noView.layout.height]).toEqual([w, false, noView.group!.height]);
+    }
+    // Nothing to show: no row.
+    expect(sldViewHeaderLayout({ width: 328, gap: HEADER_GAP })).toEqual({ wrapped: false, height: 0 });
+  });
+
+  it('the full-screen slot is reserved in both views (Diagram ⇄ 3D never re-flows the row)', () => {
+    // The layout depends only on what CAN show (3D can → the slot), not on
+    // the current view (sldHosts checks the rendered row in both views).
+    const a = headerAt(360, 48, 1);
+    // Without the slot the same pills would fit one line on a 360 pt phone.
+    const withoutSlot = sldViewHeaderLayout({ width: a.width, gap: HEADER_GAP, viewPill: a.view, groupPill: a.group });
+    expect(withoutSlot.wrapped).toBe(false);
+    expect(a.layout.wrapped).toBe(true);
+  });
+});
+
+describe('inline 2D no longer reserves the Grouped | Units strip; the 2D full screen still does', () => {
+  it('inline: no overlay → plain fit, no mask band, no strip in the panel height', () => {
+    for (const [name, l] of [
+      ['Grouped', GROUPED],
+      ['Units', UNITS],
+    ] as const) {
+      const h = sldPanelHeight({
+        viewWidth: INLINE_W,
+        contentWidth: l.bounds.width,
+        contentHeight: l.bounds.height,
+        minHeight: 318,
+        maxHeight: 722,
+      });
+      const fit = computeSldFit({
+        viewWidth: INLINE_W,
+        viewHeight: h,
+        contentWidth: l.bounds.width,
+        contentHeight: l.bounds.height,
+        focusY: l.focus.y,
+        cards: cardRects(l),
+      });
+      expect([name, fit.reserve, fit.mask]).toEqual([name, 'none', 0]);
+    }
+    // Grouped Lucky: exactly the diagram's own height (the strip is gone).
+    expect(
+      sldPanelHeight({
+        viewWidth: INLINE_W,
+        contentWidth: GROUPED.bounds.width,
+        contentHeight: GROUPED.bounds.height,
+        minHeight: 318,
+        maxHeight: 722,
+      }),
+    ).toBe(Math.ceil(GROUPED.bounds.height * (INLINE_W / 360)));
+  });
+
+  it('full screen (Units, iPhone 17 Pro): the pill keeps its masked strip', () => {
+    const fit = computeSldFit({
+      ...PORTRAIT,
+      contentWidth: UNITS.bounds.width,
+      contentHeight: UNITS.bounds.height,
+      insets: IPHONE_17_PRO,
+      overlay: PILL,
+      focusY: UNITS.focus.y,
+      cards: cardRects(UNITS),
+    });
+    expect(fit.reserve).toBe('top');
+    expect(fit.mask).toBeCloseTo(IPHONE_17_PRO.top + STRIP, 9);
+  });
+});
+
+/* ─────────── the sideways rail's Group | Units ─────────── */
+
+describe('the sideways rail: Close, Diagram, Group | Units', () => {
+  /** Portrait phones: width × height and their portrait insets. */
+  const PHONES: { w: number; h: number; top: number; bottom: number }[] = [
+    { w: 360, h: 740, top: 24, bottom: 0 },
+    { w: 360, h: 800, top: 24, bottom: 48 },
+    { w: 375, h: 812, top: 50, bottom: 34 },
+    { w: 390, h: 844, top: 47, bottom: 34 },
+    { w: 412, h: 915, top: 24, bottom: 48 },
+    { w: 430, h: 932, top: 59, bottom: 34 },
+    { w: 440, h: 956, top: 62, bottom: 34 },
+  ];
+  /** The "Diagram" caption's gap + its tallest line (lineHeight 14 floored-up, × the 1.2 cap). */
+  const CAPTION = { gap: 4, line: Math.round(14 * (11 / 10)) * 1.2 };
+  const GROUP_RAIL_LABELS = ['Group', 'Units'];
+
+  it('every segment is ≥ touch.min tall AND wide (the pill is a round button wide)', () => {
+    for (const touchMin of [44, 48]) {
+      const m = sldRailMetrics(touchMin, 60);
+      expect([touchMin, m.segment >= touchMin, sldRailSegmentInner(m) >= touchMin]).toEqual([touchMin, true, true]);
+      expect([touchMin, m.button >= touchMin]).toEqual([touchMin, true]);
+      expect(sldRailPillHeight(m)).toBe(2 * m.segment + 2 * (m.pad + m.border));
+      // The rail stays as wide as the round button + its sides, or the caption.
+      expect(m.width).toBeGreaterThanOrEqual(m.button);
+    }
+  });
+
+  it('the whole stack fits the rail on every phone’s short edge (360–440 pt)', () => {
+    for (const d of PHONES) {
+      for (const touchMin of [44, 48]) {
+        const caption = estimateSldTextWidth('Diagram', Math.max(11, Math.round((11 * d.w) / 393)) * 1.2, true);
+        const m = sldRailMetrics(touchMin, caption);
+        const geo = sldLandscapeGeometry({ width: d.w, height: d.h }, { top: d.top, bottom: d.bottom, left: 0, right: 0 }, m.width);
+        const stack = sldRailStackHeight(m, CAPTION, true);
+        expect([d.w, d.h, touchMin, stack <= geo.rail.h]).toEqual([d.w, d.h, touchMin, true]);
+        // Without Group | Units the stack is just Close + Diagram.
+        expect(sldRailStackHeight(m, CAPTION, false)).toBe(stack - m.gap - sldRailPillHeight(m));
+      }
+    }
+  });
+
+  it('"Group" (bold) still fits its segment at the capped OS text scale — never shrunk on phones', () => {
+    const perPt = Math.max(...GROUP_RAIL_LABELS.map(l => estimateSldTextWidth(l, 1, true)));
+    for (const w of [360, 375, 390, 393, 402, 412, 430, 440]) {
+      for (const touchMin of [44, 48]) {
+        const m = sldRailMetrics(touchMin, 60);
+        const inner = sldRailSegmentInner(m);
+        const fontPt = Math.max(11, Math.round((11 * w) / 393));
+        const fit = sldRailLabelFit(inner, perPt, fontPt, 1.3);
+        const label = `${w}pt · ${touchMin}`;
+        expect([label, fit.sizeFactor]).toEqual([label, 1]);
+        expect([label, fit.maxFontScale >= 1 && fit.maxFontScale <= 1.3]).toEqual([label, true]);
+        // At its largest the widest label still fits the segment's inside.
+        expect([label, perPt * fontPt * fit.maxFontScale <= inner + EPS]).toEqual([label, true]);
+      }
+    }
+    // A tablet's width-scaled font can't fit even unscaled: shrink to fit, no OS scaling.
+    const tablet = sldRailLabelFit(44, perPt, 22, 1.3);
+    expect(tablet.maxFontScale).toBe(1);
+    expect(tablet.sizeFactor).toBeLessThan(1);
+    expect(perPt * 22 * tablet.sizeFactor).toBeCloseTo(44, 9);
+    // Degenerate input: no scaling, no shrink.
+    expect(sldRailLabelFit(0, perPt, 11)).toEqual({ sizeFactor: 1, maxFontScale: 1 });
+  });
+});

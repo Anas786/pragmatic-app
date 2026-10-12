@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useRef,
+  useSyncExternalStore,
   type RefObject,
 } from 'react';
 import type { HostInstance, View } from 'react-native';
@@ -77,6 +78,21 @@ export const createBodyViewportStore = (
 };
 
 export const BodyViewportContext = createContext<BodyViewportStore | null>(null);
+
+/**
+ * The body ScrollView's visible height, points — 0 before it is laid out and
+ * outside a provider. Re-renders only when the HEIGHT changes (scrolling
+ * notifies the store at scroll rate; the snapshot is the height alone).
+ */
+export const useBodyViewportHeight = (): number => {
+  const store = useContext(BodyViewportContext);
+  const subscribe = useCallback(
+    (listener: () => void) => (store ? store.subscribe(listener) : () => {}),
+    [store],
+  );
+  const getHeight = useCallback(() => (store ? store.get().height : 0), [store]);
+  return useSyncExternalStore(subscribe, getHeight);
+};
 
 /**
  * Whether a box at content-space `top` (points from the top of the scroll

@@ -1,0 +1,1051 @@
+{
+ "source": "SldTwin/twinGrouped.ts (twinDataFor \"grouped\") on fixtures/lucky.json — written by __tests__/sldTwinGrouped.test.ts with SLD_TWIN_WRITE_FIXTURES=1",
+ "siteName": "Lucky Cement Nooriabad",
+ "sld": {
+  "nodes": [
+   {
+    "id": "1",
+    "type": "custom",
+    "position": {
+     "x": 479.20271453600856,
+     "y": 498.18518184281436
+    },
+    "data": {
+     "heading": "LCL Plant",
+     "keys": [
+      {
+       "unit": "kW",
+       "param": "live.p30.value",
+       "label": "P"
+      }
+     ],
+     "edgesConnect": "target",
+     "icon": {
+      "color": "#ff64ff",
+      "name": "industry"
+     },
+     "fixed": true,
+     "type": "logo"
+    }
+   },
+   {
+    "id": "sldgrp:wind:1",
+    "type": "custom",
+    "position": {
+     "x": 1005.795907250161,
+     "y": 726.0890990685739
+    },
+    "data": {
+     "heading": "Wind · 6",
+     "color": "#ff7d00",
+     "keys": [
+      {
+       "label": "P",
+       "unit": "kW",
+       "param": "live.pesgrp0k0.value"
+      },
+      {
+       "label": "Q",
+       "unit": "kVar",
+       "param": "live.pesgrp0k1.value"
+      }
+     ],
+     "edgesConnect": "source",
+     "icon": {
+      "name": "wind",
+      "color": "#ff7d00"
+     },
+     "animation": {
+      "animationParams": "live.Wind units flowing.value",
+      "operator": "!=",
+      "value": 0
+     },
+     "pesGroupMembers": [
+      {
+       "id": "2",
+       "type": "custom",
+       "position": {
+        "x": 654.0614434550164,
+        "y": 659.3101060810963
+       },
+       "data": {
+        "heading": "GW-WTG-01",
+        "keys": [
+         {
+          "unit": "kW",
+          "param": "live.p10326.value",
+          "label": "P"
+         },
+         {
+          "unit": "kW",
+          "param": "live.p10370.value",
+          "label": "Q"
+         },
+         {
+          "unit": "%",
+          "param": "live.p10124.value",
+          "label": "SOC"
+         }
+        ],
+        "edgesConnect": "source",
+        "icon": {
+         "color": "#ff7d00",
+         "name": "wind"
+        },
+        "fixed": false,
+        "type": null,
+        "animation": {
+         "animationParams": "live.p10326.value",
+         "value": 0,
+         "operator": "!="
+        }
+       }
+      },
+      {
+       "id": "4",
+       "type": "custom",
+       "position": {
+        "x": 1368.8933387699803,
+        "y": 770.2699055322454
+       },
+       "data": {
+        "heading": "GW-WTG-06",
+        "keys": [
+         {
+          "unit": "kW",
+          "param": "live.p10331.value",
+          "label": "P"
+         },
+         {
+          "unit": "kVar",
+          "param": "live.p10375.value",
+          "label": "Q"
+         }
+        ],
+        "edgesConnect": "source",
+        "icon": {
+         "color": "#ff7d00",
+         "name": "wind"
+        },
+        "fixed": false,
+        "type": null,
+        "animation": {
+         "animationParams": "live.p10331.value",
+         "value": 0,
+         "operator": "!="
+        }
+       }
+      },
+      {
+       "id": "9",
+       "type": "custom",
+       "position": {
+        "x": 796.8549851162863,
+        "y": 781.577739872236
+       },
+       "data": {
+        "heading": "GW-WTG-02",
+        "keys": [
+         {
+          "unit": "kW",
+          "param": "live.p10327.value",
+          "label": "P"
+         },
+         {
+          "unit": "kVar",
+          "param": "live.p10371.value",
+          "label": "Q"
+         }
+        ],
+        "icon": {
+         "color": "#ff7d00",
+         "name": "wind"
+        },
+        "edgesConnect": "source",
+        "animation": {
+         "animationParams": "live.p10327.value",
+         "value": "0",
+         "operator": "!="
+        }
+       }
+      },
+      {
+       "id": "7",
+       "type": "custom",
+       "position": {
+        "x": 918.6251798683681,
+        "y": 681.639273451389
+       },
+       "data": {
+        "heading": "GW-WTG-03",
+        "keys": [
+         {
+          "unit": "kW",
+          "param": "live.p10328.value",
+          "label": "P"
+         },
+         {
+          "unit": "kVar",
+          "param": "live.p10372.value",
+          "label": "Q"
+         }
+        ],
+        "icon": {
+         "color": "#ff7d00",
+         "name": "wind"
+        },
+        "edgesConnect": "source",
+        "animation": {
+         "animationParams": "live.p10328.value",
+         "value": "0",
+         "operator": "!="
+        }
+       }
+      },
+      {
+       "id": "10",
+       "type": "custom",
+       "position": {
+        "x": 1089.0506569268791,
+        "y": 779.3563480583086
+       },
+       "data": {
+        "heading": "GW-WTG-04",
+        "keys": [
+         {
+          "unit": "kW",
+          "param": "live.p10329.value",
+          "label": "P"
+         },
+         {
+          "unit": "kVar",
+          "param": "live.p10373.value",
+          "label": "Q"
+         }
+        ],
+        "icon": {
+         "color": "#ff7d00",
+         "name": "wind"
+        },
+        "edgesConnect": "source",
+        "animation": {
+         "animationParams": "live.p10329.value",
+         "value": "0",
+         "operator": "!="
+        }
+       }
+      },
+      {
+       "id": "11",
+       "type": "custom",
+       "position": {
+        "x": 1212.2156934457616,
+        "y": 686.398508988761
+       },
+       "data": {
+        "heading": "GW-WTG-05",
+        "keys": [
+         {
+          "unit": "kW",
+          "param": "live.p10330.value",
+          "label": "P"
+         },
+         {
+          "unit": "kVar",
+          "param": "live.p10374.value",
+          "label": "Q"
+         }
+        ],
+        "icon": {
+         "color": "#ff7d00",
+         "name": "wind"
+        },
+        "edgesConnect": "source",
+        "animation": {
+         "animationParams": "live.p10330.value",
+         "value": "0",
+         "operator": "!="
+        }
+       }
+      }
+     ]
+    }
+   },
+   {
+    "id": "sldgrp:solar:1",
+    "type": "custom",
+    "position": {
+     "x": 1173.1081215081408,
+     "y": 126.65698697982094
+    },
+    "data": {
+     "heading": "Solar · 9",
+     "color": "#00ff00",
+     "keys": [
+      {
+       "label": "P",
+       "unit": "kW",
+       "param": "live.pesgrp1k0.value"
+      },
+      {
+       "label": "Q",
+       "unit": "kVar",
+       "param": "live.pesgrp1k1.value"
+      }
+     ],
+     "edgesConnect": "source",
+     "icon": {
+      "name": "solar",
+      "color": "#00ff00"
+     },
+     "animation": {
+      "animationParams": "live.Solar units flowing.value",
+      "operator": "!=",
+      "value": 0
+     },
+     "pesGroupMembers": [
+      {
+       "id": "3",
+       "type": "custom",
+       "position": {
+        "x": 643.5461430648834,
+        "y": 83.06231870989357
+       },
+       "data": {
+        "heading": "PV-SG-CI-01",
+        "keys": [
+         {
+          "unit": "kW",
+          "param": "live.p42.value",
+          "label": "P"
+         },
+         {
+          "unit": "kVar",
+          "param": "live.p74.value",
+          "label": "Q"
+         }
+        ],
+        "edgesConnect": "source",
+        "icon": {
+         "color": "#00ff00",
+         "name": "solarLg"
+        },
+        "fixed": false,
+        "type": null,
+        "animation": {
+         "animationParams": "live.p42.value",
+         "value": 0,
+         "operator": "!="
+        }
+       }
+      },
+      {
+       "id": "6",
+       "type": "custom",
+       "position": {
+        "x": 754.9519095396172,
+        "y": 189.74898524047381
+       },
+       "data": {
+        "heading": "PV-SG-CI-02",
+        "keys": [
+         {
+          "unit": "kW",
+          "param": "live.p43.value",
+          "label": "P"
+         },
+         {
+          "unit": "kVar",
+          "param": "live.p75.value",
+          "label": "Q"
+         }
+        ],
+        "icon": {
+         "color": "#00ff00",
+         "name": "solarLg"
+        },
+        "edgesConnect": "source",
+        "animation": {
+         "animationParams": "live.p43.value",
+         "value": "0",
+         "operator": "!="
+        }
+       }
+      },
+      {
+       "id": "8",
+       "type": "custom",
+       "position": {
+        "x": 885.0007464100579,
+        "y": 84.70027589298756
+       },
+       "data": {
+        "heading": "PV-SG-CI-03",
+        "keys": [
+         {
+          "unit": "kW",
+          "param": "live.p44.value",
+          "label": "P"
+         },
+         {
+          "unit": "kVar",
+          "param": "live.p76.value",
+          "label": "Q"
+         }
+        ],
+        "icon": {
+         "color": "#00ff00",
+         "name": "solarLg"
+        },
+        "edgesConnect": "source",
+        "animation": {
+         "animationParams": "live.p44.value",
+         "value": "0",
+         "operator": "!="
+        }
+       }
+      },
+      {
+       "id": "15",
+       "type": "custom",
+       "position": {
+        "x": 1014.9661199749612,
+        "y": 187.86052553287354
+       },
+       "data": {
+        "heading": "PV-SG-CI-04",
+        "keys": [
+         {
+          "unit": "kW",
+          "param": "live.p45.value",
+          "label": "P"
+         },
+         {
+          "unit": "kVar",
+          "param": "live.p77.value",
+          "label": "Q"
+         }
+        ],
+        "icon": {
+         "color": "#00ff00",
+         "name": "solarLg"
+        },
+        "edgesConnect": "source",
+        "animation": {
+         "animationParams": "live.p45.value",
+         "value": "0",
+         "operator": "!="
+        }
+       }
+      },
+      {
+       "id": "17",
+       "type": "custom",
+       "position": {
+        "x": 1153.937790783373,
+        "y": 90.03669730769283
+       },
+       "data": {
+        "heading": "PV-SG-CI-05",
+        "keys": [
+         {
+          "unit": "kW",
+          "param": "live.p46.value",
+          "label": "P"
+         },
+         {
+          "unit": "kVar",
+          "param": "live.p78.value",
+          "label": "Q"
+         }
+        ],
+        "icon": {
+         "color": "#00ff00",
+         "name": "solarLg"
+        },
+        "edgesConnect": "source",
+        "animation": {
+         "animationParams": "live.p46.value",
+         "value": "0",
+         "operator": "!="
+        }
+       }
+      },
+      {
+       "id": "19",
+       "type": "custom",
+       "position": {
+        "x": 1268.9331312957322,
+        "y": 194.2189264164457
+       },
+       "data": {
+        "heading": "SG-CI-PV-06",
+        "keys": [
+         {
+          "unit": "kW",
+          "param": "live.p47.value",
+          "label": "P"
+         },
+         {
+          "unit": "kVar",
+          "param": "live.p79.value",
+          "label": "Q"
+         }
+        ],
+        "icon": {
+         "color": "#00ff00",
+         "name": "solarLg"
+        },
+        "edgesConnect": "source",
+        "animation": {
+         "animationParams": "live.p47.value",
+         "value": "0",
+         "operator": "!="
+        }
+       }
+      },
+      {
+       "id": "18",
+       "type": "custom",
+       "position": {
+        "x": 1408.2653797314558,
+        "y": 103.41726880635483
+       },
+       "data": {
+        "heading": "PV-SG-CI-07",
+        "keys": [
+         {
+          "unit": "kW",
+          "param": "live.p48.value",
+          "label": "P"
+         },
+         {
+          "unit": "kVar",
+          "param": "live.p80.value",
+          "label": "Q"
+         }
+        ],
+        "icon": {
+         "color": "#00ff00",
+         "name": "solarLg"
+        },
+        "edgesConnect": "source",
+        "animation": {
+         "animationParams": "live.p48.value",
+         "value": "0",
+         "operator": "!="
+        }
+       }
+      },
+      {
+       "id": "13",
+       "type": "custom",
+       "position": {
+        "x": 1518.2653797314558,
+        "y": 206.75060213968814
+       },
+       "data": {
+        "heading": "PV-SG-CI-08",
+        "keys": [
+         {
+          "unit": "kW",
+          "param": "live.p49.value",
+          "label": "P"
+         },
+         {
+          "unit": "kVar",
+          "param": "live.p81.value",
+          "label": "Q"
+         }
+        ],
+        "icon": {
+         "color": "#00ff00",
+         "name": "solarLg"
+        },
+        "edgesConnect": "source",
+        "animation": {
+         "animationParams": "live.p49.value",
+         "value": "0",
+         "operator": "!="
+        }
+       }
+      },
+      {
+       "id": "20",
+       "type": "custom",
+       "position": {
+        "x": 1686.5987130647893,
+        "y": 110.08393547302148
+       },
+       "data": {
+        "heading": "PV-SG-CI-09",
+        "keys": [
+         {
+          "unit": "kW",
+          "param": "live.p50.value",
+          "label": "P"
+         },
+         {
+          "unit": "kVar",
+          "param": "live.p82.value",
+          "label": "Q"
+         }
+        ],
+        "icon": {
+         "color": "#00ff00",
+         "name": "solarLg"
+        },
+        "edgesConnect": "source",
+        "animation": {
+         "animationParams": "live.p50.value",
+         "value": "0",
+         "operator": "!="
+        }
+       }
+      }
+     ]
+    }
+   },
+   {
+    "id": "5",
+    "type": "custom",
+    "position": {
+     "x": 272.2871602762649,
+     "y": 326.58409668046994
+    },
+    "data": {
+     "heading": "Captive Plant",
+     "keys": [
+      {
+       "unit": "kW",
+       "param": "live.p1000005.value",
+       "label": "P"
+      },
+      {
+       "unit": "kVar",
+       "param": "live.p1000006.value",
+       "label": "Q"
+      },
+      {
+       "param": "live.p1000007.value",
+       "label": "PF"
+      }
+     ],
+     "edgesConnect": "source",
+     "icon": {
+      "color": "#ff0000",
+      "name": "genset"
+     },
+     "fixed": false,
+     "type": null,
+     "animation": {
+      "animationParams": "live.p1000005.value",
+      "value": 0,
+      "operator": "!="
+     }
+    }
+   },
+   {
+    "id": "14",
+    "type": "custom",
+    "position": {
+     "x": 278.16622768615275,
+     "y": 665.8200292910648
+    },
+    "data": {
+     "heading": "BESS",
+     "keys": [
+      {
+       "unit": "kW",
+       "param": "live.p10385.value",
+       "label": "P"
+      },
+      {
+       "unit": "kVar",
+       "param": "live.p10388.value",
+       "label": "Q"
+      },
+      {
+       "unit": "%",
+       "param": "live.p10389.value",
+       "label": "PF"
+      }
+     ],
+     "icon": {
+      "color": "#084baf",
+      "name": "battery"
+     },
+     "edgesConnect": "source",
+     "animation": {
+      "animationParams": "live.p10385.value",
+      "value": "0",
+      "operator": "!="
+     }
+    }
+   },
+   {
+    "id": "12",
+    "type": "custom",
+    "position": {
+     "x": 144.66776405686903,
+     "y": 509.82807994226914
+    },
+    "data": {
+     "heading": "WHR Plant",
+     "keys": [
+      {
+       "unit": "kW",
+       "param": "live.p1000009.value",
+       "label": "P"
+      },
+      {
+       "unit": "kVar",
+       "param": "live.p1000010.value",
+       "label": "Q"
+      },
+      {
+       "unit": "%",
+       "param": "live.p1000011.value",
+       "label": "PF"
+      }
+     ],
+     "icon": {
+      "color": "#1fcee5",
+      "name": "genset"
+     },
+     "edgesConnect": "source",
+     "animation": {
+      "animationParams": "live.p1000009.value",
+      "value": "0",
+      "operator": "!="
+     }
+    }
+   },
+   {
+    "id": "16",
+    "type": "custom",
+    "position": {
+     "x": 1739.452443036058,
+     "y": 395.13488162517854
+    },
+    "data": {
+     "heading": "SVG",
+     "keys": [
+      {
+       "unit": "kW",
+       "param": "live.p10497.value",
+       "label": "P"
+      },
+      {
+       "unit": "kVar",
+       "param": "live.p10498.value",
+       "label": "Q"
+      }
+     ],
+     "icon": {
+      "color": "#0463f1",
+      "name": "switchLg"
+     },
+     "edgesConnect": "source",
+     "animation": {
+      "animationParams": "live.p10498.value",
+      "value": "0",
+      "operator": "!="
+     }
+    }
+   }
+  ],
+  "edges": [
+   {
+    "id": "sldgrp:wind:1->1",
+    "source": "sldgrp:wind:1",
+    "target": "1",
+    "sourceHandle": "l",
+    "targetHandle": "r",
+    "type": "buttonedge",
+    "style": {
+     "stroke": "#ff7d00"
+    },
+    "markerEnd": {
+     "color": "#ff7d00",
+     "type": "arrowclosed"
+    },
+    "data": {}
+   },
+   {
+    "id": "sldgrp:solar:1->1",
+    "source": "sldgrp:solar:1",
+    "target": "1",
+    "sourceHandle": "l",
+    "targetHandle": "r",
+    "type": "buttonedge",
+    "style": {
+     "stroke": "#00ff00"
+    },
+    "markerEnd": {
+     "color": "#00ff00",
+     "type": "arrowclosed"
+    },
+    "data": {}
+   },
+   {
+    "id": "e5-1",
+    "source": "5",
+    "target": "1",
+    "sourceHandle": "b",
+    "targetHandle": "l",
+    "type": "buttonedge",
+    "style": {
+     "stroke": "#cd0a61"
+    },
+    "markerEnd": {
+     "color": "#cd0a61",
+     "type": "arrowclosed"
+    },
+    "selected": false
+   },
+   {
+    "id": "e14-1",
+    "source": "14",
+    "target": "1",
+    "sourceHandle": "t",
+    "targetHandle": "l",
+    "type": "buttonedge",
+    "style": {
+     "stroke": "#61656b"
+    },
+    "markerEnd": {
+     "color": "#61656b",
+     "type": "arrowclosed"
+    }
+   },
+   {
+    "id": "e12-1",
+    "source": "12",
+    "target": "1",
+    "sourceHandle": "r",
+    "targetHandle": "l",
+    "type": "buttonedge",
+    "style": {
+     "stroke": "#09dcd9"
+    },
+    "markerEnd": {
+     "color": "#09dcd9",
+     "type": "arrowclosed"
+    },
+    "selected": false
+   },
+   {
+    "id": "e16-1",
+    "source": "16",
+    "target": "1",
+    "sourceHandle": "l",
+    "targetHandle": "r",
+    "type": "buttonedge",
+    "style": {
+     "stroke": "#0b60e0"
+    },
+    "markerEnd": {
+     "color": "#0b60e0",
+     "type": "arrowclosed"
+    },
+    "selected": false
+   }
+  ]
+ },
+ "live": {
+  "live": {
+   "p30": {
+    "update_at": 0,
+    "value": 218.1
+   },
+   "p10326": {
+    "update_at": 0,
+    "value": 1240.5
+   },
+   "p10370": {
+    "update_at": 0,
+    "value": 85.2
+   },
+   "p10124": {
+    "update_at": 0,
+    "value": 99
+   },
+   "p10327": {
+    "update_at": 0,
+    "value": 980
+   },
+   "p10371": {
+    "update_at": 0,
+    "value": 60.5
+   },
+   "p10328": {
+    "update_at": 0,
+    "value": 1100.3
+   },
+   "p10372": {
+    "update_at": 0,
+    "value": 70.1
+   },
+   "p10329": {
+    "update_at": 0,
+    "value": 0
+   },
+   "p10373": {
+    "update_at": 0,
+    "value": 0
+   },
+   "p10330": {
+    "update_at": 0,
+    "value": 1320.8
+   },
+   "p10374": {
+    "update_at": 0,
+    "value": 88
+   },
+   "p10331": {
+    "update_at": 0,
+    "value": 0
+   },
+   "p10375": {
+    "update_at": 0,
+    "value": 0
+   },
+   "p42": {
+    "update_at": 0,
+    "value": 86.5
+   },
+   "p74": {
+    "update_at": 0,
+    "value": 12.3
+   },
+   "p43": {
+    "update_at": 0,
+    "value": 78.2
+   },
+   "p75": {
+    "update_at": 0,
+    "value": 10.1
+   },
+   "p44": {
+    "update_at": 0,
+    "value": 91
+   },
+   "p76": {
+    "update_at": 0,
+    "value": 14
+   },
+   "p45": {
+    "update_at": 0,
+    "value": 64.4
+   },
+   "p77": {
+    "update_at": 0,
+    "value": 9.2
+   },
+   "p46": {
+    "update_at": 0,
+    "value": 88.7
+   },
+   "p78": {
+    "update_at": 0,
+    "value": 13.1
+   },
+   "p47": {
+    "update_at": 0,
+    "value": 0
+   },
+   "p79": {
+    "update_at": 0,
+    "value": 0
+   },
+   "p48": {
+    "update_at": 0,
+    "value": 72.9
+   },
+   "p80": {
+    "update_at": 0,
+    "value": 11.5
+   },
+   "p49": {
+    "update_at": 0,
+    "value": 83.3
+   },
+   "p81": {
+    "update_at": 0,
+    "value": 12
+   },
+   "p50": {
+    "update_at": 0,
+    "value": 69.5
+   },
+   "p82": {
+    "update_at": 0,
+    "value": 10.4
+   },
+   "p1000005": {
+    "update_at": 0,
+    "value": 0
+   },
+   "p1000006": {
+    "update_at": 0,
+    "value": 0
+   },
+   "p1000007": {
+    "update_at": 0,
+    "value": 1
+   },
+   "p1000009": {
+    "update_at": 0,
+    "value": 540
+   },
+   "p1000010": {
+    "update_at": 0,
+    "value": 45
+   },
+   "p1000011": {
+    "update_at": 0,
+    "value": 0.98
+   },
+   "p10385": {
+    "update_at": 0,
+    "value": -120.5
+   },
+   "p10388": {
+    "update_at": 0,
+    "value": 8.4
+   },
+   "p10389": {
+    "update_at": 0,
+    "value": 96
+   },
+   "p10497": {
+    "update_at": 0,
+    "value": 12
+   },
+   "p10498": {
+    "update_at": 0,
+    "value": 210.6
+   },
+   "pesgrp0k0": {
+    "value": 4641.6
+   },
+   "pesgrp0k1": {
+    "value": 303.79999999999995
+   },
+   "Wind units flowing": {
+    "value": 4
+   },
+   "pesgrp1k0": {
+    "value": 634.5
+   },
+   "pesgrp1k1": {
+    "value": 92.6
+   },
+   "Solar units flowing": {
+    "value": 8
+   }
+  },
+  "update_at": 0
+ }
+}

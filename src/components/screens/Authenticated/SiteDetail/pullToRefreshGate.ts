@@ -35,8 +35,53 @@ export const usePullToRefreshBlock = (blocked: boolean): void => {
 };
 
 /**
+ * Lets a SiteDetail child hold the body's SCROLL still (and pull-to-refresh
+ * off) while it owns a gesture the native scroll view would also follow.
+ * The inline 3D twin does this while a finger is on it: the scroll view
+ * under the WebView followed every drag on the 3D — the page moved while the
+ * model turned (user reports, 2026-10-10). Same shape as
+ * {@link PullToRefreshGateContext}: one stable `acquire()`, a no-op outside a
+ * provider.
+ */
+export const BodyScrollGateContext = createContext<Acquire>(noopAcquire);
+
+/**
+ * A stable `(active) => void` for a gesture owner: `true` takes the body
+ * scroll AND pull-to-refresh holds, `false` releases both (idempotent;
+ * released on unmount too). Each call of the hook is ONE independent hold:
+ * an owner with two sources (the inline 3D: the page's claim and RN's own
+ * touches) takes two, so neither source can release the other's — the
+ * gates are ref-counted.
+ */
+export const useBodyScrollHold = (): ((active: boolean) => void) => {
+  const acquireScroll = useContext(BodyScrollGateContext);
+  const acquirePull = useContext(PullToRefreshGateContext);
+  const release = useRef<(() => void) | null>(null);
+  const hold = useCallback(
+    (active: boolean) => {
+      if (active) {
+        if (release.current !== null) return;
+        const releaseScroll = acquireScroll();
+        const releasePull = acquirePull();
+        release.current = () => {
+          releaseScroll();
+          releasePull();
+        };
+      } else if (release.current !== null) {
+        release.current();
+        release.current = null;
+      }
+    },
+    [acquireScroll, acquirePull],
+  );
+  useEffect(() => () => hold(false), [hold]);
+  return hold;
+};
+
+/**
  * Provider side: a ref-counted gate. Returns the context value to provide
- * and whether pull-to-refresh is currently blocked.
+ * and whether the gate is currently blocked — used for both
+ * pull-to-refresh and the body scroll ({@link BodyScrollGateContext}).
  */
 export const usePullToRefreshGate = (): { acquire: Acquire; blocked: boolean } => {
   const count = useRef(0);

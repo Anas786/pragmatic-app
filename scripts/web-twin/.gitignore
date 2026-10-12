@@ -1,0 +1,5 @@
+# Vendored web chunks + CSS: byte-identical copies of public website files, already
+# inlined (verbatim) into SldTwin/twinHtml.generated.js and pinned by md5 in
+# vendor/manifest.json. Restore them with `node scripts/web-twin/vendor.mjs --from-generated`.
+vendor/chunks/
+vendor/css/
